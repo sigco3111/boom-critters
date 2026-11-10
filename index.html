@@ -6,11 +6,11 @@
   <title>붐 크리터스 - 포격 웹게임</title>
   <meta name="description" content="웜즈·포트리스 스타일 싱글플레이 포격 웹게임">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=2026111022">
+  <link rel="stylesheet" href="style.css?v=2026111023">
 </head>
 <body>
   <div id="app">
-    <div id="rotateHint" role="status"><span>📱 휴대폰을 가로로 돌리면 더 크게 볼 수 있어요</span><button id="rotateHintClose" type="button" aria-label="안내 닫기">✕</button></div>
+    <div id="rotateHint" role="status"><span>📱 가로로 돌리면 더 크게 보여요</span><button id="rotateHintClose" type="button" aria-label="안내 닫기">✕</button></div>
     <div id="stage">
       <canvas id="game" width="960" height="540"></canvas>
       <div id="loading" class="overlay">불러오는 중...</div>
@@ -85,7 +85,8 @@
               <tr><th>발사</th><td>Space 꾹 눌러 파워 충전 → 떼면 발사 (발사 버튼 꾹)</td></tr>
               <tr><th>무기 변경</th><td>숫자 1~6 또는 하단 무기 버튼 (6 공습은 스테이지 4부터)</td></tr>
               <tr><th>일시정지</th><td>Esc 또는 ⏸ 버튼 (계속하기 · 매치 다시 시작 · 메뉴로 나가기)</td></tr>
-              <tr><th>소리</th><td>M 음소거 · ⚙ 설정(음악/효과음 볼륨)</td></tr>
+              <tr><th>소리</th><td>M 음소거 · ⚙ 설정(음악/효과음 볼륨). 번개 지직, 공습 휘파람, 수류탄 똑딱, 치유 차임 효과음도 효과음 볼륨·음소거를 따릅니다</td></tr>
+              <tr><th>튜토리얼</th><td>처음 실행하면 4단계 안내가 한 번 나옵니다. 아래 '튜토리얼 보기'로 언제든 다시 볼 수 있어요 (←/→ 이동, Esc 건너뛰기)</td></tr>
             </table>
           </section>
           <section>
@@ -101,7 +102,7 @@
           </section>
           <section>
             <h2>보급 상자</h2>
-            <p>4번째 턴마다 낙하산 상자가 떨어집니다. 유닛이 닿으면 HP +30(최대 100). 폭발에 맞으면 파괴됩니다.</p>
+            <p>4번째 턴마다 낙하산 상자가 떨어집니다. 유닛이 닿으면 HP +30(최대 100)과 함께 맑은 차임이 울립니다. 폭발에 맞으면 파괴됩니다. 화염 지대 안에서는 턴 시작 때 피해를 받으니 벗어나세요.</p>
           </section>
           <section>
             <h2>모드</h2>
@@ -112,7 +113,25 @@
             </table>
           </section>
         </div>
-        <button type="button" id="helpCloseBtn">닫기</button>
+        <div class="row">
+          <button type="button" id="helpTutorialBtn">튜토리얼 보기</button>
+          <button type="button" id="helpCloseBtn">닫기</button>
+        </div>
+      </div>
+
+      <div id="tutorialScreen" class="overlay modal hidden" role="dialog" aria-modal="true" aria-label="튜토리얼">
+        <p class="tut-step" id="tutStep">1 / 4</p>
+        <div class="tut-card">
+          <div class="tut-icon" id="tutIcon" aria-hidden="true"></div>
+          <h2 id="tutTitle"></h2>
+          <ul id="tutBody"></ul>
+        </div>
+        <div class="tut-dots" id="tutDots" aria-hidden="true"></div>
+        <div class="row">
+          <button type="button" id="tutSkip">건너뛰기</button>
+          <button type="button" id="tutPrev" hidden>이전</button>
+          <button type="button" id="tutNext" class="primary">다음</button>
+        </div>
       </div>
 
       <div id="creditsScreen" class="overlay modal hidden" role="dialog" aria-label="크레딧">
@@ -127,7 +146,7 @@
           </ul>
           <p class="note">CC0 에셋은 표기 의무가 없지만 감사의 뜻으로 적습니다. 게임 코드는 MIT 라이선스입니다. 지형·스테이지 테마 배경(초원·사막·설원·밤)·이펙트·무기 아이콘은 외부 이미지 없이 캔버스 코드로 직접 그렸습니다.</p>
         </div>
-        <p class="ver">버전 <span id="verHtml">2026111022</span> · 스크립트 <span id="verJs">-</span></p>
+        <p class="ver">버전 <span id="verHtml">2026111023</span> · 스크립트 <span id="verJs">-</span></p>
         <button type="button" id="creditsCloseBtn">닫기</button>
       </div>
 
@@ -183,6 +202,6 @@
       </div>
     </div>
   </div>
-  <script type="module" src="js/main.js?v=2026111022"></script>
+  <script type="module" src="js/main.js?v=2026111023"></script>
 </body>
 </html>
