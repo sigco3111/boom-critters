@@ -24,6 +24,8 @@ export const WEAPONS = [
 ];
 // 하단 HUD 무기 슬롯 (캔버스 좌표)
 const SLOT = { x: 10, y: H - 56, w: 62, h: 50, gap: 4 };
+// 팀별 무기 탄약 (무한 = Infinity, 비활성 무기는 0)
+const freshAmmo = () => [0, 1].map(() => WEAPONS.map((w) => (w.disabled ? 0 : w.ammo ?? Infinity)));
 export function slotRect(i) { return [SLOT.x + i * (SLOT.w + SLOT.gap), SLOT.y, SLOT.w, SLOT.h]; }
 export const TEAMS = [
   { name: '파랑 팀', color: '#3b82f6' },
@@ -93,6 +95,7 @@ export class Game {
     this.proj = null; this.shake = 0;
     this.keys = { left: false, right: false, up: false, down: false };
     this.onOver = () => {};
+    this.ammo = freshAmmo();    // 매치 시작 전에도 버튼 표시가 올바르도록
     this.stepTimer = 0;
   }
 
@@ -120,7 +123,7 @@ export class Game {
     this.winner = null;
     this.angle = 45; this.power = 0; this.lastPower = 0; this.weapon = 0;
     // 팀별 무기 탄약 (무한 = Infinity, 비활성 무기는 0)
-    this.ammo = [0, 1].map(() => WEAPONS.map((w) => (w.disabled ? 0 : w.ammo ?? Infinity)));
+    this.ammo = freshAmmo();
     this.charging = false; this.ai = null;
     this.banner = null;
     this.startTurn();
