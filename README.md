@@ -171,7 +171,7 @@ HP가 70 미만이고 약 150px 안에 상자가 있으면 상자 쪽으로 걷�
 - **로딩**: 진행 막대 로딩 화면에서 첫 화면에 필요한 것(메뉴 음악, 버튼 효과음, 우리 팀 3명과 첫 두 적 이미지)만 먼저 받고 나머지는 뒤에서 받습니다. 이미지는 한 번 더 시도하고 안 되면 임시 그림으로 대신하며, 약 8초가 지나면 받은 것만으로 시작합니다.
 - **앱으로 설치**: `manifest.webmanifest`(이름 *Boom Critters*, 짧은 이름 *포탄 동물원*, `display: standalone`)와 192·512 아이콘이 연결돼 있어 크롬·엣지의 앱 설치, 사파리·크롬 모바일의 홈 화면에 추가를 쓸 수 있습니다. 오래된 캐시가 남지 않도록 **서비스 워커는 일부러 넣지 않았습니다**(오프라인 실행 불가).
 - **조준점 가림 방지**: 조준 중 조준점(터치 드래그 지점 포함)이 어떤 유닛의 이름표·HP 바에서 화면 28px 안에 들어오면 그 블록이 0.12초에 걸쳐 30% 투명도로 흐려집니다. 이름표·HP 바는 머리 위로 HP 바 높이(11px) 이상 띄워 조준선에 놓이지 않으며, 가로 터치 화면에서는 활성 유닛의 이름표·조준점이 왼쪽 위 버튼과 겹치면 버튼을 잠시 숨깁니다.
-- **버전 확인(캐시)**: JS·CSS 주소 뒤에 `?v=버전`을 붙입니다(현재 `2026111046`). 크레딧 화면에 "버전(페이지) · 스크립트"가 표시되고 둘이 다르면 새로고침 안내가 나옵니다.
+- **버전 확인(캐시)**: JS·CSS 주소 뒤에 `?v=버전`을 붙입니다(현재 `2026111047`). 크레딧 화면에 "버전(페이지) · 스크립트"가 표시되고 둘이 다르면 새로고침 안내가 나옵니다.
 
 ## 소리
 - 효과음: 대포탄·로켓 발사/폭발과 물에 빠지는 소리는 Battle at sea(CC0), 나머지는 Kenney Impact/Interface Sounds(CC0).
@@ -246,12 +246,20 @@ python -m http.server 8000      # Python 3 (python3 -m http.server 8000도 동�
 | Music Jingles | Kenney | CC0 1.0 |
 | Battle at sea | Thimras | CC0 1.0 |
 | Enchanted Festival | Matthew Pablo | **CC-BY 3.0** (표기 필수) |
+| Explosions | chabull | **CC-BY 3.0** (표기 필수) |
+| Pixelated Hit Animations | Viktor Hahn | **CC-BY 4.0** (표기 필수) |
+| Blue projectile | greengiant67 | **CC-BY 3.0** (표기 필수) |
+| Gun Muzzle Flash Effects | Reactorcore | CC0 1.0 |
 
 > Enchanted Festival by Matthew Pablo, https://opengameart.org/content/enchanted-festival, licensed CC-BY 3.0
+>
+> chabull — "explosions" (https://opengameart.org/content/explosions-0), CC-BY 3.0 · Viktor Hahn — "Pixelated Hit Animations" (https://opengameart.org/content/pixelated-hit-animations), CC-BY 4.0 · greengiant67 — "Blue projectile" (https://opengameart.org/content/blue-projectile), CC-BY 3.0
+
+**이펙트 스프라이트**(`assets/fx/`, 약 300KB): 폭발(대포·로켓·수류탄·화염탄·공습), 유닛 피격 번쩍임, 발사 때 총구 화염, 파란 구슬 대포탄. 로딩 화면에서 미리 받고, 받지 못하면 예전 캔버스 불꽃·연기로 대신합니다. 느린 기기(`lowFx`)에서는 빛나는 겹쳐 그리기를 생략하고, '움직임 줄이기'를 켜면 짧은 번쩍임 한 장으로 줄입니다. 동시에 최대 24개까지만 재생합니다.
 
 ## 라이선스
 - **코드**: MIT 라이선스 ([LICENSE](LICENSE)).
-- **에셋**: 코드의 MIT 라이선스는 **에셋에 적용되지 않습니다.** `assets/`의 파일은 각자의 라이선스(대부분 CC0, 배경음악 *Enchanted Festival*은 CC-BY 3.0으로 저작자 표기 필요)를 따르며 [CREDITS.md](CREDITS.md)에 정리돼 있습니다. 배경음악 OGG는 원곡을 변환·편집한 것이고 MP3는 원곡 그대로입니다. 에셋을 따로 재사용하려면 해당 라이선스를 확인하세요. 지형·테마 배경·이펙트·무기 아이콘·앱 아이콘은 외부 에셋 없이 코드로 직접 그린 것입니다.
+- **에셋**: 코드의 MIT 라이선스는 **에셋에 적용되지 않습니다.** `assets/`의 파일은 각자의 라이선스(음향 대부분은 CC0, 배경음악 *Enchanted Festival*·폭발 *Explosions*·대포탄 *Blue projectile*은 CC-BY 3.0, *Pixelated Hit Animations*는 CC-BY 4.0으로 저작자 표기 필요)를 따르며 [CREDITS.md](CREDITS.md)에 정리돼 있습니다. 배경음악 OGG는 원곡을 변환·편집한 것이고 MP3는 원곡 그대로입니다. 에셋을 따로 재사용하려면 해당 라이선스를 확인하세요. 지형·테마 배경·번개·불똥 파티클·무기 아이콘·앱 아이콘은 외부 에셋 없이 코드로 직접 그린 것입니다.
 
 ## English summary
 **Boom Critters** is a single-player, turn-based artillery game in the spirit of Worms and Pocket Tanks, written in plain HTML5 Canvas and vanilla ES modules (no build step). Play it at https://sigco3111.github.io/boom-critters/.
