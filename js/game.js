@@ -19,7 +19,7 @@ export const WEAPONS = [
   { id: 'cannon', name: '대포탄', radius: 40, damage: 50, windK: 8, speedK: 1.0, knock: 380 },
   { id: 'rocket', name: '로켓', radius: 58, damage: 42, windK: 3, speedK: 0.85, knock: 470 },
   { id: 'grenade', name: '수류탄', radius: 55, damage: 60, windK: 1, speedK: 0.9, knock: 640, ammo: 3, fuse: 3 },
-  { id: 'lightning', name: '번개', disabled: true },
+  { id: 'lightning', name: '번개', damage: 35, knock: 260, ammo: 2, instant: true },
   { id: 'fire', name: '화염탄', disabled: true },
 ];
 // 하단 HUD 무기 슬롯 (캔버스 좌표)
@@ -93,6 +93,7 @@ export class Game {
     this.state = 'idle';
     this.units = []; this.particles = []; this.floaters = [];
     this.proj = null; this.shake = 0;
+    this.bolt = null; this.flashT = 0;
     this.keys = { left: false, right: false, up: false, down: false };
     this.onOver = () => {};
     this.ammo = freshAmmo();    // 매치 시작 전에도 버튼 표시가 올바르도록
@@ -106,6 +107,7 @@ export class Game {
     this.terrain = new Terrain(this.seed);
     this.bg = this.makeBackground(this.seed);
     this.units = []; this.particles = []; this.floaters = []; this.proj = null;
+    this.bolt = null; this.flashT = 0;
     const baseX = [[95, 230, 360], [600, 730, 865]];
     for (let t = 0; t < 2; t++) {
       for (let i = 0; i < 3; i++) {
@@ -431,6 +433,7 @@ export class Game {
 
   fire(power) {
     const u = this.activeUnit, w = WEAPONS[this.weapon];
+    if (w.instant) return this.fireLightning(u, w);
     const a = rad(this.angle), v = launchSpeed(w, power), f = u.facing;
     this.proj = {
       x: u.x + f * Math.cos(a) * 18, y: u.y - 20 - Math.sin(a) * 18,
@@ -442,6 +445,45 @@ export class Game {
     this.state = 'flying';
     u.squash = -0.2; u.shootT = 0.4;
     audio.play('fire', { rate: w.id === 'rocket' ? 0.8 : w.id === 'grenade' ? 1.3 : 1 });
+  }
+
+  // ---------- 번개 ----------
+  // 활성 유닛에서 각도 방향으로 곧게 뻗는 번개. 처음 맞은 유닛 하나에게만 피해를 준다 (지형은 관통).
+  fireLightning(u, w) {
+    const a = rad(this.angle), f = u.facing;
+    const dx = f * Math.cos(a), dy = -Math.sin(a);
+    const ox = u.x + dx * 18, oy = u.y - 20 + dy * 18;
+    if (this.ammo[this.turnTeam][this.weapon] !== Infinity) this.ammo[this.turnTeam][this.weapon]--;
+    let len = 1300, target = null;
+    for (let s = 0; s < 1300; s += 3) {
+      const x = ox + dx * s, y = oy + dy * s;
+      if (x < -10 || x > W + 10 || y < -10 || y > H) { len = s; break; }
+      for (const o of this.units) {
+        if (!o.alive || o === u) continue;
+        const vy = Math.max(0, Math.abs(y - (o.y - BODY_CY)) - BODY_HALF);
+        if (Math.hypot(o.x - x, vy) < BODY_R + 2) { target = o; break; }
+      }
+      if (target) { len = s; break; }
+    }
+    const ex = ox + dx * len, ey = oy + dy * len;
+    this.bolt = { x1: ox, y1: oy, x2: ex, y2: ey, t: 0, seed: Math.random() * 1000 };
+    this.flashT = 0.14;
+    this.shake = Math.max(this.shake, 4);
+    audio.play('explosion', { rate: 1.9, vol: 0.55 });
+    audio.play('fire', { rate: 1.8, vol: 0.6 });
+    u.squash = -0.2; u.shootT = 0.4;
+    for (let i = 0; i < 8; i++) this.particles.push({ type: 'spark', x: ox, y: oy, vx: rnd(-90, 90), vy: rnd(-90, 90), r: rnd(1.5, 3), life: 0, max: rnd(0.2, 0.4) });
+    if (target) {
+      this.damage(target, w.damage, '#9fd0ff');
+      this.particles.push({ type: 'flash', x: ex, y: ey, r: 34, life: 0, max: 0.25 });
+      for (let i = 0; i < 16; i++) this.particles.push({ type: 'spark', x: ex, y: ey, vx: rnd(-220, 220), vy: rnd(-220, 160), r: rnd(1.5, 3.5), life: 0, max: rnd(0.25, 0.55) });
+      audio.play('hit', { vol: 0.8 });
+      if (target.alive) {
+        target.grounded = false; target.y -= 2; target.fallStart = target.y;
+        target.vx = dx * w.knock; target.vy = dy * w.knock - 120;
+      }
+    }
+    this.state = 'settle'; this.settleT = 0; this.settleTotal = 0;
   }
 
   // ---------- AI ----------
@@ -523,6 +565,8 @@ export class Game {
     this.time += dt;
     if (this.state === 'idle') return;
     this.updateParticles(dt);
+    if (this.bolt) { this.bolt.t += dt; if (this.bolt.t > 0.3) this.bolt = null; }
+    this.flashT = Math.max(0, this.flashT - dt);
     this.shake = Math.max(0, this.shake - dt * 30);
     if (this.banner) { this.banner.t += dt; if (this.banner.t > 1.8) this.banner = null; }
 
@@ -611,6 +655,7 @@ export class Game {
     const showAim = this.state === 'aim' && (this.turnTeam === 0 || (this.ai && (this.ai.phase === 'aim' || this.ai.phase === 'charge')));
     if (showAim) this.drawAim(g);
     if (this.proj) this.drawProj(g, this.proj);
+    this.drawBolt(g);
     this.drawParticles(g);
     this.drawTags(g);
     for (const f of this.floaters) {
@@ -619,7 +664,29 @@ export class Game {
       g.globalAlpha = 1;
     }
     g.restore();
+    if (this.flashT > 0) { g.fillStyle = `rgba(220,235,255,${Math.min(0.55, this.flashT * 4)})`; g.fillRect(0, 0, W, H); }
     this.drawHUD(g);
+  }
+
+  // 번개 줄기: 지그재그 파란 글로우 + 흰 심지, 약 0.3초
+  drawBolt(g) {
+    const b = this.bolt; if (!b) return;
+    const len = Math.hypot(b.x2 - b.x1, b.y2 - b.y1), ux = (b.x2 - b.x1) / len, uy = (b.y2 - b.y1) / len;
+    const n = Math.max(2, Math.round(len / 16)), amp = 9;
+    const pts = [];
+    for (let i = 0; i <= n; i++) {
+      const k = i / n, off = i === 0 || i === n ? 0 : rnd(-amp, amp);
+      pts.push([b.x1 + (b.x2 - b.x1) * k - uy * off, b.y1 + (b.y2 - b.y1) * k + ux * off]);
+    }
+    const fade = Math.max(0, 1 - b.t / 0.3);
+    g.save();
+    g.globalAlpha = fade; g.lineJoin = 'round'; g.lineCap = 'round';
+    const path = () => { g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke(); };
+    g.shadowColor = '#4aa8ff'; g.shadowBlur = 18;
+    g.strokeStyle = 'rgba(70,150,255,0.8)'; g.lineWidth = 9; path();
+    g.shadowBlur = 8; g.strokeStyle = '#bfe0ff'; g.lineWidth = 4; path();
+    g.shadowBlur = 0; g.strokeStyle = '#fff'; g.lineWidth = 1.8; path();
+    g.restore();
   }
 
   drawWater(g) {
@@ -718,7 +785,8 @@ export class Game {
     const dx = f * Math.cos(a), dy = -Math.sin(a);
     g.save();
     g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 2; g.setLineDash([4, 5]);
-    g.beginPath(); g.moveTo(ox + dx * 20, oy + dy * 20); g.lineTo(ox + dx * 62, oy + dy * 62); g.stroke();
+    const reach = WEAPONS[this.weapon].instant ? 220 : 62;
+    g.beginPath(); g.moveTo(ox + dx * 20, oy + dy * 20); g.lineTo(ox + dx * reach, oy + dy * reach); g.stroke();
     g.setLineDash([]);
     g.strokeStyle = '#ff4d3d'; g.lineWidth = 2.5;
     const cx = ox + dx * 74, cy = oy + dy * 74;
@@ -772,6 +840,9 @@ export class Game {
         g.beginPath(); g.arc(p.x, p.y, p.r, 0, 7); g.fill();
       } else if (p.type === 'debris') {
         g.fillStyle = `rgba(110,70,35,${1 - k})`; g.fillRect(p.x, p.y, p.r * 1.6, p.r * 1.6);
+      } else if (p.type === 'spark') {
+        g.fillStyle = `rgba(${k < 0.5 ? '255,255,255' : '140,200,255'},${1 - k})`;
+        g.beginPath(); g.arc(p.x, p.y, p.r * (1 - k * 0.4), 0, 7); g.fill();
       } else if (p.type === 'splash') {
         g.fillStyle = `rgba(220,240,255,${1 - k})`;
         g.beginPath(); g.arc(p.x, p.y, p.r, 0, 7); g.fill();
