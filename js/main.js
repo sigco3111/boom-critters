@@ -1,20 +1,25 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
-import { Game, W, H } from './game.js';
+import { Game, W, H, CHARACTERS, WALK_FRAMES } from './game.js';
 import * as audio from './audio.js';
 
-const SPRITES = ['rabbit', 'pig', 'panda', 'monkey', 'penguin', 'hippo'];
+const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
+const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
 const g = canvas.getContext('2d');
 canvas.width = W; canvas.height = H;
 
 function loadImages() {
-  return Promise.all(SPRITES.map((n) => new Promise((res, rej) => {
+  const load = (key, pose) => new Promise((res, rej) => {
     const im = new Image();
-    im.onload = () => res([n, im]);
-    im.onerror = () => rej(new Error('이미지 로드 실패: ' + n));
-    im.src = `assets/sprites/${n}.png`;
-  }))).then(Object.fromEntries);
+    im.onload = () => res(im);
+    im.onerror = () => rej(new Error(`이미지 로드 실패: ${key}/${pose}`));
+    im.src = `assets/toon/${key}/${pose}.png`;
+  });
+  return Promise.all(CHAR_KEYS.map(async (key) => {
+    const imgs = await Promise.all(POSES.map((p) => load(key, p)));
+    return [key, Object.fromEntries(POSES.map((p, i) => [p, imgs[i]]))];
+  })).then(Object.fromEntries);
 }
 
 let game = null, difficulty = 'normal';
