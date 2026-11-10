@@ -1,6 +1,6 @@
 // 진행 상황 저장 (localStorage): 해금된 스테이지, 스테이지별 최고 별, 무한 모드 최고 기록
 // 저장소는 storage.js를 거치므로 localStorage가 막힌 환경에서도 이번 접속 동안은 메모리에 유지된다
-import { local } from './storage.js?v=2026111044';
+import { local } from './storage.js?v=2026111045';
 const KEY = 'boom-critters-progress-v1';
 export const STAGES = 10;
 
@@ -72,12 +72,16 @@ export function bestOf(stage) { return load().best[stage] || null; }
 // 설정 저장 (localStorage 'boom-prefs-v1'): 빠른 대전 난이도, 큰 HUD 글씨, 고대비 팀 표시. 진행 기록과 별도 키
 const PREF_KEY = 'boom-prefs-v1';
 export const DIFFS = ['easy', 'normal', 'hard'];
+export const MAP_THEMES = ['random', 'grass', 'desert', 'snow', 'night'];   // 빠른 대전 맵 선택: 테마
+export const MAP_TERRAINS = ['random', 'gentle', 'hills', 'canyon'];          // 빠른 대전 맵 선택: 지형
 export function loadPrefs() {
-  const p = { difficulty: 'normal', bigHud: false, contrast: false, vibration: true, hint: null };
+  const p = { difficulty: 'normal', bigHud: false, contrast: false, vibration: true, hint: null, theme: 'random', terrain: 'random' };
   try {
     const d = JSON.parse(local.get(PREF_KEY));
     if (d && typeof d === 'object') {
       if (DIFFS.includes(d.difficulty)) p.difficulty = d.difficulty;
+      if (MAP_THEMES.includes(d.theme)) p.theme = d.theme;
+      if (MAP_TERRAINS.includes(d.terrain)) p.terrain = d.terrain;
       p.bigHud = d.bigHud === true; p.contrast = d.contrast === true;
       p.vibration = d.vibration !== false; // 저장값이 없으면 켬
       p.hint = typeof d.hint === 'boolean' ? d.hint : null; // null = 기기 기본값(터치 켬 / 데스크톱 끔)

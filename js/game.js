@@ -1,8 +1,8 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111044';
-import * as audio from './audio.js?v=2026111044';
-import { t as tr, getLang } from './i18n.js?v=2026111044';
-import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111044';
+import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111045';
+import * as audio from './audio.js?v=2026111045';
+import { t as tr, getLang } from './i18n.js?v=2026111045';
+import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111045';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -117,7 +117,8 @@ export const DIFF = {
   normal: { a: 5.5, p: 11, enemies: 3, get label() { return tr('diff.normal'); } },
   hard: { a: 2.8, p: 5.6, enemies: 4, get label() { return tr('diff.hard'); } },
 };
-export function quickConfig(diff) { return { mode: 'quick', enemies: (DIFF[diff] || DIFF.normal).enemies }; }
+// map: 빠른 대전 맵 선택 { theme: 'random'|테마 id, terrain: 'random'|'gentle'|'hills'|'canyon' } (생략·random = 시드로 정함)
+export function quickConfig(diff, map) { return { mode: 'quick', enemies: (DIFF[diff] || DIFF.normal).enemies, theme: map && map.theme, terrain: map && map.terrain }; }
 const ENEMY_X = { 1: [760], 2: [650, 820], 3: [600, 730, 865], 4: [560, 670, 780, 885] };
 
 // ---------- 스테이지 / 무한 모드 설정 (밸런스 숫자는 README "밸런스" 표 참고) ----------
@@ -246,7 +247,11 @@ export class Game {
     this.stats = blankStats();
     const seed = opts.seed ?? ((Math.random() * 1e9) | 0);
     // 스테이지 1~3 초원 / 4~6 사막 / 7~8 설원 / 9~10 밤, 빠른 대전·무한은 시드로 결정
-    this.buildField(seed, opts.enemies ?? 3, null, this.mode === 'stage' ? themeForStage(this.stage) : themeForSeed(seed));
+    // 빠른 대전만 맵을 고를 수 있다 (테마·지형 모두 '랜덤'이면 시드로 정함). 스테이지·무한은 예전 그대로(지형 hills)
+    const quick = this.mode === 'quick';
+    const theme = this.mode === 'stage' ? themeForStage(this.stage) : (quick && themeById(opts.theme)) || themeForSeed(seed);
+    const kind = quick ? (TERRAINS.includes(opts.terrain) ? opts.terrain : terrainForSeed(seed)) : 'hills';
+    this.buildField(seed, opts.enemies ?? 3, null, theme, kind);
     this.nextIdx = [0, 0];
     this.turnTeam = 0;
     this.winner = null;
@@ -267,10 +272,11 @@ export class Game {
   }
 
   // 지형·배경·유닛을 새로 배치. carry가 있으면 그 팀0 유닛의 체력/생존을 이어받는다 (무한 모드 웨이브 전환)
-  buildField(seed, enemies, carry, theme = themeForSeed(seed)) {
+  buildField(seed, enemies, carry, theme = themeForSeed(seed), kind = 'hills') {
     this.seed = seed;
     this.theme = theme;
-    this.terrain = new Terrain(seed, theme, this.headless);
+    this.terrainKind = kind;
+    this.terrain = new Terrain(seed, theme, this.headless, kind);
     this.bg = this.headless ? null : makeBackground(theme, seed);
     this.weather = this.headless ? null : makeWeather(theme);
     this.units = []; this.particles = []; this.floaters = []; this.proj = null;

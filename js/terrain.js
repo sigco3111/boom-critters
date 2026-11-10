@@ -36,9 +36,41 @@ function makeDirtTile(rnd, tile) {
   return c;
 }
 
+// 지형 프리셋(빠른 대전 '지형' 선택): gentle = 낮은 진폭의 완만한 땅, hills = 기본(예전과 같은 난수 순서), canyon = 가운데 깊은 협곡과 높은 벽
+export const TERRAINS = ['gentle', 'hills', 'canyon'];
+// 지형 '랜덤': 시드로 정한다 (gentle 25% · hills 50% · canyon 25%). 테마(themeForSeed)와 다른 해시를 써서 서로 영향이 없다
+export function terrainForSeed(seed) { const v = Math.imul((seed | 0) ^ 0x9e3779b9, 2246822519) >>> 28; return v < 4 ? 'gentle' : v < 12 ? 'hills' : 'canyon'; }
+// 열마다 지표면 높이 h[x] (y 아래가 땅). 협곡은 양쪽 끝 유닛 배치 구역(x≈20~385, 535~910) 밖인 x 400~540에만 파서 모든 유닛이 평평한 고원 위에 서게 한다
+export function makeHeights(rnd, kind = 'hills') {
+  const h = new Float32Array(W);
+  if (kind === 'canyon') {
+    const left = 255 + rnd() * 40, right = 255 + rnd() * 40, cx = 466 + rnd() * 8, half = 28 + rnd() * 6, wall = 32, floor = 440 + rnd() * 16, p = rnd() * 6.283;
+    for (let x = 0; x < W; x++) {
+      const t = Math.min(1, Math.max(0, (Math.abs(x - cx) - half) / wall)), s = t * t * (3 - 2 * t);
+      const top = (x < cx ? left : right) + 12 * Math.sin(p + (6.283 * 3 * x) / W) + 7 * Math.sin(2.1 * p + (6.283 * 7 * x) / W);
+      h[x] = Math.max(215, Math.min(458, floor + (top - floor) * s));
+    }
+    return h;
+  }
+  const k = kind === 'gentle' ? 0.4 : 1;
+  const comps = [[70, 1.0], [40, 2.3], [22, 4.7], [10, 9.1]].map(([a, f]) => ({
+    a: a * (0.6 + rnd() * 0.8) * k, f: f * (0.8 + rnd() * 0.4), p: rnd() * 6.283,
+  }));
+  const valley = rnd() < 0.5;
+  const feat = (valley ? 1 : -1) * (60 + rnd() * 45) * (kind === 'gentle' ? 0.3 : 1);
+  for (let x = 0; x < W; x++) {
+    let y = 345;
+    for (const c of comps) y += c.a * Math.sin(c.p + (6.283 * c.f * x) / W);
+    y += feat * Math.exp(-Math.pow((x - W / 2) / 110, 2));
+    h[x] = Math.max(215, Math.min(458, y)); // 최고점 215: 이름표가 상단 HUD(바람·시드 표시) 아래에 머문다
+  }
+  return h;
+}
+
 export class Terrain {
   // headless=true: 캔버스 없이 높이맵만으로 충돌 배열을 만든다 (window.__sim 시뮬레이션용, 렌더링 불가)
-  constructor(seed, theme, headless = false) {
+  constructor(seed, theme, headless = false, kind = 'hills') {
+    this.kind = TERRAINS.includes(kind) ? kind : 'hills';
     this.theme = theme || DEFAULT_THEME;
     this.headless = headless;
     this.alpha = new Uint8Array(W * H);
@@ -53,18 +85,7 @@ export class Terrain {
 
   generate(seed) {
     const rnd = mulberry32(seed);
-    const comps = [[70, 1.0], [40, 2.3], [22, 4.7], [10, 9.1]].map(([a, f]) => ({
-      a: a * (0.6 + rnd() * 0.8), f: f * (0.8 + rnd() * 0.4), p: rnd() * 6.283,
-    }));
-    const valley = rnd() < 0.5;
-    const feat = (valley ? 1 : -1) * (60 + rnd() * 45);
-    const h = new Float32Array(W);
-    for (let x = 0; x < W; x++) {
-      let y = 345;
-      for (const c of comps) y += c.a * Math.sin(c.p + (6.283 * c.f * x) / W);
-      y += feat * Math.exp(-Math.pow((x - W / 2) / 110, 2));
-      h[x] = Math.max(215, Math.min(458, y)); // 최고점 215: 이름표가 상단 HUD(바람·시드 표시) 아래에 머문다
-    }
+    const h = makeHeights(rnd, this.kind);
     this.heights = h;
     if (this.headless) {
       for (let x = 0; x < W; x++) for (let y = Math.ceil(h[x]); y < H; y++) this.alpha[y * W + x] = 255;

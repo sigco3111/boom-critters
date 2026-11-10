@@ -1,6 +1,6 @@
 // 스테이지 테마: 배경(하늘·구름·별·언덕)과 지형/물 색을 캔버스 코드로 그린다 (외부 이미지 없음)
-import { W, H, mulberry32 } from './terrain.js?v=2026111044';
-import { t as tr } from './i18n.js?v=2026111044';
+import { W, H, mulberry32, makeHeights } from './terrain.js?v=2026111045';
+import { t as tr } from './i18n.js?v=2026111045';
 
 export const THEMES = [
   {
@@ -41,6 +41,22 @@ export const THEMES = [
 export function themeForStage(s) { return THEMES[s <= 3 ? 0 : s <= 6 ? 1 : s <= 8 ? 2 : 3]; }
 // 빠른 대전·무한 모드: 시드로 테마를 정한다 (같은 시드 = 같은 테마)
 export function themeForSeed(seed) { return THEMES[(Math.imul(seed | 0, 2654435761) >>> 28) % THEMES.length]; }
+// 빠른 대전 '테마' 선택값('grass'|'desert'|'snow'|'night') -> 테마 (없으면 undefined: 랜덤)
+export function themeById(id) { return THEMES.find((t) => t.id === id); }
+// 시작 화면의 작은 맵 미리보기: 하늘 그라데이션 + 지형 윤곽 (theme/kind가 없으면 '랜덤'이라 물음표 상자)
+export function drawMapPreview(c, theme, kind) {
+  const g = c.getContext('2d'), w = c.width, h = c.height;
+  if (!theme) { // 랜덤 테마: 네 테마 하늘색을 나란히
+    THEMES.forEach((t, i) => { const gr = g.createLinearGradient(0, 0, 0, h); t.sky.forEach(([o, col]) => gr.addColorStop(o, col)); g.fillStyle = gr; g.fillRect((i * w) / 4, 0, w / 4 + 1, h); });
+  } else {
+    const gr = g.createLinearGradient(0, 0, 0, h); theme.sky.forEach(([o, col]) => gr.addColorStop(o, col)); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  }
+  if (!kind) { g.fillStyle = 'rgba(0,0,0,0.45)'; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.font = `bold ${h * 0.7}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('?', w / 2, h / 2 + 1); return; }
+  const hs = makeHeights(mulberry32(kind === 'canyon' ? 7 : kind === 'gentle' ? 11 : 3), kind), tl = theme ? theme.tile.base : '#6b5a48', ed = theme ? theme.edge[1] : '#6fae4a';
+  g.beginPath(); g.moveTo(0, h);
+  for (let i = 0; i <= 48; i++) g.lineTo((i / 48) * w, ((hs[Math.min(W - 1, Math.round((i / 48) * (W - 1)))] - 200) / 280) * h);
+  g.lineTo(w, h); g.closePath(); g.fillStyle = tl; g.fill(); g.lineWidth = 2; g.strokeStyle = ed; g.stroke();
+}
 
 function ridge(g, color, base, amp, rnd, step = 8) {
   const p = [rnd() * 6.28, rnd() * 6.28, rnd() * 6.28], f = 0.7 + rnd() * 0.8;

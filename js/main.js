@@ -1,13 +1,14 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111044';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig, warmupSteps, warmFlash } from './game.js?v=2026111044';
-import * as audio from './audio.js?v=2026111044';
-import * as progress from './progress.js?v=2026111044';
-import { MenuBg } from './menubg.js?v=2026111044';
-import * as store from './storage.js?v=2026111044';
-import * as loader from './loader.js?v=2026111044';
-import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111044';
+const VERSION = '2026111045';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig, warmupSteps, warmFlash } from './game.js?v=2026111045';
+import * as audio from './audio.js?v=2026111045';
+import * as progress from './progress.js?v=2026111045';
+import { MenuBg } from './menubg.js?v=2026111045';
+import { themeById, drawMapPreview } from './themes.js?v=2026111045';
+import * as store from './storage.js?v=2026111045';
+import * as loader from './loader.js?v=2026111045';
+import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111045';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -182,7 +183,7 @@ function showResult(winner) {
       const dl = $('resultDiff');
       if (dl) { // 빠른 대전: 고른 난이도와 적 수를 결과 화면에 표시
         const d = DIFF[current.diff];
-        dl.textContent = mode === 'quick' && d ? tr('res.diff', { d: d.label, n: d.enemies }) : '';
+        dl.textContent = mode === 'quick' && d ? tr('res.diff', { d: d.label, n: d.enemies }) + ' · ' + mapLabel(current) : '';
         dl.classList.toggle('hidden', !(mode === 'quick' && d));
       }
       { // 공유 글: 모드/스테이지 · 결과 · 별 + 게임 주소
@@ -214,9 +215,9 @@ function showResult(winner) {
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
 window.__audio = audio; // 디버깅/테스트용: __audio.musicInfo()
-window.__sim = (n, opts) => import('./sim.js?v=2026111044').then((m) => m.sim(n, opts));
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111044').then((m) => m.table(n, stages, skills));
-window.__sim.soak = (n, opts) => import('./sim.js?v=2026111044').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
+window.__sim = (n, opts) => import('./sim.js?v=2026111045').then((m) => m.sim(n, opts));
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111045').then((m) => m.table(n, stages, skills));
+window.__sim.soak = (n, opts) => import('./sim.js?v=2026111045').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
 
 // 이 경기에 뒤에서 받는 캐릭터가 필요한가: 적이 3마리 이상(보통 이상·스테이지 4~)이거나 무한 모드(웨이브가 오르면 적이 4마리)
 function needsLazy(cfg) {
@@ -241,9 +242,9 @@ async function launch(cfg) {
   ['startScreen', 'stageScreen', 'resultScreen'].forEach((id) => show(id, false));
   if (cfg.mode === 'stage') game.newMatch('normal', stageConfig(cfg.stage));
   else if (cfg.mode === 'endless') game.newMatch('normal', waveConfig(1));
-  else { difficulty = cfg.diff; game.newMatch(cfg.diff, quickConfig(cfg.diff)); }
+  else { difficulty = cfg.diff; game.newMatch(cfg.diff, quickConfig(cfg.diff, cfg)); }
 }
-const startMatch = (diff) => launch({ mode: 'quick', diff });
+const startMatch = (diff) => launch({ mode: 'quick', diff, theme: prefs.theme, terrain: prefs.terrain });
 // 시작 화면 난이도 선택(쉬움/보통/어려움): 고른 값은 localStorage에 저장되고 '빠른 대전 시작'으로 시작
 function selectDiff(d, save = true) {
   if (!DIFF[d]) d = 'normal';
@@ -252,6 +253,33 @@ function selectDiff(d, save = true) {
   document.querySelectorAll('[data-diff]').forEach((b) => { const on = b.dataset.diff === d; b.classList.toggle('sel', on); b.setAttribute('aria-checked', String(on)); });
   const x = DIFF[d], q = $('quickDesc');
   if (q) q.textContent = tr('quick.desc', { n: x.enemies, a: x.a, p: x.p });
+}
+
+// 시작 화면 맵 선택(테마·지형, 빠른 대전 전용): 고른 값은 localStorage(없으면 메모리)에 저장된다. '랜덤'은 시드로 정한다
+const MAP_TH = ['random', 'grass', 'desert', 'snow', 'night'], MAP_TR = ['random', 'gentle', 'hills', 'canyon'];
+const mapThemeName = (id) => (id === 'random' ? tr('map.random') : tr('th.' + id));
+const mapTerrainName = (id) => tr(id === 'random' ? 'map.random' : 'ter.' + id);
+function selectMap(save = true) {
+  const sTh = $('mapTheme'), sTr = $('mapTerrain');
+  if (!sTh || !sTr) return;
+  if (!sTh.options.length || sTh.dataset.lang !== getLang()) { // 언어가 바뀌면 이름을 다시 채운다
+    sTh.dataset.lang = getLang();
+    sTh.innerHTML = MAP_TH.map((id) => `<option value="${id}">${mapThemeName(id)}</option>`).join('');
+    sTr.innerHTML = MAP_TR.map((id) => `<option value="${id}">${mapTerrainName(id)}</option>`).join('');
+  }
+  if (!MAP_TH.includes(prefs.theme)) prefs.theme = 'random';
+  if (!MAP_TR.includes(prefs.terrain)) prefs.terrain = 'random';
+  sTh.value = prefs.theme; sTr.value = prefs.terrain;
+  if (save) progress.savePrefs({ theme: prefs.theme, terrain: prefs.terrain });
+  const th = themeById(prefs.theme), kind = MAP_TR.includes(prefs.terrain) && prefs.terrain !== 'random' ? prefs.terrain : null, pv = $('mapPreview');
+  if (pv) drawMapPreview(pv, th, kind);
+  const d = $('mapDesc');
+  if (d) d.textContent = tr('map.desc', { t: mapThemeName(prefs.theme), r: mapTerrainName(prefs.terrain), d: tr(prefs.terrain === 'random' ? 'ter.random.d' : 'ter.' + prefs.terrain + '.d') });
+}
+// 결과 화면에 표시할 맵 이름: 실제로 플레이한 맵 (고른 값이 랜덤이면 '(랜덤)' 표시)
+function mapLabel(cfg) {
+  const th = game.theme ? tr('th.' + game.theme.id) : '?', ter = tr('ter.' + (game.terrainKind || 'hills'));
+  return tr('res.map', { t: th, r: ter, x: cfg.theme === 'random' || cfg.terrain === 'random' || !cfg.theme ? tr('map.rnd') : '' });
 }
 
 const refreshEndless = () => { $('endlessBest').textContent = tr('best.endless', { n: progress.load().endlessBest }); };
@@ -350,6 +378,9 @@ function setup(sprites) {
   // 시작 화면
   document.querySelectorAll('[data-diff]').forEach((b) => b.addEventListener('click', () => { audio.play('select'); selectDiff(b.dataset.diff); }));
   selectDiff(difficulty, false);
+  selectMap(false);
+  $('mapTheme')?.addEventListener('change', (e) => { audio.play('select'); prefs.theme = e.target.value; selectMap(); });
+  $('mapTerrain')?.addEventListener('change', (e) => { audio.play('select'); prefs.terrain = e.target.value; selectMap(); });
   $('quickStartBtn')?.addEventListener('click', () => startMatch(difficulty));
   $('stageModeBtn').addEventListener('click', goStageSelect);
   $('endlessModeBtn').addEventListener('click', () => launch({ mode: 'endless' }));
@@ -654,7 +685,7 @@ function setup(sprites) {
   langBtns.forEach((b) => b.addEventListener('click', () => { audio.play('select'); setLang(b.dataset.lang); }));
   syncLang();
   onLangChange(() => {
-    syncLang(); selectDiff(difficulty, false); refreshEndless(); refreshMute(); applyA11y(); syncPrefUI(); updateVer(); popSoundLabel = '';
+    syncLang(); selectDiff(difficulty, false); selectMap(false); refreshEndless(); refreshMute(); applyA11y(); syncPrefUI(); updateVer(); popSoundLabel = '';
     if (!$('stageScreen').classList.contains('hidden')) renderStages();
     if (resultView && !$('resultScreen').classList.contains('hidden')) resultView();
     tutorial.rerender();
