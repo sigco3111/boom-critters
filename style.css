@@ -397,3 +397,16 @@ button:focus-visible, input:focus-visible, a:focus-visible, #canvasWrap:focus-vi
 #canvasWrap:focus-visible { outline-offset: -4px; box-shadow: inset 0 0 0 7px #000, inset 0 0 0 9px #ffd24a; }
 .vol input[type=range]:focus-visible { outline-offset: 4px; }
 #controls .weapons button:focus-visible { outline-offset: -3px; box-shadow: inset 0 0 0 5px #000; } /* 가로 스크롤 영역에서 잘리지 않도록 안쪽에 그림 */
+
+/* 로딩 화면: 진행 막대 + 불러온 개수. 끝나면 .fade로 부드럽게 사라진 뒤 .hidden. 뒤에서 캐릭터를 받을 때는 .slim(글자만) */
+#loading { z-index: 20; background: #0c1a2c; transition: opacity 0.4s ease; }
+#loading.fade { opacity: 0; pointer-events: none; }
+#loading.slim { background: rgba(10, 25, 45, 0.6); }
+#loading.slim #loadBar, #loading.slim #loadCount, #loading.slim #loadNote { display: none; }
+#loadText { margin: 0; font-size: calc(3 * var(--cq)); font-weight: 700; }
+#loadBar { width: 46%; height: calc(1.8 * var(--cq)); min-height: 8px; background: rgba(255, 255, 255, 0.16); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 999px; overflow: hidden; }
+#loadBar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #d9a31b, #ffd24a); border-radius: 999px; transition: width 0.15s ease; }
+#loadCount { margin: 0; font-size: calc(1.8 * var(--cq)); color: #9fb8d0; font-variant-numeric: tabular-nums; }
+#loadNote { margin: 0; font-size: calc(1.7 * var(--cq)); color: #ffe27a; }
+@media (prefers-reduced-motion: reduce) { #loading, #loadBar i { transition: none; } }
+body.booting #controls, body.booting #topBtns, body.booting #rotateHint { visibility: hidden; } /* 로딩 중에는 조작 버튼을 숨김 */

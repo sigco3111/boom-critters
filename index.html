@@ -9,14 +9,19 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/icons/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=2026111037">
+  <link rel="stylesheet" href="style.css?v=2026111038">
 </head>
-<body>
+<body class="booting">
   <div id="app">
     <div id="rotateHint" role="status"><span>📱 가로로 돌리면 더 크게 보여요</span><button id="rotateHintClose" type="button" aria-label="안내 닫기">✕</button></div>
     <div id="stage">
       <div id="canvasWrap" role="application" aria-label="붐 크리터스 게임 화면 (이동 A·D, 점프 W, 각도 ↑·↓, 발사 Space, 무기 1~6, 일시정지 Esc)" tabindex="0"><canvas id="game" width="960" height="540"></canvas></div>
-      <div id="loading" class="overlay">불러오는 중...</div>
+      <div id="loading" class="overlay" role="status" aria-live="polite">
+        <p id="loadText">...</p>
+        <div id="loadBar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+        <p id="loadCount"></p>
+        <p id="loadNote" class="hidden"></p>
+      </div>
       <div id="topBtns">
         <button id="pauseBtn" type="button" aria-label="일시정지" hidden>⏸<span class="tx"> 일시정지</span></button>
         <button id="gearBtn" type="button" aria-label="설정">⚙</button>
@@ -106,6 +111,7 @@
               <tr><th>결과 공유</th><td>결과 화면의 <b>결과 공유</b> 버튼은 스테이지(또는 모드)·결과·별과 게임 주소를 공유합니다. 공유 기능이 있는 기기에서는 공유 창이 열리고, 없으면 같은 글이 클립보드에 복사되며 작은 안내가 잠깐 뜹니다</td></tr>
               <tr><th>앱 설치</th><td>브라우저 메뉴의 '앱 설치' / '홈 화면에 추가'로 <b>포탄 동물원</b> 아이콘을 만들어 전체 화면 앱처럼 실행할 수 있습니다. 서비스 워커를 쓰지 않아 업데이트는 항상 최신 파일로 받습니다. 진행 기록은 이 브라우저에 저장됩니다</td></tr>
               <tr><th>튜토리얼</th><td>처음 실행하면 4단계 안내가 한 번 나옵니다. 아래 '튜토리얼 보기'로 언제든 다시 볼 수 있어요 (←/→ 이동, Esc 건너뛰기)</td></tr>
+              <tr><th>불러오기</th><td>처음 실행하면 진행 막대가 있는 불러오기 화면이 나오며 첫 화면에 필요한 소리와 그림을 받습니다. 일부가 실패해도 약 8초 뒤 게임이 계속되고, 나머지 소리와 추가 캐릭터는 뒤에서 받습니다</td></tr>
             </table>
           </section>
           <section>
@@ -180,7 +186,7 @@
           </ul>
           <p class="note">CC0 에셋은 표기 의무가 없지만 감사의 뜻으로 적습니다. 게임 코드는 MIT 라이선스입니다. 지형·스테이지 테마 배경(초원·사막·설원·밤)·이펙트·무기 아이콘은 외부 이미지 없이 캔버스 코드로 직접 그렸습니다. 앱 아이콘(대포와 별)도 직접 그린 그림입니다.</p>
         </div>
-        <p class="ver">버전 <span id="verHtml">2026111037</span> · 스크립트 <span id="verJs">-</span></p>
+        <p class="ver">버전 <span id="verHtml">2026111038</span> · 스크립트 <span id="verJs">-</span></p>
         <button type="button" id="creditsCloseBtn">닫기</button>
       </div>
 
@@ -241,6 +247,6 @@
       </div>
     </div>
   </div>
-  <script type="module" src="js/main.js?v=2026111037"></script>
+  <script type="module" src="js/main.js?v=2026111038"></script>
 </body>
 </html>
