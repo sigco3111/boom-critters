@@ -7,6 +7,9 @@ export const WATER_Y = 496;
 const UNIT_G = 900;      // 유닛 중력 (px/s^2)
 const PROJ_G = 500;      // 투사체 중력
 const UNIT_H = 38, HALF_W = 9;
+const BODY_CY = 26;      // 몸통 중심 높이 (발 기준 위쪽, 스프라이트 키 약 52px)
+const BODY_R = 15;       // 투사체 명중 판정 반경(몸통 중심 기준)
+const BODY_HALF = 8;     // 몸통 캡슐의 세로 반길이 (중심에서 위/아래)
 const FALL_T = 80;       // 낙하 데미지 임계 높이
 const TURN_TIME = 30;
 
@@ -51,7 +54,9 @@ export function stepProj(p, dt, wind, terrain, units) {
     if (units) {
       for (const u of units) {
         if (!u.alive || (u === p.owner && p.age < 0.35)) continue;
-        if (Math.hypot(u.x - p.x, u.y - 18 - p.y) < 15) return 'unit';
+        // 몸통 캡슐(세로 선분 + 반경) 판정: 중심은 발 위 BODY_CY
+        const dy = Math.max(0, Math.abs(p.y - (u.y - BODY_CY)) - BODY_HALF);
+        if (Math.hypot(u.x - p.x, dy) < BODY_R) return 'unit';
       }
     }
   }
@@ -236,7 +241,7 @@ export class Game {
     let hit = false;
     for (const u of this.units) {
       if (!u.alive) continue;
-      const cx = u.x, cy = u.y - 18;
+      const cx = u.x, cy = u.y - BODY_CY;
       const d = Math.hypot(cx - x, cy - y);
       const reach = r + 12;
       if (d >= reach) continue;
@@ -385,9 +390,9 @@ export class Game {
     for (let angle = 12; angle <= 85; angle += 2.5) {
       for (let power = 15; power <= 100; power += 2.5) {
         const r = this.simulate(u, weapon, angle, power, facing);
-        let score = r.kind === 'water' || r.kind === 'out' ? 9999 : Math.hypot(r.x - tgt.x, r.y - (tgt.y - 18));
+        let score = r.kind === 'water' || r.kind === 'out' ? 9999 : Math.hypot(r.x - tgt.x, r.y - (tgt.y - BODY_CY));
         const rad2 = WEAPONS[weapon].radius * 1.1;
-        for (const o of friends) if (Math.hypot(r.x - o.x, r.y - (o.y - 18)) < rad2) score += 150;
+        for (const o of friends) if (Math.hypot(r.x - o.x, r.y - (o.y - BODY_CY)) < rad2) score += 150;
         cands.push({ angle, power, score });
         if (!best || score < best.score) best = { angle, power, score };
       }
