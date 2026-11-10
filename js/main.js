@@ -64,7 +64,7 @@ const stars = (n) => '★'.repeat(n) + '☆'.repeat(3 - n);
 const show = (id, on = true) => $(id).classList.toggle('hidden', !on);
 // 설정·크레딧·도움말 같은 모달이 열려 있으면 경기를 멈추고 게임 키 입력을 막음
 let modalOpen = false;
-const MODALS = ['settingsScreen', 'helpScreen', 'creditsScreen'];
+const MODALS = ['settingsScreen', 'helpScreen', 'creditsScreen', 'pauseScreen'];
 
 function showResult(winner) {
   setTimeout(() => {
@@ -233,6 +233,23 @@ function setup(sprites) {
     $(open).addEventListener('click', () => { audio.play('select'); openModal(scr); });
     $(close).addEventListener('click', () => { audio.play('select'); closeModal(scr); });
   }
+  // 일시정지: 모달과 같은 방식으로 game.update를 통째로 멈춤 → 타이머·AI 생각/조준/충전도 그대로 멈췄다가 이어짐 (건너뛰기 불가)
+  const pauseBtn = $('pauseBtn');
+  pauseBtn.hidden = false;
+  const canPause = () => !modalOpen && !game.winner && ['aim', 'flying', 'settle', 'wave'].includes(game.state);
+  const pauseGame = () => {
+    if (!canPause()) return;
+    game.charging = false; game.power = 0; // 충전 중이면 발사하지 않고 취소
+    audio.play('select'); openModal('pauseScreen');
+  };
+  pauseBtn.addEventListener('click', pauseGame);
+  $('resumeBtn').addEventListener('click', () => { audio.play('select'); closeModal('pauseScreen'); });
+  $('restartBtn').addEventListener('click', () => { closeModal('pauseScreen'); launch({ ...current }); });
+  $('quitBtn').addEventListener('click', () => {
+    closeModal('pauseScreen');
+    game.state = 'idle'; game.ai = null; game.charging = false; // 뒤에서 경기가 계속 진행되지 않도록 정지
+    audio.play('select'); goStart();
+  });
   $('gearBtn').addEventListener('click', () => { audio.play('select'); openModal('settingsScreen'); });
   $('settingsCloseBtn').addEventListener('click', () => { audio.play('select'); closeModal('settingsScreen'); });
 
@@ -245,6 +262,7 @@ function setup(sprites) {
       else if (e.code === 'Escape') MODALS.forEach((m) => !$(m).classList.contains('hidden') && closeModal(m));
       return;
     }
+    if (e.code === 'Escape') { if (!e.repeat) pauseGame(); return; }
     if (map[e.code]) { k[map[e.code]] = true; e.preventDefault(); return; }
     if (e.repeat) { if (['Space', 'KeyW'].includes(e.code)) e.preventDefault(); return; }
     if (e.code === 'KeyW') { game.playerJump(); e.preventDefault(); }
@@ -322,6 +340,7 @@ function setup(sprites) {
       if (fireFx.textContent !== info) fireFx.textContent = info;
       const pw = mine ? Math.round(game.power) + '%' : '0%';
       if (fireBtn.dataset.pw !== pw) { fireBtn.dataset.pw = pw; fireBtn.style.setProperty('--pw', pw); }
+      pauseBtn.disabled = !canPause();
     }
     // 무기 버튼 상태 표시
     weaponBtns.forEach((b, i) => {
