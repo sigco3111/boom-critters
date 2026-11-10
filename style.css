@@ -45,6 +45,8 @@ button.down, button:active { transform: translateY(2px); filter: brightness(1.15
 .overlay .mode button.big:hover { background: #ecb52a; }
 #stageGrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: calc(1.6 * var(--cq)); }
 #stageGrid button { display: flex; flex-direction: column; align-items: center; gap: calc(0.3 * var(--cq)); min-width: calc(13 * var(--cq)); padding: calc(1 * var(--cq)) calc(1.4 * var(--cq)); }
+#stageGrid button.boss { background: #8e1c1c; border-color: #ffd34a; color: #fff; }
+#stageGrid button.boss.locked { background: #4a2a2a; border-color: #6d5b25; }
 #stageGrid button b { font-size: calc(3.6 * var(--cq)); line-height: 1.1; }
 #stageGrid button small { font-size: calc(1.4 * var(--cq)); color: #cfe3f7; }
 #stageGrid .stars, .stars { letter-spacing: calc(0.2 * var(--cq)); color: #ffd24a; text-shadow: 0 calc(0.2 * var(--cq)) 0 #0008; }
@@ -91,8 +93,9 @@ body.touch #topBtns .tx { display: none; }
 /* 세로 화면: 캔버스 아래에 컨트롤을 배치 */
 @media (orientation: portrait) {
   body.touch #controls { display: grid; grid-template-columns: auto auto auto; grid-template-areas: "weap weap weap" "move aim fire"; justify-content: space-between; align-items: center; gap: 10px 8px; width: 100%; padding: 10px 8px calc(10px + env(safe-area-inset-bottom)); }
-  body.touch #controls .weapons { grid-area: weap; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; }
-  body.touch #controls .weapons button { min-height: 52px; min-width: 0; padding: 4px 0; font-size: clamp(10px, 3.2vw, 13px); white-space: nowrap; }
+  body.touch #controls .weapons { grid-area: weap; display: flex; gap: 3px; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; } /* 9칸: 한 칸 최소 44px, 모자라면 가로로 밀어서 본다 */
+  body.touch #controls .weapons::-webkit-scrollbar { display: none; }
+  body.touch #controls .weapons button { flex: 1 0 44px; min-height: 52px; min-width: 44px; padding: 4px 0; touch-action: pan-x; font-size: clamp(10px, 3.2vw, 13px); white-space: nowrap; }
   body.touch #controls .weapons .wa { font-size: clamp(10px, 3vw, 12px); }
   body.touch #controls .move { grid-area: move; }
   body.touch #controls .move button { width: min(60px, 15vw); height: min(60px, 15vw); min-width: 44px; min-height: 44px; padding: 0; font-size: 16px; }
