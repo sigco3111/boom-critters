@@ -1,8 +1,8 @@
 // 시작·스테이지 선택 화면의 움직이는 배경: 별밤 하늘에 천천히 흐르는 구름(시차 3겹)과 떠다니는 별. 외부 이미지 없이 캔버스 코드로 그린다.
 // 가볍게: 층마다 한 번만 미리 그려 두고(오프스크린) 프레임마다 drawImage로 옮기기만 하며, 30fps로 제한한다.
 // 움직임 줄이기(prefers-reduced-motion)면 한 프레임만 그려 정지 화면으로 두고, 탭이 숨겨지면 main.js가 루프 자체를 멈춘다.
-import { THEMES } from './themes.js?v=2026111032';
-import { mulberry32 } from './terrain.js?v=2026111032';
+import { THEMES } from './themes.js?v=2026111033';
+import { mulberry32 } from './terrain.js?v=2026111033';
 
 const BW = 640, BH = 360;        // 내부 해상도 (CSS로 화면 크기에 맞춰 늘림 — 부드러운 구름이라 낮은 해상도로 충분)
 const STEP = 1 / 30;             // 프레임 간격(초): 30fps

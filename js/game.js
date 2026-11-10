@@ -1,7 +1,7 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111032';
-import * as audio from './audio.js?v=2026111032';
-import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111032';
+import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111033';
+import * as audio from './audio.js?v=2026111033';
+import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111033';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -36,9 +36,11 @@ export const WEAPONS = [
 ];
 // 하단 HUD 무기 슬롯 (캔버스 좌표)
 const SLOT = { x: 10, y: H - 56, w: 54, h: 50, gap: 3 };
+// '큰 HUD 글씨'를 켜면 슬롯 높이만 키우고(글자 +25%) 폭은 거의 그대로 둔다: 가운데 파워 바(x 356~)를 가리지 않도록 6칸이 x 348 안에 끝난다
+const SLOT_BIG = { x: 8, y: H - 64, w: 55, h: 58, gap: 2 };
 // 팀별 무기 탄약 (무한 = Infinity, 비활성 무기는 0). 공습은 해금 전(airOk=false)이면 0
 const freshAmmo = (airOk = false) => [0, 1].map(() => WEAPONS.map((w) => (w.disabled || (w.airstrike && !airOk) ? 0 : w.ammo ?? Infinity)));
-export function slotRect(i) { return [SLOT.x + i * (SLOT.w + SLOT.gap), SLOT.y, SLOT.w, SLOT.h]; }
+export function slotRect(i, big = false) { const s = big ? SLOT_BIG : SLOT; return [s.x + i * (s.w + s.gap), s.y, s.w, s.h]; }
 export const TEAMS = [
   { name: '파랑 팀', color: '#3b82f6' },
   { name: '빨강 팀', color: '#ef4444' },
@@ -666,7 +668,7 @@ export class Game {
   // 캔버스 좌표가 하단 무기 슬롯 위인지 (없으면 -1)
   slotAt(px, py) {
     for (let i = 0; i < WEAPONS.length; i++) {
-      const [x, y, w, h] = slotRect(i);
+      const [x, y, w, h] = slotRect(i, this.bigHud);
       if (px >= x && px < x + w && py >= y && py < y + h) return i;
     }
     return -1;
@@ -1549,26 +1551,28 @@ export class Game {
   }
 
   drawWeaponBar(g) {
-    g.fillStyle = 'rgba(8,20,35,0.72)'; g.fillRect(0, H - 62, W, 62);
-    g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(0, H - 62, W, 1);
+    const big = this.bigHud, f = big ? 1.25 : 1, top = big ? H - 70 : H - 62;   // 큰 HUD 글씨: 라벨·탄약 +25%
+    g.fillStyle = 'rgba(8,20,35,0.72)'; g.fillRect(0, top, W, H - top);
+    g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(0, top, W, 1);
     WEAPONS.forEach((w, i) => {
-      const [x, y, sw, sh] = slotRect(i), sel = this.weapon === i;
+      const [x, y, sw, sh] = slotRect(i, big), sel = this.weapon === i;
       const ammo = this.ammo ? this.ammo[0][i] : (w.ammo ?? Infinity);
       const off = !!w.disabled, empty = !off && ammo <= 0;
+      const cy = y + (big ? 28 : 22);
       g.fillStyle = sel ? 'rgba(255,226,122,0.92)' : 'rgba(255,255,255,0.12)';
       g.strokeStyle = sel ? '#fff' : 'rgba(255,255,255,0.25)'; g.lineWidth = 1.5;
       g.beginPath(); g.roundRect(x, y, sw, sh, 7); g.fill(); g.stroke();
       g.save();
       if (off || empty) g.globalAlpha = 0.45;
-      this.drawWeaponIcon(g, w.id, x + sw / 2, y + 22, 0.95);
-      this.text(g, String(i + 1), x + 9, y + 9, 10, sel ? '#222' : '#cfe3f7', 'center');
+      this.drawWeaponIcon(g, w.id, x + sw / 2, cy, big ? 1 : 0.95);
+      this.text(g, String(i + 1), x + 9 * f, y + 9 * f, 10 * f, sel ? '#222' : '#cfe3f7', 'center');
       const lock = w.airstrike && !this.airOk;
-      if (!off) this.text(g, lock ? '잠김' : ammo === Infinity ? '∞' : '×' + ammo, x + sw - 5, y + 9, lock ? 9 : 11, empty ? '#ff9c9c' : sel ? '#222' : '#ffe27a', 'right');
-      this.text(g, w.name, x + sw / 2, y + 42, 10, sel ? '#222' : '#fff');
+      if (!off) this.text(g, lock ? '잠김' : ammo === Infinity ? '∞' : '×' + ammo, x + sw - 5, y + 9 * f, (lock ? 9 : 11) * f, empty ? '#ff9c9c' : sel ? '#222' : '#ffe27a', 'right');
+      this.text(g, w.name, x + sw / 2, y + (big ? 48 : 42), 10 * f, sel ? '#222' : '#fff');
       g.restore();
       if (off) {
-        g.fillStyle = 'rgba(0,0,0,0.6)'; g.beginPath(); g.roundRect(x + sw / 2 - 18, y + 14, 36, 15, 7); g.fill();
-        this.text(g, 'soon', x + sw / 2, y + 22, 10, '#bbb');
+        g.fillStyle = 'rgba(0,0,0,0.6)'; g.beginPath(); g.roundRect(x + sw / 2 - 18 * f, cy - 8 * f, 36 * f, 15 * f, 7 * f); g.fill();
+        this.text(g, 'soon', x + sw / 2, cy, 10 * f, '#bbb');
       }
     });
   }
