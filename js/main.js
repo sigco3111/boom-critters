@@ -1,10 +1,10 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111033';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig } from './game.js?v=2026111033';
-import * as audio from './audio.js?v=2026111033';
-import * as progress from './progress.js?v=2026111033';
-import { MenuBg } from './menubg.js?v=2026111033';
+const VERSION = '2026111034';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig } from './game.js?v=2026111034';
+import * as audio from './audio.js?v=2026111034';
+import * as progress from './progress.js?v=2026111034';
+import { MenuBg } from './menubg.js?v=2026111034';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -111,6 +111,40 @@ function renderStats(st, rec) {
   box.classList.remove('hidden');
 }
 
+// 결과 공유: navigator.share가 있으면 공유 창, 없거나 실패하면 같은 글을 클립보드에 복사하고 작은 토스트로 알린다
+const GAME_URL = 'https://sigco3111.github.io/boom-critters/';
+let shareText = '';
+let toastTimer = 0;
+function showToast(msg) {
+  const el = $('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add('hidden'), 2600);
+}
+async function copyText(t) {
+  try { if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(t); return true; } } catch (e) { /* 아래 대체 방법으로 */ }
+  try { // 권한이 없거나 http 같은 환경: 임시 textarea + execCommand
+    const ta = document.createElement('textarea');
+    ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch (e) { return false; }
+}
+async function shareResult() {
+  if (!shareText) return;
+  const text = shareText;
+  if (navigator.share) {
+    try { await navigator.share({ title: '붐 크리터스', text }); return; } catch (e) {
+      if (e && e.name === 'AbortError') return; // 사용자가 공유 창을 닫음
+    }
+  }
+  showToast(await copyText(text) ? '결과를 클립보드에 복사했어요' : `복사하지 못했어요. 주소: ${GAME_URL}`);
+}
+
 function showResult(winner) {
   setTimeout(() => {
     const mode = current.mode, won = winner === 0;
@@ -142,6 +176,14 @@ function showResult(winner) {
       if (won) { const r = progress.recordStats(current.stage, game.stats); rec = { ...r, first: !r.prev }; }
       else rec = { best: progress.bestOf(current.stage), isNew: {} };
     }
+    { // 공유 글: 모드/스테이지 · 결과 · 별 + 게임 주소
+      const word = won ? '승리' : winner === 1 ? '패배' : '무승부';
+      let line;
+      if (mode === 'endless') line = `붐 크리터스 무한 모드 - 웨이브 ${game.cleared} 클리어${endlessRecord && game.cleared > 0 ? ' (신기록!)' : ''}`;
+      else if (mode === 'stage') line = `붐 크리터스 스테이지 ${current.stage} ${word} ${stars(starN)}`;
+      else line = `붐 크리터스 빠른 대전(${(DIFF[current.diff] || {}).label || '보통'}) ${word}`;
+      shareText = `${line}\n${GAME_URL}`;
+    }
     renderStats(game.stats, rec);
     $('resultTitle').textContent = title;
     $('resultSub').textContent = sub;
@@ -160,9 +202,9 @@ function showResult(winner) {
 
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
-window.__sim = (n, opts) => import('./sim.js?v=2026111033').then((m) => m.sim(n, opts));
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111033').then((m) => m.table(n, stages, skills));
-window.__sim.soak = (n, opts) => import('./sim.js?v=2026111033').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
+window.__sim = (n, opts) => import('./sim.js?v=2026111034').then((m) => m.sim(n, opts));
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111034').then((m) => m.table(n, stages, skills));
+window.__sim.soak = (n, opts) => import('./sim.js?v=2026111034').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
 
 function launch(cfg) {
   current = cfg; endlessRecord = false;
@@ -288,6 +330,7 @@ function setup(sprites) {
   $('nextBtn').addEventListener('click', () => launch({ mode: 'stage', stage: Math.min(STAGE_COUNT, current.stage + 1) }));
   $('stageSelBtn').addEventListener('click', goStageSelect);
   $('menuBtn').addEventListener('click', () => { audio.play('select'); goStart(); });
+  $('shareBtn')?.addEventListener('click', () => { audio.play('select'); shareResult(); });
   game.onWave = (n) => { if (progress.recordEndless(n)) endlessRecord = true; };
   goStart();
 
