@@ -38,7 +38,7 @@ const stars = (n) => '★'.repeat(n) + '☆'.repeat(3 - n);
 const show = (id, on = true) => $(id).classList.toggle('hidden', !on);
 // 설정·크레딧·도움말 같은 모달이 열려 있으면 경기를 멈추고 게임 키 입력을 막음
 let modalOpen = false;
-const MODALS = ['settingsScreen'];
+const MODALS = ['settingsScreen', 'helpScreen', 'creditsScreen'];
 
 function showResult(winner) {
   setTimeout(() => {
@@ -162,6 +162,11 @@ function setup(sprites) {
     for (const n in k) k[n] = false; game.releaseCharge();
   };
   const closeModal = (id) => { show(id, false); modalOpen = MODALS.some((m) => !$(m).classList.contains('hidden')); $('controls').inert = modalOpen; };
+  // 게임 방법·크레딧: 시작 화면에서 열고 닫으면 시작 화면으로 복귀
+  for (const [open, scr, close] of [['helpBtn', 'helpScreen', 'helpCloseBtn'], ['creditsBtn', 'creditsScreen', 'creditsCloseBtn']]) {
+    $(open).addEventListener('click', () => { audio.play('select'); openModal(scr); });
+    $(close).addEventListener('click', () => { audio.play('select'); closeModal(scr); });
+  }
   $('gearBtn').addEventListener('click', () => { audio.play('select'); openModal('settingsScreen'); });
   $('settingsCloseBtn').addEventListener('click', () => { audio.play('select'); closeModal('settingsScreen'); });
 
