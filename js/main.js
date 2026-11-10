@@ -30,7 +30,20 @@ function unlockAudio() { // 재생이 막혀 있으면 다음 입력에서도 �
 }
 ['pointerdown', 'touchend', 'keydown'].forEach((t) => window.addEventListener(t, unlockAudio, true));
 
-let game = null, difficulty = 'normal';
+// 터치 화면 판별: 주 입력이 손가락(coarse)이거나 좁은 화면이거나, 실제 터치 입력이 한 번이라도 들어오면 켠다
+let game = null, difficulty = 'normal', touchSticky = false;
+const coarseMQ = window.matchMedia('(pointer: coarse)');
+const looksTouch = () => touchSticky || coarseMQ.matches || innerWidth <= 820 || (innerHeight <= 500 && innerWidth <= 1000)
+  || (('ontouchstart' in window || navigator.maxTouchPoints > 0) && !window.matchMedia('(any-pointer: fine)').matches);
+function setTouchUI(forceOn) {
+  if (forceOn) touchSticky = true;
+  const on = looksTouch();
+  document.body.classList.toggle('touch', on);
+  if (game) game.touchUI = on;
+}
+setTouchUI();
+window.addEventListener('resize', () => setTouchUI());
+coarseMQ.addEventListener?.('change', () => setTouchUI());
 let endlessRecord = false;
 let current = { mode: 'quick' };   // 현재/마지막 매치: { mode: 'quick'|'stage'|'endless', stage? }
 const weaponBtns = [1, 2, 3, 4, 5].map((n) => $('bW' + n));
@@ -127,6 +140,7 @@ function setup(sprites) {
   game = new Game(sprites);
   window.__game = game; // 디버깅/테스트용
   game.onOver = showResult;
+  setTouchUI();
   const k = game.keys;
 
   // 시작 화면
@@ -144,7 +158,7 @@ function setup(sprites) {
   // 음소거 + 설정 패널(음악/효과음 볼륨, localStorage 저장)
   const muteBtn = $('muteBtn');
   const refreshMute = () => {
-    muteBtn.textContent = audio.isMuted() ? '🔇 소리 꺼짐' : '🔊 소리 켜짐';
+    muteBtn.innerHTML = audio.isMuted() ? '🔇<span class="tx"> 소리 꺼짐</span>' : '🔊<span class="tx"> 소리 켜짐</span>';
     $('muteToggle').textContent = audio.isMuted() ? '꺼짐 (누르면 켜기)' : '켜짐 (누르면 끄기)';
   };
   muteBtn.addEventListener('click', () => { audio.initAudio(); audio.setMuted(!audio.isMuted()); refreshMute(); });
@@ -159,7 +173,7 @@ function setup(sprites) {
   refreshMute();
   const openModal = (id) => {
     modalOpen = true; show(id); $('controls').inert = true;
-    for (const n in k) k[n] = false; game.releaseCharge();
+    for (const n in k) k[n] = false; game.releaseCharge(); game.drag = null;
   };
   const closeModal = (id) => { show(id, false); modalOpen = MODALS.some((m) => !$(m).classList.contains('hidden')); $('controls').inert = modalOpen; };
   // 게임 방법·크레딧: 시작 화면에서 열고 닫으면 시작 화면으로 복귀
@@ -203,20 +217,38 @@ function setup(sprites) {
   weaponBtns.forEach((b, i) => b.addEventListener('click', () => game.setWeapon(i)));
 
   // 드래그 조준
-  let dragging = false;
+  // 마우스: 클릭/드래그로 각도만 조절 (기존 동작). 터치: 오른쪽 절반을 드래그하면 각도(유닛→손가락 방향)와
+  // 파워(드래그 거리)를 정하고 손을 떼면 발사, 왼쪽 절반은 각도만 조절.
+  let dragging = null, aimPtr = null; // 각도만 조절 중인 포인터 id / 드래그 발사 중인 포인터 id
   const toGame = (e) => {
     const r = canvas.getBoundingClientRect();
     return [((e.clientX - r.left) * W) / r.width, ((e.clientY - r.top) * H) / r.height];
   };
   canvas.addEventListener('pointerdown', (e) => {
-    const [px, py] = toGame(e), slot = game.slotAt(px, py);
-    if (slot >= 0) { game.setWeapon(slot); return; } // 하단 HUD 무기 버튼
-    dragging = true; canvas.setPointerCapture(e.pointerId); game.aimTo(px, py);
+    if (modalOpen) return;
+    const finger = e.pointerType === 'touch' || e.pointerType === 'pen';
+    if (finger) setTouchUI(true);
+    const [px, py] = toGame(e);
+    if (!game.touchUI) { const slot = game.slotAt(px, py); if (slot >= 0) { game.setWeapon(slot); return; } } // 하단 HUD 무기 버튼
+    if (finger && px >= W / 2 && aimPtr === null) {
+      const max = Math.min(300, (140 * W) / canvas.getBoundingClientRect().width); // 손가락 약 140px 끌면 최대 파워
+      if (game.dragBegin(px, py, max)) { aimPtr = e.pointerId; canvas.setPointerCapture(e.pointerId); }
+      return;
+    }
+    dragging = e.pointerId; canvas.setPointerCapture(e.pointerId); game.aimTo(px, py);
   });
-  canvas.addEventListener('pointermove', (e) => { if (dragging) game.aimTo(...toGame(e)); });
-  const end = () => { dragging = false; };
-  canvas.addEventListener('pointerup', end);
-  canvas.addEventListener('pointercancel', end);
+  canvas.addEventListener('pointermove', (e) => {
+    if (e.pointerId === aimPtr) game.dragMove(...toGame(e));
+    else if (e.pointerId === dragging) game.aimTo(...toGame(e));
+  });
+  const endDrag = (fireIt) => (e) => {
+    if (e.pointerId === aimPtr) { aimPtr = null; game.dragEnd(fireIt); }
+    if (e.pointerId === dragging) dragging = null;
+  };
+  canvas.addEventListener('pointerup', endDrag(true));
+  canvas.addEventListener('pointercancel', endDrag(false));
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  document.addEventListener('gesturestart', (e) => e.preventDefault()); // iOS 핀치 줌 방지
 
   // 메인 루프
   let last = performance.now();
@@ -232,8 +264,12 @@ function setup(sprites) {
       b.classList.toggle('sel', game.weapon === i);
       const w = WEAPONS[i], a = game.ammo ? game.ammo[0][i] : 0;
       b.disabled = !!w.disabled || a <= 0;
-      const label = `${i + 1} ${w.name}${w.disabled ? ' (soon)' : a === Infinity ? '' : ` ×${a}`}`;
-      if (b.textContent !== label) b.textContent = label;
+      const amt = w.disabled ? 'soon' : a === Infinity ? '∞' : `×${a}`;
+      const label = `${i + 1} ${w.name}|${amt}`;
+      if (b.dataset.label !== label) { // 터치 화면에서는 두 줄(이름 / 탄약)로 보인다
+        b.dataset.label = label;
+        b.innerHTML = `<span class="wn">${i + 1} ${w.name}</span><span class="wa">${amt}</span>`;
+      }
     });
     requestAnimationFrame(frame);
   }

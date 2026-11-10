@@ -15,6 +15,7 @@ const BOUNCE_E = 0.55, BOUNCE_FRICTION = 0.85; // 수류탄 반발/마찰 계수
 const CRATE_W = 22, CRATE_H = 20, CRATE_FALL = 85, CRATE_HEAL = 30, CRATE_EVERY = 4; // 보급 상자
 const FALL_T = 80;       // 낙하 데미지 임계 높이
 const TURN_TIME = 30;
+const DRAG_MIN = 14; // 터치 드래그 조준: 발사에 필요한 최소 드래그 거리 (캔버스 px)
 
 export const WEAPONS = [
   { id: 'cannon', name: '대포탄', radius: 40, damage: 50, windK: 8, speedK: 1.0, knock: 380 },
@@ -116,6 +117,8 @@ export class Game {
     this.proj = null; this.shake = 0;
     this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.turnNo = 0;
     this.keys = { left: false, right: false, up: false, down: false };
+    this.touchUI = false;       // 터치 화면이면 캔버스 하단 무기바를 숨기고 DOM 버튼을 쓴다
+    this.drag = null;           // 터치 드래그 조준 중: { sx, sy, x, y } (캔버스 좌표)
     this.onOver = () => {}; this.onWave = () => {};
     this.mode = 'quick'; this.stage = 0; this.wave = 0; this.cleared = 0; this.windMax = 10; this.level = null;
     this.ammo = freshAmmo();    // 매치 시작 전에도 버튼 표시가 올바르도록
@@ -427,7 +430,7 @@ export class Game {
     this.wind = Math.floor(rnd(-this.windMax, this.windMax + 1));
     this.timer = TURN_TIME;
     this.state = 'aim';
-    this.power = 0; this.charging = false;
+    this.power = 0; this.charging = false; this.drag = null;
     this.weapon = 0;
     this.angle = 45;
     this.banner = { text: t === 0 ? `내 차례 - ${u.name}` : `상대 차례 - ${u.name}`, color: TEAMS[t].color, t: 0 };
@@ -571,6 +574,30 @@ export class Game {
     const dx = px - u.x, dy = u.y - 20 - py;
     if (Math.abs(dx) > 4) u.facing = dx > 0 ? 1 : -1;
     this.angle = clamp((Math.atan2(dy, Math.abs(dx)) * 180) / Math.PI, 2, 88);
+  }
+  // 터치 드래그 조준: 각도 = 활성 유닛에서 손가락 방향, 파워 = 누른 지점에서 끈 거리, 떼면 발사
+  // max: 파워 100%가 되는 드래그 거리 (캔버스 px, 화면 크기에 맞춰 호출 쪽에서 정함)
+  dragBegin(px, py, max = 170) {
+    if (!this.isPlayerTurn || this.charging || this.drag) return false;
+    this.drag = { sx: px, sy: py, x: px, y: py, max };
+    this.power = 0; this.aimTo(px, py);
+    return true;
+  }
+  dragMove(px, py) {
+    const d = this.drag;
+    if (!d) return;
+    if (!this.isPlayerTurn) { this.drag = null; return; }
+    d.x = px; d.y = py;
+    this.aimTo(px, py);
+    this.power = clamp((Math.hypot(px - d.sx, py - d.sy) / d.max) * 100, 0, 100);
+  }
+  dragEnd(fireIt = true) {
+    const d = this.drag;
+    if (!d) return;
+    this.drag = null;
+    const far = Math.hypot(d.x - d.sx, d.y - d.sy) >= DRAG_MIN;
+    if (fireIt && far && this.isPlayerTurn && this.activeUnit.grounded) this.fire(Math.max(8, this.power));
+    else this.power = 0; // 너무 짧게 끌었거나 취소 -> 발사 안 함
   }
   playerJump() {
     if (!this.isPlayerTurn || this.charging) return;
@@ -1149,6 +1176,17 @@ export class Game {
     g.strokeStyle = '#ff4d3d'; g.lineWidth = 2.5;
     const cx = ox + dx * 74, cy = oy + dy * 74;
     g.beginPath(); g.arc(cx, cy, 8, 0, 7); g.moveTo(cx - 12, cy); g.lineTo(cx + 12, cy); g.moveTo(cx, cy - 12); g.lineTo(cx, cy + 12); g.stroke();
+    if (this.drag) { // 터치 드래그: 누른 지점 -> 손가락 위치 선과 파워 표시
+      const d = this.drag;
+      g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 3; g.setLineDash([]); g.lineCap = 'round';
+      g.beginPath(); g.moveTo(d.sx, d.sy); g.lineTo(d.x, d.y); g.stroke();
+      g.fillStyle = 'rgba(255,255,255,0.35)';
+      g.beginPath(); g.arc(d.sx, d.sy, 12, 0, 7); g.fill();
+      g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.arc(d.sx, d.sy, 12, 0, 7); g.stroke();
+      g.fillStyle = `hsl(${120 - this.power * 1.2},90%,55%)`;
+      g.beginPath(); g.arc(d.x, d.y, 9, 0, 7); g.fill();
+      this.text(g, `파워 ${Math.round(this.power)}`, d.x, d.y - 24, 20, '#fff');
+    }
     if (this.charging || this.power > 0) {
       const len = 20 + this.power * 0.6;
       g.strokeStyle = `hsl(${120 - this.power * 1.2},90%,55%)`; g.lineWidth = 5; g.lineCap = 'round';
@@ -1295,7 +1333,7 @@ export class Game {
     } else this.text(g, '없음', cx, 73, 12, '#ffe27a');
     this.text(g, String(Math.abs(this.wind)), W / 2 + 68, 73, 12, '#fff', 'right');
     // 무기 (하단 HUD)
-    this.drawWeaponBar(g);
+    if (!this.touchUI) this.drawWeaponBar(g);
     // 파워 바
     if (this.turnTeam === 0 && (this.state === 'aim' || this.state === 'flying')) {
       const bx = W / 2 - 120, by = H - 34;
