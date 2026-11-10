@@ -1,9 +1,10 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111031';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig } from './game.js?v=2026111031';
-import * as audio from './audio.js?v=2026111031';
-import * as progress from './progress.js?v=2026111031';
+const VERSION = '2026111032';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig } from './game.js?v=2026111032';
+import * as audio from './audio.js?v=2026111032';
+import * as progress from './progress.js?v=2026111032';
+import { MenuBg } from './menubg.js?v=2026111032';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -159,9 +160,9 @@ function showResult(winner) {
 
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
-window.__sim = (n, opts) => import('./sim.js?v=2026111031').then((m) => m.sim(n, opts));
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111031').then((m) => m.table(n, stages, skills));
-window.__sim.soak = (n, opts) => import('./sim.js?v=2026111031').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
+window.__sim = (n, opts) => import('./sim.js?v=2026111032').then((m) => m.sim(n, opts));
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111032').then((m) => m.table(n, stages, skills));
+window.__sim.soak = (n, opts) => import('./sim.js?v=2026111032').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
 
 function launch(cfg) {
   current = cfg; endlessRecord = false;
@@ -477,13 +478,22 @@ function setup(sprites) {
 
   // 메인 루프
   const fireBtn = $('bFire'), fireFx = fireBtn.querySelector('.fx'), fireLabel = fireBtn.querySelector('.fl');
-  let last = performance.now();
+  let last = performance.now(), raf = 0;
+  // 시작·스테이지 선택 화면 배경(index.html의 canvas.menuBg): 메뉴가 보이는 동안에는 경기 대신 이 배경만 그린다. 없으면(구버전 HTML) 예전처럼 경기 화면
+  const menuCanvases = [...document.querySelectorAll('canvas.menuBg')], menuBg = menuCanvases.length ? new MenuBg() : null;
+  window.__menuBg = menuBg; // 디버깅/테스트용: frames(그린 프레임 수), mode('animated'|'still'|'idle'), t
   function frame(now) {
     const dt = Math.min(0.033, (now - last) / 1000);
     last = now;
     try {
-      if (!modalOpen) game.update(dt);
-      game.draw(g);
+      const menuEl = menuBg && menuCanvases.find((c) => !c.parentElement.classList.contains('hidden'));
+      if (menuEl) {
+        if (!modalOpen) menuBg.step(menuEl, dt, motionMQ.matches); // 모달이 위를 덮고 있으면 그리지 않음
+      } else {
+        menuBg && (menuBg.mode = 'idle');
+        if (!modalOpen) game.update(dt);
+        game.draw(g);
+      }
     } catch (err) { console.error(err); }
     if (game.domHud) hud.update(game);
     // 메뉴/모달이 떠 있으면 가로 화면의 겹침 컨트롤을 숨김
@@ -511,9 +521,14 @@ function setup(sprites) {
         b.innerHTML = `<span class="wn">${i + 1} ${w.name}</span><span class="wa">${amt}</span>`;
       }
     });
-    requestAnimationFrame(frame);
+    raf = requestAnimationFrame(frame);
   }
-  requestAnimationFrame(frame);
+  raf = requestAnimationFrame(frame);
+  // 탭이 숨겨지면 루프를 완전히 멈추고(배터리), 돌아오면 시간 간격을 리셋해 다시 시작
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { cancelAnimationFrame(raf); raf = 0; }
+    else if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); }
+  });
   $('loading').classList.add('hidden');
 }
 
