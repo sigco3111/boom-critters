@@ -1,14 +1,14 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111045';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig, warmupSteps, warmFlash } from './game.js?v=2026111045';
-import * as audio from './audio.js?v=2026111045';
-import * as progress from './progress.js?v=2026111045';
-import { MenuBg } from './menubg.js?v=2026111045';
-import { themeById, drawMapPreview } from './themes.js?v=2026111045';
-import * as store from './storage.js?v=2026111045';
-import * as loader from './loader.js?v=2026111045';
-import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111045';
+const VERSION = '2026111046';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig, warmupSteps, warmFlash } from './game.js?v=2026111046';
+import * as audio from './audio.js?v=2026111046';
+import * as progress from './progress.js?v=2026111046';
+import { MenuBg } from './menubg.js?v=2026111046';
+import { themeById, drawMapPreview } from './themes.js?v=2026111046';
+import * as store from './storage.js?v=2026111046';
+import * as loader from './loader.js?v=2026111046';
+import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111046';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -215,9 +215,9 @@ function showResult(winner) {
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
 window.__audio = audio; // 디버깅/테스트용: __audio.musicInfo()
-window.__sim = (n, opts) => import('./sim.js?v=2026111045').then((m) => m.sim(n, opts));
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111045').then((m) => m.table(n, stages, skills));
-window.__sim.soak = (n, opts) => import('./sim.js?v=2026111045').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
+window.__sim = (n, opts) => import('./sim.js?v=2026111046').then((m) => m.sim(n, opts));
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111046').then((m) => m.table(n, stages, skills));
+window.__sim.soak = (n, opts) => import('./sim.js?v=2026111046').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
 
 // 이 경기에 뒤에서 받는 캐릭터가 필요한가: 적이 3마리 이상(보통 이상·스테이지 4~)이거나 무한 모드(웨이브가 오르면 적이 4마리)
 function needsLazy(cfg) {
@@ -727,6 +727,16 @@ function setup(sprites) {
     if (game.domHud) hud.update(game);
     // 메뉴/모달이 떠 있으면 가로 화면의 겹침 컨트롤을 숨김
     document.body.classList.toggle('menu', ['startScreen', 'stageScreen', 'resultScreen', ...MODALS].some((id) => !$(id).classList.contains('hidden')));
+    // 가로 터치 화면: 조준 중 활성 유닛의 이름표·조준점이 왼쪽 위 버튼(topBtns)과 겹치거나 가까우면(24px 안) 버튼을 잠시 숨김
+    {
+      const tb = $('topBtns'), bx = game.aimBox;
+      let hide = false;
+      if (bx && document.body.classList.contains('touch') && matchMedia('(orientation: landscape)').matches && $('compactBtn').getAttribute('aria-expanded') !== 'true') {
+        const c = canvas.getBoundingClientRect(), s = c.width / W, r = tb.getBoundingClientRect(), m = 24;
+        hide = r.width > 0 && c.left + bx.x1 * s > r.left - m && c.left + bx.x0 * s < r.right + m && c.top + bx.y1 * s > r.top - m && c.top + bx.y0 * s < r.bottom + m;
+      }
+      tb.classList.toggle('aimclear', hide);
+    }
     // 발사 버튼(가로 터치 화면): 각도·파워 표시와 파워 게이지
     {
       const mine = game.turnTeam === 0 && (game.state === 'aim' || game.state === 'flying');

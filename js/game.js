@@ -1,8 +1,8 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111045';
-import * as audio from './audio.js?v=2026111045';
-import { t as tr, getLang } from './i18n.js?v=2026111045';
-import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111045';
+import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111046';
+import * as audio from './audio.js?v=2026111046';
+import { t as tr, getLang } from './i18n.js?v=2026111046';
+import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111046';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -12,7 +12,8 @@ const UNIT_H = 38, HALF_W = 9;
 const BODY_CY = 26;      // 몸통 중심 높이 (발 기준 위쪽, 스프라이트 키 약 52px)
 const BODY_R = 15;       // 투사체 명중 판정 반경(몸통 중심 기준)
 const BANNER_T = 1.3; // 턴 배너 표시 시간(초): 0.12초 페이드 인 → 유지 → 0.35초 페이드 아웃
-const TAG_TOP = 84, TAG_H = 26; // 이름표+HP 블록: 발 위 84px부터 높이 26px
+const TAG_TOP = 101, TAG_H = 26; // 이름표+HP 블록: 발 위 101px부터 높이 26px (머리 끝(발 위 64px)에서 HP 바 높이 11px 이상 떨어져 조준선과 겹치지 않음)
+const TAG_NEAR = 28, TAG_FADE_A = 0.3, TAG_FADE_T = 0.12; // 조준점이 이 화면 거리(px) 안이면 이름표 블록을 30%까지 0.12초에 걸쳐 흐리게
 const BODY_HALF = 8;     // 몸통 캡슐의 세로 반길이 (중심에서 위/아래)
 const BOUNCE_E = 0.55, BOUNCE_FRICTION = 0.85; // 수류탄 반발/마찰 계수
 const CRATE_W = 22, CRATE_H = 20, CRATE_FALL = 85, CRATE_HEAL = 30, CRATE_EVERY = 4; // 보급 상자
@@ -1358,6 +1359,7 @@ export class Game {
     this.drawWater(g);
     const showAim = this.state === 'aim' && (this.turnTeam === 0 || (this.ai && (this.ai.phase === 'aim' || this.ai.phase === 'charge')));
     if (showAim && !this.airMode) this.drawAim(g);
+    this._aim = showAim && !this.airMode ? this.aimPoint() : null; this.aimBox = null;
     if (this.proj) this.drawProj(g, this.proj);
     this.drawAir(g, showAim && this.airMode);
     this.drawBolt(g);
@@ -1541,15 +1543,30 @@ export class Game {
       }
       if (!moved) break;
     }
+    // 조준점(과 터치 드래그 지점)이 이름표·HP 바 블록 가까이(화면 28px 안)에 있으면 블록을 흐리게 해 조준점이 가려지지 않게 한다
+    const now = performance.now(), dtA = Math.min(0.1, Math.max(0, (now - (this._tagNow || now)) / 1000)); this._tagNow = now;
+    const near = TAG_NEAR / Math.max(0.2, this.viewScale), ap = this._aim, dr = ap && this.drag;
     for (const t of tags) {
       t.x = clamp(t.x, (t.w / 2) * ts + 2, W - (t.w / 2) * ts - 2);
-      if (ts === 1) { this.drawTag(g, t, 1); continue; }
+      const x0 = t.x - (t.w / 2) * ts, x1 = t.x + (t.w / 2) * ts, y1 = t.y + TAG_H, y0 = y1 - TAG_H * ts;
+      let hit = false;
+      if (ap) {
+        hit = Math.hypot(Math.max(x0 - ap.x, 0, ap.x - x1), Math.max(y0 - ap.y, 0, ap.y - y1)) <= near;
+        if (!hit && dr) hit = Math.hypot(Math.max(x0 - dr.x, 0, dr.x - x1), Math.max(y0 - dr.y, 0, dr.y - y1)) <= near;
+      }
+      if (t.a === undefined) t.a = 1;
+      const goal = hit ? TAG_FADE_A : 1, step = ((1 - TAG_FADE_A) / TAG_FADE_T) * dtA;
+      t.a = t.a < goal ? Math.min(goal, t.a + step) : Math.max(goal, t.a - step);
+      if (ap && t.u === this.activeUnit) this.aimBox = { x0: Math.min(x0, ap.x - 14), y0: Math.min(y0, ap.y - 14), x1: Math.max(x1, ap.x + 14), y1: Math.max(y1, ap.y + 14) }; // 터치 버튼이 피해 갈 영역(캔버스 좌표)
+      g.globalAlpha = t.a;
+      if (ts === 1) { this.drawTag(g, t, 1); g.globalAlpha = 1; continue; }
       const ay = t.y + TAG_H; // 블록 아래 중앙을 기준으로 확대 (머리 위쪽으로 자란다)
       g.save(); g.translate(t.x, ay); g.scale(ts, ts); g.translate(-t.x, -ay);
       this.sc = ts;
       this.drawTag(g, t, ts);
       this.sc = 1;
       g.restore();
+      g.globalAlpha = 1;
     }
   }
 
@@ -1610,10 +1627,15 @@ export class Game {
     g.restore();
   }
 
+  aimPoint() {
+    const u = this.activeUnit, a = rad(this.angle);
+    return { x: u.x + u.facing * Math.cos(a) * 74, y: u.y - 20 - Math.sin(a) * 74 };
+  }
+
   // 조준점: 이름표·파워 선·궤적 힌트·드래그 표시보다 위(맨 마지막)에, 어두운 외곽선과 함께 그려 항상 보이게 한다. 작은 화면에서는 이름표처럼 키운다
   drawCross(g) {
     const u = this.activeUnit; if (!u) return;
-    const a = rad(this.angle), cx = u.x + u.facing * Math.cos(a) * 74, cy = u.y - 20 - Math.sin(a) * 74;
+    const { x: cx, y: cy } = this.aimPoint();
     const k = Math.min(1.7, Math.max(1, 0.8 / this.viewScale));
     g.save();
     g.lineCap = 'butt'; g.lineJoin = 'round';
