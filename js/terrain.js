@@ -169,12 +169,20 @@ export class Terrain {
     const g = this.ctx;
     g.save();
     g.globalCompositeOperation = 'source-atop';
-    g.fillStyle = 'rgba(25,14,6,0.6)';
-    g.beginPath(); g.arc(x, y, r + 5, 0, 7); g.fill();
+    // 그을음(scorch): 구덩이 가장자리에서 바깥으로 부드럽게 옅어지는 어두운 고리. 지형 캔버스에 그려 경기 내내 남는다 (지형이 있는 곳에만 칠해지는 source-atop)
+    const R = r + 18, sg = g.createRadialGradient(x, y, Math.max(0, r - 2), x, y, R);
+    sg.addColorStop(0, 'rgba(14,8,4,0.78)'); sg.addColorStop(0.25, 'rgba(18,10,5,0.55)'); sg.addColorStop(0.6, 'rgba(22,12,6,0.2)'); sg.addColorStop(1, 'rgba(22,12,6,0)');
+    g.fillStyle = sg;
+    g.beginPath(); g.arc(x, y, R, 0, 7); g.fill();
+    g.fillStyle = 'rgba(12,7,3,0.5)'; // 가장자리 둘레에 흩어진 검댕 점
+    for (let i = 0, n = 6 + (r / 4 | 0); i < n; i++) {
+      const a = Math.random() * 6.283, d = r + 2 + Math.random() * 13, s = 0.8 + Math.random() * 1.8;
+      g.beginPath(); g.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, s, 0, 7); g.fill();
+    }
     g.globalCompositeOperation = 'destination-out';
     g.fillStyle = '#000';
     g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
     g.restore();
-    this.refresh(x - r - 6, y - r - 6, 2 * r + 12, 2 * r + 12);
+    this.refresh(x - r - 20, y - r - 20, 2 * r + 40, 2 * r + 40);
   }
 }

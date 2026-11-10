@@ -22,6 +22,7 @@ const FALL_T = 80;       // 낙하 데미지 임계 높이
 const TURN_TIME = 30;
 const CHARGE_T = 1.6;    // 파워 0→100 충전 시간(초)
 const AIR_WARN = 1.0, AIR_W = 120, AIR_N = 5, AIR_IDX = 5; // 공습: 경고 마커 1초 → 폭탄 5발이 폭 120px 구역에 순서 없이 떨어짐 (무기 슬롯 6번)
+const MAX_SPLASH = 8;     // 동시에 보이는 물 튀김 상한
 const MAX_SFX = 24;       // 동시에 재생하는 스프라이트 이펙트(폭발·타격·머즐 플래시) 상한: 넘치면 가장 오래된 것부터 버림
 const MAX_PARTICLES = 500, MAX_FLOATERS = 24; // 파티클·떠오르는 글자 상한 (넘치면 가장 오래된 것부터 재활용=제거)
 const AI_MAX_TRIES = 3;      // AI가 유효한 사격(물/화면 밖이 아닌 착탄)을 못 찾을 때 다시 계산해 보는 횟수. 넘으면 턴을 넘긴다
@@ -207,6 +208,7 @@ export class Game {
     this.units = []; this.particles = []; this.floaters = [];
     this.ppool = []; this.fpool = []; // 재사용할 파티클·떠오르는 글자 객체
     this.sfx = []; this.sfxPool = []; // 스프라이트 이펙트(fx.js)와 재사용 객체
+    this.splashes = []; // 물 튀김 애니메이션(코드로 그림): { x, t, k(크기 배율), s(물방울 시드) }
     this.proj = null; this.shake = 0;
     this.viewScale = 1;         // 캔버스 CSS 폭 / 논리 폭 (작은 화면일수록 글자를 키우는 데 사용)
     this.bigHud = false;        // 접근성: HUD 글자 +25% (설정)
@@ -247,7 +249,7 @@ export class Game {
     this.wave = opts.wave || 0; this.cleared = 0;
     this.windMax = opts.windMax ?? 10;
     this.level = opts.level ?? null;      // null이면 난이도(쉬움/보통/어려움)의 오차를 사용
-    this.units = []; this.particles = []; this.floaters = []; this.proj = null; this.sfx.length = 0;
+    this.units = []; this.particles = []; this.floaters = []; this.proj = null; this.sfx.length = 0; this.splashes.length = 0;
     this.stats = blankStats();
     const seed = opts.seed ?? ((Math.random() * 1e9) | 0);
     // 스테이지 1~3 초원 / 4~6 사막 / 7~8 설원 / 9~10 밤, 빠른 대전·무한은 시드로 결정
@@ -283,7 +285,7 @@ export class Game {
     this.terrain = new Terrain(seed, theme, this.headless, kind);
     this.bg = this.headless ? null : makeBackground(theme, seed);
     this.weather = this.headless ? null : makeWeather(theme);
-    this.units = []; this.particles = []; this.floaters = []; this.proj = null; this.sfx.length = 0;
+    this.units = []; this.particles = []; this.floaters = []; this.proj = null; this.sfx.length = 0; this.splashes.length = 0;
     this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.turnNo = 0; this.air = null;
     const rng = mulberry32(seed ^ 0x5bd1e995), jit = () => (rng() * 2 - 1) * 25;
     const baseX = [[95, 230, 360], ENEMY_X[enemies] || ENEMY_X[3]];
@@ -424,6 +426,7 @@ export class Game {
     u.alive = false; u.hp = 0; u.drowned = true;
     for (let i = 0; i < 18; i++) this.pt('splash', u.x + rnd(-8, 8), WATER_Y, rnd(-60, 60), rnd(-260, -100), rnd(2, 5), rnd(0.6, 1.0));
     audio.play('sea_splash', { vol: 0.9 });
+    this.splash(u.x, 1.3);
     this.ft(u.x, WATER_Y - 10, tr('f.splash'), '#fff');
   }
 
@@ -586,6 +589,57 @@ export class Game {
     }
   }
 
+  // ---------- 물 튀김 (코드로 그림) ----------
+  // x에 물이 튀는 애니메이션을 시작: 퍼지는 물결 고리 3개 + 솟는 물기둥 + 물방울. k는 크기 배율. 최대 MAX_SPLASH개 (넘치면 가장 오래된 것부터 버림)
+  splash(x, k = 1) {
+    if (this.headless) return;
+    const S = this.splashes;
+    if (S.length >= MAX_SPLASH) S.shift();
+    S.push({ x, t: 0, k, s: Math.random() * 1000 });
+  }
+  updateSplashes(dt) {
+    const S = this.splashes; if (!S.length) return;
+    let n = 0;
+    for (let i = 0; i < S.length; i++) { const e = S[i]; e.t += dt; if (e.t < (this.reduceMotion ? 0.14 : 1.1)) S[n++] = e; }
+    S.length = n;
+  }
+  drawSplashes(g) {
+    const S = this.splashes; if (!S.length) return;
+    const rm = this.reduceMotion, low = this.lowFx;
+    g.save();
+    g.lineCap = 'round';
+    for (let i = 0; i < S.length; i++) {
+      const e = S[i], t = e.t, k = e.k, y0 = WATER_Y + 1;
+      if (rm) { // 모션 줄이기: 고리 하나가 0.14초 번쩍
+        g.globalAlpha = 1 - t / 0.14; g.strokeStyle = '#fff'; g.lineWidth = 2.5;
+        g.beginPath(); g.ellipse(e.x, y0, 26 * k, 7 * k, 0, 0, 6.283); g.stroke();
+        continue;
+      }
+      for (let r = 0, nr = low ? 2 : 3; r < nr; r++) { // 퍼지는 물결 고리: 0.13초씩 어긋나게 시작
+        const tt = t - r * 0.13; if (tt <= 0 || tt > 0.85) continue;
+        const u = tt / 0.85, rx = (8 + 46 * u) * k;
+        g.globalAlpha = (1 - u) * 0.9; g.strokeStyle = r ? 'rgba(210,235,255,1)' : '#fff'; g.lineWidth = 2.6 * (1 - u * 0.6);
+        g.beginPath(); g.ellipse(e.x, y0, rx, rx * 0.26, 0, 0, 6.283); g.stroke();
+      }
+      if (t < 0.4) { // 솟았다 가라앉는 물기둥
+        const u = t / 0.4, hgt = Math.sin(u * Math.PI) * 34 * k, wd = (7 + 5 * u) * k;
+        g.globalAlpha = (1 - u * 0.7) * 0.85; g.fillStyle = 'rgba(235,246,255,1)';
+        g.beginPath(); g.moveTo(e.x - wd, y0); g.quadraticCurveTo(e.x - wd * 0.5, y0 - hgt * 0.8, e.x, y0 - hgt); g.quadraticCurveTo(e.x + wd * 0.5, y0 - hgt * 0.8, e.x + wd, y0); g.closePath(); g.fill();
+      }
+      // 물방울: 시드로 속도를 정하고 포물선으로 날아 물에 닿으면 사라진다
+      g.fillStyle = '#fff';
+      for (let d = 0, nd = low ? 5 : 10; d < nd; d++) {
+        const h1 = Math.sin(e.s + d * 91.7) * 43758.5453, h2 = Math.sin(e.s * 1.7 + d * 12.3) * 24634.634;
+        const vx = ((h1 - Math.floor(h1)) * 2 - 1) * 85 * k, vy = -(150 + (h2 - Math.floor(h2)) * 170) * Math.sqrt(k);
+        const dy = vy * t + 350 * t * t; // 중력 700의 절반
+        if (dy > 0) continue;
+        g.globalAlpha = Math.min(1, (1 - t / 1.1) * 1.6);
+        g.beginPath(); g.arc(e.x + vx * t, y0 + dy, (1.6 + (d % 3) * 0.5) * Math.sqrt(k), 0, 6.283); g.fill();
+      }
+    }
+    g.restore();
+  }
+
   // 파티클·떠오르는 글자는 객체 풀에서 꺼내 쓰고, 수명이 끝나면 풀로 돌려보낸다 (폭발마다 수십 개를 새로 만들면 느린 폰에서 가비지 수거로 프레임이 끊긴다)
   pt(type, x, y, vx, vy, r, max, color = '', green = false) {
     const p = this.ppool.pop() || { type: '', x: 0, y: 0, vx: 0, vy: 0, r: 0, life: 0, max: 0, color: '', green: false };
@@ -699,7 +753,7 @@ export class Game {
       for (let i = 0; i < steps; i++) {
         if (this.crateSupported(c)) break;
         c.landed = false; c.y += (CRATE_FALL * dt) / steps;
-        if (c.y > WATER_Y + 10) { c.dead = true; break; }
+        if (c.y > WATER_Y + 10) { c.dead = true; this.splash(c.x, 0.8); break; }
       }
       if (c.dead || !c.landed) continue;
       if (!this.crateSupported(c)) { c.landed = false; continue; }
@@ -924,6 +978,7 @@ export class Game {
       else if (r === 'water') {
         for (let i = 0; i < 10; i++) this.pt('splash', b.p.x, WATER_Y, rnd(-60, 60), rnd(-220, -80), rnd(2, 4), rnd(0.5, 0.9));
         audio.play('sea_splash', { vol: 0.6, rate: 1.2 });
+        this.splash(b.p.x, 0.9);
       }
     }
     if (a.t > 12) for (const b of a.bombs) b.done = true; // 안전장치
@@ -1241,6 +1296,7 @@ export class Game {
     if (this.state === 'idle') return;
     this.updateParticles(dt);
     this.updateSfx(dt);
+    this.updateSplashes(dt);
     if (this.weather && !this.reduceMotion) { this.weather.active = this.lowFx ? Math.ceil(this.weather.parts.length * 0.4) : this.weather.parts.length; stepWeather(this.weather, dt, this.wind || 0); }
     if (this.bolt) { this.bolt.t += dt; if (this.bolt.t > 0.3) this.bolt = null; }
     this.flashT = Math.max(0, this.flashT - dt);
@@ -1316,6 +1372,7 @@ export class Game {
         else if (r === 'water') {
           for (let i = 0; i < 14; i++) this.pt('splash', p.x, WATER_Y, rnd(-70, 70), rnd(-250, -90), rnd(2, 4), rnd(0.5, 0.9));
           audio.play('sea_splash', { vol: 0.8, rate: 1.1 });
+          this.splash(p.x, p.w.id === 'rocket' ? 1.3 : 1);
         }
         this.state = 'settle'; this.settleT = 0; this.settleTotal = 0;
       }
@@ -1410,6 +1467,7 @@ export class Game {
     for (const u of this.units) if (u.alive || (!u.drowned && u.deadT < FADE_END)) this.drawUnit(g, u);
     this.drawFires(g);
     this.drawWater(g);
+    this.drawSplashes(g);
     const showAim = this.state === 'aim' && (this.turnTeam === 0 || (this.ai && (this.ai.phase === 'aim' || this.ai.phase === 'charge')));
     if (showAim && !this.airMode) this.drawAim(g);
     this._aim = showAim && !this.airMode ? this.aimPoint() : null; this.aimBox = null;
@@ -1579,6 +1637,28 @@ export class Game {
     return c;
   }
 
+  // 발 아래로 내려가며 처음 만나는 지면 y (없거나 물 아래면 null). 점프·낙하 중 그림자 높이를 구하는 데 쓴다
+  groundBelow(x, y) {
+    const T = this.terrain;
+    for (let k = 0, yy = Math.floor(y) - 2; k < 160 && yy < WATER_Y; k++, yy++) if (T.solid(x, yy)) return yy;
+    return null;
+  }
+  // 유닛 그림자: 지면에 닿은 어두운 타원. 지면 기울기를 따라 기울고, 공중에 뜬 높이만큼 작고 옅어진다
+  drawShadow(g, u) {
+    if (u.drowned) return;
+    const gy = this.groundBelow(u.x, u.y);
+    if (gy === null) return;
+    const h = Math.max(0, gy - u.y) + this.hopOf(u), k = clamp(h / 130, 0, 1);
+    const yl = this.groundBelow(u.x - 9, gy - 8), yr = this.groundBelow(u.x + 9, gy - 8);
+    const tilt = yl !== null && yr !== null ? clamp(Math.atan2(yr - yl, 18), -0.7, 0.7) : 0;
+    const rx = 17 * (1 - 0.55 * k);
+    g.save();
+    g.globalAlpha *= 0.34 * (1 - 0.65 * k);
+    g.fillStyle = '#000';
+    g.beginPath(); g.ellipse(u.x, gy + 0.5, rx, rx * 0.26, tilt, 0, 6.283); g.fill();
+    g.restore();
+  }
+
   drawUnit(g, u) {
     const set = this.sprites[u.sprite];
     const img = set[this.poseOf(u)] || set.idle;
@@ -1587,6 +1667,7 @@ export class Game {
     if (u.alive && u.grounded && !u.moving) { sx = 1 + u.squash * 0.5; sy = 1 - u.squash * 0.5; }
     g.save();
     if (!u.alive) g.globalAlpha = clamp(1 - (u.deadT - FADE_START) / (FADE_END - FADE_START), 0, 1);
+    this.drawShadow(g, u);
     g.translate(u.x, u.y + 1 - this.hopOf(u)); // 발(이미지 하단)이 지형 위 u.y
     g.scale(sx * (u.facing < 0 ? -1 : 1), sy);
     g.drawImage(img, -w / 2, -h, w, h);
