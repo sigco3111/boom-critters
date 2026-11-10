@@ -1,7 +1,7 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111021';
-import * as audio from './audio.js?v=2026111021';
-import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111021';
+import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111022';
+import * as audio from './audio.js?v=2026111022';
+import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111022';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -17,6 +17,7 @@ const BOUNCE_E = 0.55, BOUNCE_FRICTION = 0.85; // 수류탄 반발/마찰 계수
 const CRATE_W = 22, CRATE_H = 20, CRATE_FALL = 85, CRATE_HEAL = 30, CRATE_EVERY = 4; // 보급 상자
 const FALL_T = 80;       // 낙하 데미지 임계 높이
 const TURN_TIME = 30;
+const AIR_WARN = 1.0, AIR_W = 120, AIR_N = 5, AIR_IDX = 5; // 공습: 경고 마커 1초 → 폭탄 5발이 폭 120px 구역에 순서 없이 떨어짐 (무기 슬롯 6번)
 const DRAG_MIN = 14; // 터치 드래그 조준: 발사에 필요한 최소 드래그 거리 (캔버스 px)
 
 export const WEAPONS = [
@@ -25,11 +26,13 @@ export const WEAPONS = [
   { id: 'grenade', name: '수류탄', radius: 55, damage: 60, windK: 1, speedK: 0.9, knock: 640, ammo: 3, fuse: 3 },
   { id: 'lightning', name: '번개', damage: 35, knock: 260, ammo: 2, instant: true },
   { id: 'fire', name: '화염탄', radius: 35, damage: 25, windK: 6, speedK: 0.95, knock: 320, ammo: 2, fireR: 50, fireTurns: 3, fireDmg: 8 },
+  // 공습: 목표 x를 찍으면 1초 경고 뒤 작은 폭탄 5발(폭발 반경 28, 최대 피해 18)이 폭 120px 구역에 떨어진다. 팀당 1발, 스테이지 4부터 해금(빠른 대전은 항상)
+  { id: 'airstrike', name: '공습', radius: 28, damage: 18, windK: 0, knock: 240, ammo: 1, airstrike: true },
 ];
 // 하단 HUD 무기 슬롯 (캔버스 좌표)
-const SLOT = { x: 10, y: H - 56, w: 62, h: 50, gap: 4 };
-// 팀별 무기 탄약 (무한 = Infinity, 비활성 무기는 0)
-const freshAmmo = () => [0, 1].map(() => WEAPONS.map((w) => (w.disabled ? 0 : w.ammo ?? Infinity)));
+const SLOT = { x: 10, y: H - 56, w: 54, h: 50, gap: 3 };
+// 팀별 무기 탄약 (무한 = Infinity, 비활성 무기는 0). 공습은 해금 전(airOk=false)이면 0
+const freshAmmo = (airOk = false) => [0, 1].map(() => WEAPONS.map((w) => (w.disabled || (w.airstrike && !airOk) ? 0 : w.ammo ?? Infinity)));
 export function slotRect(i) { return [SLOT.x + i * (SLOT.w + SLOT.gap), SLOT.y, SLOT.w, SLOT.h]; }
 export const TEAMS = [
   { name: '파랑 팀', color: '#3b82f6' },
@@ -53,8 +56,8 @@ const ENEMY_X = { 1: [760], 2: [650, 820], 3: [600, 730, 865], 4: [560, 670, 780
 export const STAGE_COUNT = 10;
 // AI 오차 단계(level 1~10): 각도 오차(표준편차, °) 9 → 1, 파워 오차 18 → 2 로 선형 감소. level ≤ 3은 상위 6개 후보 중 무작위 선택
 const ERR_A = [9, 1], ERR_P = [18, 2];
-// AI가 쓸 수 있는 특수 무기(무기 번호 -> 최소 level): 수류탄 2, 번개 3, 화염탄 4. level이 없는 빠른 대전은 모두 사용
-const AI_UNLOCK = { 2: 2, 3: 3, 4: 4 };
+// AI가 쓸 수 있는 특수 무기(무기 번호 -> 최소 level): 수류탄 2, 번개 3, 화염탄 4, 공습 4. level이 없는 빠른 대전은 모두 사용
+const AI_UNLOCK = { 2: 2, 3: 3, 4: 4, 5: 4 };
 // 스테이지 s(1~10): 고정 시드, 적 수 2→4(1~3: 2마리, 4~6: 3마리, 7~10: 4마리), 바람 범위 ±(3+s), AI level = s
 export function stageConfig(s) {
   return { mode: 'stage', stage: s, seed: 20240 + s * 7919, enemies: s <= 3 ? 2 : s <= 6 ? 3 : 4, windMax: 3 + s, level: s };
@@ -130,6 +133,9 @@ export class Game {
     this.drag = null;           // 터치 드래그 조준 중: { sx, sy, x, y } (캔버스 좌표)
     this.onOver = () => {}; this.onWave = () => {};
     this.mode = 'quick'; this.stage = 0; this.wave = 0; this.cleared = 0; this.windMax = 10; this.level = null;
+    this.airOk = false;         // 공습 해금 여부 (빠른 대전은 항상, 스테이지·웨이브는 AI level 4 이상 = 스테이지 4 / 웨이브 3부터)
+    this.air = null;            // 진행 중인 공습: { cx, t, bombs: [{ x, delay, p, done }] }
+    this.airX = W / 2;          // 공습 목표 x (조준 마커)
     this.ammo = freshAmmo();    // 매치 시작 전에도 버튼 표시가 올바르도록
     this.stepTimer = 0;
   }
@@ -152,7 +158,8 @@ export class Game {
     this.winner = null;
     this.angle = 45; this.power = 0; this.lastPower = 0; this.weapon = 0;
     // 팀별 무기 탄약 (무한 = Infinity, 비활성 무기는 0)
-    this.ammo = freshAmmo();
+    this.airOk = this.level == null || this.level >= AI_UNLOCK[AIR_IDX];
+    this.ammo = freshAmmo(this.airOk);
     this.charging = false; this.ai = null;
     this.banner = null;
     this.startTurn();
@@ -165,7 +172,7 @@ export class Game {
     this.terrain = new Terrain(seed, theme);
     this.bg = makeBackground(theme, seed);
     this.units = []; this.particles = []; this.floaters = []; this.proj = null;
-    this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.turnNo = 0;
+    this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.turnNo = 0; this.air = null;
     const rng = mulberry32(seed ^ 0x5bd1e995), jit = () => (rng() * 2 - 1) * 25;
     const baseX = [[95, 230, 360], ENEMY_X[enemies] || ENEMY_X[3]];
     for (let t = 0; t < 2; t++) {
@@ -198,7 +205,8 @@ export class Game {
     const cfg = waveConfig(w);
     this.wave = w; this.windMax = cfg.windMax; this.level = cfg.level;
     this.buildField((Math.random() * 1e9) | 0, cfg.enemies, carry);
-    this.ammo = freshAmmo();
+    this.airOk = this.level == null || this.level >= AI_UNLOCK[AIR_IDX];
+    this.ammo = freshAmmo(this.airOk);
     this.nextIdx = [0, 0]; this.turnTeam = 0; this.winner = null;
     this.angle = 45; this.power = 0; this.weapon = 0; this.charging = false; this.ai = null;
     this.startTurn();
@@ -548,11 +556,22 @@ export class Game {
     const w = WEAPONS[i], u = this.activeUnit;
     if (!w) return;
     if (w.disabled || this.ammo[0][i] <= 0) {
-      this.floaters.push({ x: u.x, y: u.y - 70, text: w.disabled ? '곧 출시' : '탄약 없음', color: '#ffe27a', t: 0 });
+      const locked = w.airstrike && !this.airOk;
+      this.floaters.push({ x: u.x, y: u.y - 70, text: w.disabled ? '곧 출시' : locked ? (this.mode === 'endless' ? '웨이브 3부터 해금' : '스테이지 4부터 해금') : '탄약 없음', color: '#ffe27a', t: 0 });
       return;
     }
     this.weapon = i; audio.play('switch', { vol: 0.7 });
+    if (w.airstrike) this.airX = this.defaultAirX();
   }
+  // 공습 목표 마커 초기 위치: 활성 유닛에서 가장 가까운 상대 유닛의 x
+  defaultAirX() {
+    const u = this.activeUnit;
+    let best = null;
+    for (const o of this.units) if (o.alive && o.team !== this.turnTeam && (!best || Math.abs(o.x - u.x) < Math.abs(best.x - u.x))) best = o;
+    return clamp(best ? best.x : u.x, 20, W - 20);
+  }
+  get airMode() { return this.weapon === AIR_IDX && WEAPONS[AIR_IDX].airstrike; }
+  setAirX(px) { if (this.isPlayerTurn && this.airMode) this.airX = clamp(px, 20, W - 20); }
   // 캔버스 좌표가 하단 무기 슬롯 위인지 (없으면 -1)
   slotAt(px, py) {
     for (let i = 0; i < WEAPONS.length; i++) {
@@ -599,6 +618,7 @@ export class Game {
     this.jump(this.activeUnit, dir);
   }
   beginCharge() {
+    if (this.isPlayerTurn && !this.charging && this.airMode) { this.fire(0); return; } // 공습은 충전 없이 마커 위치로 즉시 호출
     if (!this.isPlayerTurn || this.charging || !this.activeUnit.grounded) return;
     this.charging = true; this.power = 0;
   }
@@ -611,6 +631,7 @@ export class Game {
   fire(power) {
     const u = this.activeUnit, w = WEAPONS[this.weapon];
     if (w.instant) return this.fireLightning(u, w);
+    if (w.airstrike) return this.fireAirstrike(u, w);
     const a = rad(this.angle), v = launchSpeed(w, power), f = u.facing;
     this.proj = {
       x: u.x + f * Math.cos(a) * 18, y: u.y - 20 - Math.sin(a) * 18,
@@ -623,6 +644,44 @@ export class Game {
     u.squash = -0.2; u.shootT = 0.4;
     if (w.id === 'cannon' || w.id === 'rocket') audio.play('sea_cannon', { rate: w.id === 'rocket' ? 1.15 : 1, vol: 0.9 });
     else audio.play('fire', { rate: w.id === 'grenade' ? 1.3 : 0.6 });
+  }
+
+  // ---------- 공습 ----------
+  // 호출 즉시 목표 구역(폭 120px)에 경고 마커를 AIR_WARN초 동안 띄우고, 이어서 폭탄 AIR_N발이 짧은 간격으로 떨어진다.
+  fireAirstrike(u, w) {
+    if (this.ammo[this.turnTeam][this.weapon] !== Infinity) this.ammo[this.turnTeam][this.weapon]--;
+    const cx = clamp(this.airX, 20, W - 20), slot = AIR_W / AIR_N, order = [...Array(AIR_N).keys()].sort(() => Math.random() - 0.5);
+    this.air = {
+      cx, t: 0, w,
+      bombs: order.map((k, i) => ({ x: clamp(cx - AIR_W / 2 + (i + 0.5) * slot + rnd(-slot * 0.35, slot * 0.35), 4, W - 4), delay: k * 0.17 + rnd(0, 0.07), p: null, done: false })),
+    };
+    this.charging = false; this.power = 0; this.lastPower = 0;
+    this.state = 'strike';
+    u.squash = -0.2; u.shootT = 0.4;
+    audio.play('select', { rate: 0.6, vol: 0.9 });
+  }
+
+  updateAirstrike(dt) {
+    const a = this.air;
+    a.t += dt;
+    if (a.t < AIR_WARN) {
+      if (Math.floor(a.t * 4) !== Math.floor((a.t - dt) * 4)) audio.play('tick', { vol: 0.5, rate: 1.3 });
+      return;
+    }
+    for (const b of a.bombs) {
+      if (b.done || a.t < AIR_WARN + b.delay) continue;
+      if (!b.p) { b.p = { x: b.x, y: -24, vx: 0, vy: 240, w: a.w, owner: null, age: 0 }; audio.play('fire', { rate: 2.4, vol: 0.3 }); }
+      const r = stepProj(b.p, dt, 0, this.terrain, this.units);
+      this.particles.push({ type: 'smoke', x: b.p.x, y: b.p.y - 8, vx: 0, vy: 0, r: 2, life: 0, max: 0.3, color: '230,230,230' });
+      if (!r) continue;
+      b.done = true;
+      if (r === 'terrain' || r === 'unit') this.explode(b.p.x, b.p.y, a.w);
+      else if (r === 'water') {
+        for (let i = 0; i < 10; i++) this.particles.push({ type: 'splash', x: b.p.x, y: WATER_Y, vx: rnd(-60, 60), vy: rnd(-220, -80), r: rnd(2, 4), life: 0, max: rnd(0.5, 0.9) });
+        audio.play('sea_splash', { vol: 0.6, rate: 1.2 });
+      }
+    }
+    if (a.bombs.every((b) => b.done)) { this.air = null; this.state = 'settle'; this.settleT = 0; this.settleTotal = 0; }
   }
 
   // ---------- 번개 ----------
@@ -761,6 +820,18 @@ export class Game {
     const pt = (e) => ({ x: e.x, y: e.y - BODY_CY });
     const hidden = enemies.filter((e) => this.aiHidden(u, e));
     const can = (i) => am[i] > 0 && (this.level == null || this.level >= AI_UNLOCK[i]); // 낮은 스테이지/웨이브에서는 특수 무기 제한
+    if (can(AIR_IDX) && Math.random() < 0.85) { // 공습: 상대 유닛 2마리 이상이 가로 120px 안에 모여 있고 아군이 구역 근처에 없을 때
+      let grp = null;
+      for (const a of enemies) {
+        const g = enemies.filter((o) => o.x >= a.x && o.x <= a.x + AIR_W);
+        if (g.length >= 2 && (!grp || g.length > grp.length)) grp = g;
+      }
+      if (grp) {
+        const e = this.aiErr(), cx = clamp((Math.min(...grp.map((o) => o.x)) + Math.max(...grp.map((o) => o.x))) / 2 + gauss() * e.a * 2, 20, W - 20);
+        const friendly = this.units.some((o) => o.alive && o.team === 1 && Math.abs(o.x - cx) < AIR_W / 2 + 10);
+        if (!friendly) return { weapon: AIR_IDX, facing: cx >= u.x ? 1 : -1, dist: 0, min: 0, target: grp[0], angle: this.angle, power: 0, x: cx };
+      }
+    }
     if (can(3)) {
       const opts = this.aiBoltOptions(u, enemies).sort((p, q) => p.target.hp - q.target.hp);
       const o = opts[0];
@@ -847,6 +918,7 @@ export class Game {
       } else {
         a.plan = plan; a.phase = 'aim'; a.t = 0; a.from = this.angle;
         u.facing = plan.facing; this.weapon = plan.weapon;
+        if (plan.x !== undefined) this.airX = plan.x; // 공습: 마커가 목표 위치에 표시됨
       }
     } else if (a.phase === 'walk') {
       const arrived = a.goal === 'crate' && (a.crate.dead || Math.abs(a.crate.x - u.x) < 8);
@@ -857,7 +929,7 @@ export class Game {
       const k = Math.min(1, a.t / 0.7);
       this.angle = a.from + (a.plan.angle - a.from) * k;
       if (k >= 1) {
-        if (WEAPONS[a.plan.weapon].instant) { this.fire(0); this.ai = null; } // 번개는 파워 충전 없이 즉시 발사
+        if (WEAPONS[a.plan.weapon].instant || WEAPONS[a.plan.weapon].airstrike) { this.fire(0); this.ai = null; } // 번개·공습은 파워 충전 없이 즉시 발사
         else { a.phase = 'charge'; a.t = 0; this.charging = true; this.power = 0; }
       }
     } else if (a.phase === 'charge') {
@@ -889,7 +961,11 @@ export class Game {
       this.timer -= dt;
       const sec = Math.ceil(this.timer);
       if (sec <= 5 && sec > 0 && sec !== this.lastTick) { this.lastTick = sec; audio.play('tick', { vol: 0.6 }); }
-      if (this.turnTeam === 0) {
+      if (this.turnTeam === 0 && this.airMode) {
+        // 공습: 이동·각도 키(←→/AD, ↑↓와 화면 ◀▶·각도 버튼)가 목표 마커를 좌우로 움직인다
+        const d = (this.keys.right || this.keys.up ? 1 : 0) - (this.keys.left || this.keys.down ? 1 : 0);
+        if (d) this.airX = clamp(this.airX + d * 200 * dt, 20, W - 20);
+      } else if (this.turnTeam === 0) {
         if (this.charging) {
           this.power = Math.min(100, this.power + 100 * dt / 1.6);
         } else if (hu.grounded) {
@@ -940,6 +1016,8 @@ export class Game {
         }
         this.state = 'settle'; this.settleT = 0; this.settleTotal = 0;
       }
+    } else if (this.state === 'strike') {
+      this.updateAirstrike(dt);
     } else if (this.state === 'settle') {
       this.settleTotal += dt;
     } else if (this.state === 'wave') {
@@ -982,11 +1060,13 @@ export class Game {
     this.drawFires(g);
     this.drawWater(g);
     const showAim = this.state === 'aim' && (this.turnTeam === 0 || (this.ai && (this.ai.phase === 'aim' || this.ai.phase === 'charge')));
-    if (showAim) this.drawAim(g);
+    if (showAim && !this.airMode) this.drawAim(g);
     if (this.proj) this.drawProj(g, this.proj);
+    this.drawAir(g, showAim && this.airMode);
     this.drawBolt(g);
     this.drawParticles(g);
     this.drawTags(g);
+    if (this.airLabel && this.airLabel.str) { const l = this.airLabel; this.text(g, l.str, l.x, l.y, l.fs, l.color); } // 이름표 위에 보이도록 마지막에
     const fs = Math.min(34, Math.max(18, 15 / this.viewScale)); // 작은 화면에서도 CSS 15px 안팎
     for (const f of this.floaters) {
       const k = f.t / 1.2, pop = f.dmg ? 1 + Math.max(0, 0.35 - f.t * 1.6) : 1;
@@ -1160,7 +1240,7 @@ export class Game {
       g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1;
       g.beginPath(); g.moveTo(x, y + TAG_H); g.lineTo(tx, ty); g.stroke();
     }
-    if (u === this.activeUnit && (this.state === 'aim' || this.state === 'flying')) {
+    if (u === this.activeUnit && (this.state === 'aim' || this.state === 'flying' || this.state === 'strike')) {
       const ay = y - 10 + Math.sin(this.time * 6) * 3;
       g.fillStyle = col; g.strokeStyle = '#fff'; g.lineWidth = 2;
       g.beginPath(); g.moveTo(x - 7, ay - 8); g.lineTo(x + 7, ay - 8); g.lineTo(x, ay + 2); g.closePath(); g.fill(); g.stroke();
@@ -1196,6 +1276,42 @@ export class Game {
       g.beginPath(); g.moveTo(ox + dx * 20, oy + dy * 20); g.lineTo(ox + dx * len, oy + dy * len); g.stroke();
     }
     g.restore();
+  }
+
+  // 공습: 조준 중에는 목표 구역(폭 120px) 마커, 호출 뒤에는 1초 경고 마커(깜빡임)와 떨어지는 폭탄
+  drawAir(g, aiming) {
+    const a = this.air;
+    this.airLabel = null;
+    if (!aiming && !a) return;
+    const cx = a ? a.cx : this.airX, x0 = cx - AIR_W / 2;
+    const warn = a ? a.t < AIR_WARN : false, blink = warn ? 0.5 + 0.5 * Math.sin(this.time * 22) : 0;
+    // 구역 아래쪽은 지형 윤곽을 따라 그린다 (구역 안 지면 높이 샘플)
+    const ground = []; for (let x = x0; x <= x0 + AIR_W + 0.1; x += 6) ground.push([x, Math.min(WATER_Y, this.terrain.surfaceY(clamp(x, 0, W - 1))) - 3]);
+    const gy = ground[Math.floor(ground.length / 2)][1] + 3, gmin = Math.min(...ground.map((q) => q[1]));
+    const hs = Math.min(1.3, Math.max(1, 0.85 / this.viewScale));
+    const top = clamp(gy - 170, Math.ceil(107 * hs) + 28, Math.max(Math.ceil(107 * hs) + 28, gmin - 30)), fs = Math.min(26, Math.max(13, 13 / this.viewScale));
+    g.save();
+    const gr = g.createLinearGradient(0, top, 0, gy);
+    gr.addColorStop(0, 'rgba(255,70,50,0)'); gr.addColorStop(1, `rgba(255,70,50,${warn ? 0.22 + 0.2 * blink : 0.2})`);
+    g.fillStyle = gr; g.beginPath(); g.moveTo(x0, top); g.lineTo(x0 + AIR_W, top);
+    for (let i = ground.length - 1; i >= 0; i--) g.lineTo(ground[i][0], ground[i][1]);
+    g.closePath(); g.fill();
+    g.strokeStyle = warn ? `rgba(255,${90 + 100 * blink | 0},60,0.95)` : 'rgba(255,200,120,0.9)'; g.lineWidth = 2.5; g.setLineDash([8, 6]);
+    g.beginPath(); g.moveTo(x0, top); g.lineTo(x0, ground[0][1]); g.moveTo(x0 + AIR_W, top); g.lineTo(x0 + AIR_W, ground[ground.length - 1][1]); g.stroke();
+    g.setLineDash([]); g.lineWidth = 3; g.strokeStyle = warn ? '#ff4d3d' : '#ffd27a'; g.lineJoin = 'round';
+    g.beginPath(); ground.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
+    g.fillStyle = warn ? '#ff4d3d' : '#ffd27a'; // 중심을 가리키는 ▼
+    const ty = top + 4 + (warn ? 0 : Math.sin(this.time * 6) * 3);
+    g.beginPath(); g.moveTo(cx - 11, ty); g.lineTo(cx + 11, ty); g.lineTo(cx, ty + 17); g.closePath(); g.fill();
+    g.restore();
+    this.airLabel = { str: warn ? `공습 경보! ${Math.max(0.1, AIR_WARN - a.t).toFixed(1)}` : a ? '' : this.turnTeam === 0 ? '공습 목표 · 눌러서 호출' : '공습!', x: clamp(cx, 90, W - 90), y: top - 8, fs, color: warn ? '#ffb0a0' : '#ffe9b0' };
+    if (a) for (const b of a.bombs) if (b.p && !b.done) { // 떨어지는 폭탄
+      g.save(); g.translate(b.p.x, b.p.y);
+      g.fillStyle = '#2b2b2b'; g.strokeStyle = '#111'; g.lineWidth = 1;
+      g.beginPath(); g.ellipse(0, 0, 4.5, 7, 0, 0, 7); g.fill(); g.stroke();
+      g.fillStyle = '#d33'; g.beginPath(); g.moveTo(-5, -9); g.lineTo(0, -5); g.lineTo(5, -9); g.lineTo(3, -4); g.lineTo(-3, -4); g.closePath(); g.fill();
+      g.restore();
+    }
   }
 
   drawProj(g, p) {
@@ -1270,6 +1386,12 @@ export class Game {
     } else if (id === 'lightning') {
       g.fillStyle = '#ffd92e'; g.strokeStyle = '#a77a00'; g.lineWidth = 1.2;
       g.beginPath(); g.moveTo(3, -12); g.lineTo(-7, 2); g.lineTo(-1, 2); g.lineTo(-4, 12); g.lineTo(8, -3); g.lineTo(1, -3); g.closePath(); g.fill(); g.stroke();
+    } else if (id === 'airstrike') {
+      for (const [bx, by] of [[-9, -2], [0, 3], [9, -2]]) { // 떨어지는 폭탄 3발
+        g.fillStyle = '#2b2b2b'; g.beginPath(); g.ellipse(bx, by + 2, 3.6, 5.6, 0, 0, 7); g.fill();
+        g.fillStyle = '#e04030'; g.beginPath(); g.moveTo(bx - 4, by - 6); g.lineTo(bx, by - 2); g.lineTo(bx + 4, by - 6); g.lineTo(bx + 2, by - 1); g.lineTo(bx - 2, by - 1); g.closePath(); g.fill();
+      }
+      g.strokeStyle = '#ffd24a'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(-12, 12); g.lineTo(12, 12); g.stroke();
     } else if (id === 'fire') {
       g.fillStyle = '#ff7a1a';
       g.beginPath(); g.moveTo(0, -13); g.bezierCurveTo(10, -3, 10, 10, 0, 11); g.bezierCurveTo(-10, 10, -9, -2, 0, -13); g.fill();
@@ -1296,7 +1418,8 @@ export class Game {
       if (off || empty) g.globalAlpha = 0.45;
       this.drawWeaponIcon(g, w.id, x + sw / 2, y + 22, 0.95);
       this.text(g, String(i + 1), x + 9, y + 9, 10, sel ? '#222' : '#cfe3f7', 'center');
-      if (!off) this.text(g, ammo === Infinity ? '∞' : '×' + ammo, x + sw - 6, y + 9, 11, empty ? '#ff9c9c' : sel ? '#222' : '#ffe27a', 'right');
+      const lock = w.airstrike && !this.airOk;
+      if (!off) this.text(g, lock ? '잠김' : ammo === Infinity ? '∞' : '×' + ammo, x + sw - 5, y + 9, lock ? 9 : 11, empty ? '#ff9c9c' : sel ? '#222' : '#ffe27a', 'right');
       this.text(g, w.name, x + sw / 2, y + 42, 10, sel ? '#222' : '#fff');
       g.restore();
       if (off) {
@@ -1347,7 +1470,9 @@ export class Game {
     // 무기 (하단 HUD)
     if (!this.touchUI) this.drawWeaponBar(g);
     // 파워 바
-    if (this.turnTeam === 0 && (this.state === 'aim' || this.state === 'flying') && !(this.touchUI && !dom)) { // 가로 터치 화면은 발사 버튼이 각도·파워를 표시
+    if (this.turnTeam === 0 && this.airMode && this.state === 'aim' && !this.touchUI) { // 공습 조준 안내 (파워 바 대신)
+      this.text(g, `공습 x${Math.round(this.airX)} · 클릭/Space로 호출`, W / 2, H - 26, 12);
+    } else if (this.turnTeam === 0 && (this.state === 'aim' || this.state === 'flying') && !(this.touchUI && !dom)) { // 가로 터치 화면은 발사 버튼이 각도·파워를 표시
       const bx = W / 2 - 120, by = H - 34;
       g.fillStyle = 'rgba(0,0,0,0.55)'; g.beginPath(); g.roundRect(bx - 4, by - 4, 248, 24, 8); g.fill();
       const gr = g.createLinearGradient(bx, 0, bx + 240, 0);

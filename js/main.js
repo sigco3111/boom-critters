@@ -1,9 +1,9 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111021';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, stageConfig, waveConfig } from './game.js?v=2026111021';
-import * as audio from './audio.js?v=2026111021';
-import * as progress from './progress.js?v=2026111021';
+const VERSION = '2026111022';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, stageConfig, waveConfig } from './game.js?v=2026111022';
+import * as audio from './audio.js?v=2026111022';
+import * as progress from './progress.js?v=2026111022';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -68,7 +68,7 @@ coarseMQ.addEventListener?.('change', () => setTouchUI());
 portraitMQ.addEventListener?.('change', () => setTouchUI());
 let endlessRecord = false;
 let current = { mode: 'quick' };   // 현재/마지막 매치: { mode: 'quick'|'stage'|'endless', stage? }
-const weaponBtns = [1, 2, 3, 4, 5].map((n) => $('bW' + n));
+const weaponBtns = [1, 2, 3, 4, 5, 6].map((n) => $('bW' + n)).filter(Boolean); // 6번 공습 버튼은 index.html에 있을 때만
 const stars = (n) => '★'.repeat(n) + '☆'.repeat(3 - n);
 const show = (id, on = true) => $(id).classList.toggle('hidden', !on);
 // 설정·크레딧·도움말 같은 모달이 열려 있으면 경기를 멈추고 게임 키 입력을 막음
@@ -176,7 +176,7 @@ function makeHud() {
         set('n' + t, T.name, 'textContent', TEAMS[t].name.replace(' 팀', '') + (t === 0 ? '(나)' : '(AI)'));
         set('t' + t, T.tot, 'textContent', `${tot}/${cap}`);
         set('b' + t, T.bar, 'style', `width:${cap ? (100 * tot) / cap : 0}%;--tc:${TEAMS[t].color}`);
-        const act = gm.state === 'aim' || gm.state === 'flying' ? gm.activeUnit : null;
+        const act = gm.state === 'aim' || gm.state === 'flying' || gm.state === 'strike' ? gm.activeUnit : null;
         set('u' + t, T.units, 'innerHTML', mem.map((u) => `<span class="${u.alive ? (u === act ? 'act' : '') : 'dead'}">${u.alive ? u.hp : '✕'}</span>`).join(''));
       }
       const tm = Math.max(0, Math.ceil(gm.timer || 0));
@@ -186,7 +186,8 @@ function makeHud() {
       set('wn', num, 'textContent', String(Math.abs(gm.wind || 0)));
       set('md', mode, 'textContent', gm.modeLabel);
       let st = '';
-      if (gm.state === 'aim') st = gm.turnTeam === 0 ? `내 차례 · 각도 ${Math.round(gm.angle)}° · 파워 ${Math.round(gm.power)}` : '상대가 조준 중...';
+      if (gm.state === 'aim') st = gm.turnTeam === 0 ? (gm.airMode ? `내 차례 · 공습 목표 ${Math.round(gm.airX)} · 화면을 눌러 호출` : `내 차례 · 각도 ${Math.round(gm.angle)}° · 파워 ${Math.round(gm.power)}`) : '상대가 조준 중...';
+      else if (gm.state === 'strike') st = '공습 중!';
       set('st', status, 'textContent', st);
     },
   };
@@ -245,7 +246,7 @@ function setup(sprites) {
   // 일시정지: 모달과 같은 방식으로 game.update를 통째로 멈춤 → 타이머·AI 생각/조준/충전도 그대로 멈췄다가 이어짐 (건너뛰기 불가)
   const pauseBtn = $('pauseBtn');
   pauseBtn.hidden = false;
-  const canPause = () => !modalOpen && !game.winner && ['aim', 'flying', 'settle', 'wave'].includes(game.state);
+  const canPause = () => !modalOpen && !game.winner && ['aim', 'flying', 'strike', 'settle', 'wave'].includes(game.state);
   const pauseGame = () => {
     if (!canPause()) return;
     game.charging = false; game.power = 0; // 충전 중이면 발사하지 않고 취소
@@ -276,7 +277,7 @@ function setup(sprites) {
     if (e.repeat) { if (['Space', 'KeyW'].includes(e.code)) e.preventDefault(); return; }
     if (e.code === 'KeyW') { game.playerJump(); e.preventDefault(); }
     else if (e.code === 'Space') { game.beginCharge(); e.preventDefault(); }
-    else if (/^(Digit|Numpad)[1-5]$/.test(e.code)) game.setWeapon(Number(e.code.slice(-1)) - 1);
+    else if (/^(Digit|Numpad)[1-6]$/.test(e.code)) game.setWeapon(Number(e.code.slice(-1)) - 1);
     else if (e.code === 'KeyM') muteBtn.click();
   });
   window.addEventListener('keyup', (e) => {
@@ -298,7 +299,7 @@ function setup(sprites) {
   // 드래그 조준
   // 마우스: 클릭/드래그로 각도만 조절 (기존 동작). 터치: 오른쪽 절반을 드래그하면 각도(유닛→손가락 방향)와
   // 파워(드래그 거리)를 정하고 손을 떼면 발사, 왼쪽 절반은 각도만 조절.
-  let dragging = null, aimPtr = null; // 각도만 조절 중인 포인터 id / 드래그 발사 중인 포인터 id
+  let dragging = null, aimPtr = null, airPtr = null; // 각도만 조절 중인 포인터 id / 드래그 발사 중인 포인터 id
   const toGame = (e) => {
     const r = canvas.getBoundingClientRect();
     return [((e.clientX - r.left) * W) / r.width, ((e.clientY - r.top) * H) / r.height];
@@ -309,6 +310,10 @@ function setup(sprites) {
     if (finger) setTouchUI(true);
     const [px, py] = toGame(e);
     if (!game.touchUI) { const slot = game.slotAt(px, py); if (slot >= 0) { game.setWeapon(slot); return; } } // 하단 HUD 무기 버튼
+    if (game.airMode && game.isPlayerTurn) { // 공습: 누르면 목표 마커가 그 x로 가고, 끌어서 조정, 떼면 호출
+      if (airPtr === null) { airPtr = e.pointerId; canvas.setPointerCapture(e.pointerId); game.setAirX(px); }
+      return;
+    }
     if (finger && px >= W / 2 && aimPtr === null) {
       const max = Math.min(300, (140 * W) / canvas.getBoundingClientRect().width); // 손가락 약 140px 끌면 최대 파워
       if (game.dragBegin(px, py, max)) { aimPtr = e.pointerId; canvas.setPointerCapture(e.pointerId); }
@@ -317,10 +322,15 @@ function setup(sprites) {
     dragging = e.pointerId; canvas.setPointerCapture(e.pointerId); game.aimTo(px, py);
   });
   canvas.addEventListener('pointermove', (e) => {
-    if (e.pointerId === aimPtr) game.dragMove(...toGame(e));
+    if (e.pointerId === airPtr) game.setAirX(toGame(e)[0]);
+    else if (e.pointerId === aimPtr) game.dragMove(...toGame(e));
     else if (e.pointerId === dragging) game.aimTo(...toGame(e));
   });
   const endDrag = (fireIt) => (e) => {
+    if (e.pointerId === airPtr) { // 공습 호출: 손을 떼면 마커 위치에 투하 (취소되면 호출하지 않음)
+      airPtr = null;
+      if (fireIt) { game.setAirX(toGame(e)[0]); game.beginCharge(); }
+    }
     if (e.pointerId === aimPtr) { aimPtr = null; game.dragEnd(fireIt); }
     if (e.pointerId === dragging) dragging = null;
   };
@@ -330,7 +340,7 @@ function setup(sprites) {
   document.addEventListener('gesturestart', (e) => e.preventDefault()); // iOS 핀치 줌 방지
 
   // 메인 루프
-  const fireBtn = $('bFire'), fireFx = fireBtn.querySelector('.fx');
+  const fireBtn = $('bFire'), fireFx = fireBtn.querySelector('.fx'), fireLabel = fireBtn.querySelector('.fl');
   let last = performance.now();
   function frame(now) {
     const dt = Math.min(0.033, (now - last) / 1000);
@@ -345,18 +355,20 @@ function setup(sprites) {
     // 발사 버튼(가로 터치 화면): 각도·파워 표시와 파워 게이지
     {
       const mine = game.turnTeam === 0 && (game.state === 'aim' || game.state === 'flying');
-      const info = mine ? `${Math.round(game.angle)}° · ${Math.round(game.power)}` : game.turnTeam === 1 && game.state === 'aim' ? '상대 조준 중' : '';
+      const info = mine && game.airMode ? `목표 ${Math.round(game.airX)}` : mine ? `${Math.round(game.angle)}° · ${Math.round(game.power)}` : game.turnTeam === 1 && game.state === 'aim' ? '상대 조준 중' : '';
       if (fireFx.textContent !== info) fireFx.textContent = info;
       const pw = mine ? Math.round(game.power) + '%' : '0%';
       if (fireBtn.dataset.pw !== pw) { fireBtn.dataset.pw = pw; fireBtn.style.setProperty('--pw', pw); }
       pauseBtn.disabled = !canPause();
+      const fl = game.airMode ? '공습 호출' : '발사 (꾹)';
+      if (fireLabel.textContent !== fl) fireLabel.textContent = fl;
     }
     // 무기 버튼 상태 표시
     weaponBtns.forEach((b, i) => {
       b.classList.toggle('sel', game.weapon === i);
       const w = WEAPONS[i], a = game.ammo ? game.ammo[0][i] : 0;
       b.disabled = !!w.disabled || a <= 0;
-      const amt = w.disabled ? 'soon' : a === Infinity ? '∞' : `×${a}`;
+      const amt = w.disabled ? 'soon' : w.airstrike && !game.airOk ? '🔒' : a === Infinity ? '∞' : `×${a}`;
       const label = `${i + 1} ${w.name}|${amt}`;
       if (b.dataset.label !== label) { // 터치 화면에서는 두 줄(이름 / 탄약)로 보인다
         b.dataset.label = label;
