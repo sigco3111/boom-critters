@@ -12,6 +12,7 @@ const BODY_R = 15;       // 투사체 명중 판정 반경(몸통 중심 기준)
 const TAG_TOP = 84, TAG_H = 26; // 이름표+HP 블록: 발 위 84px부터 높이 26px
 const BODY_HALF = 8;     // 몸통 캡슐의 세로 반길이 (중심에서 위/아래)
 const BOUNCE_E = 0.55, BOUNCE_FRICTION = 0.85; // 수류탄 반발/마찰 계수
+const CRATE_W = 22, CRATE_H = 20, CRATE_FALL = 85, CRATE_HEAL = 30, CRATE_EVERY = 4; // 보급 상자
 const FALL_T = 80;       // 낙하 데미지 임계 높이
 const TURN_TIME = 30;
 
@@ -93,7 +94,7 @@ export class Game {
     this.state = 'idle';
     this.units = []; this.particles = []; this.floaters = [];
     this.proj = null; this.shake = 0;
-    this.bolt = null; this.flashT = 0; this.fires = [];
+    this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.turnNo = 0;
     this.keys = { left: false, right: false, up: false, down: false };
     this.onOver = () => {};
     this.ammo = freshAmmo();    // 매치 시작 전에도 버튼 표시가 올바르도록
@@ -107,7 +108,7 @@ export class Game {
     this.terrain = new Terrain(this.seed);
     this.bg = this.makeBackground(this.seed);
     this.units = []; this.particles = []; this.floaters = []; this.proj = null;
-    this.bolt = null; this.flashT = 0; this.fires = [];
+    this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.turnNo = 0;
     const baseX = [[95, 230, 360], [600, 730, 865]];
     for (let t = 0; t < 2; t++) {
       for (let i = 0; i < 3; i++) {
@@ -297,6 +298,7 @@ export class Game {
     const r = w.radius;
     this.terrain.crater(x, y, r);
     this.emitExplosion(x, y, r);
+    this.blastCrates(x, y, r);
     this.shake = Math.max(this.shake, r / 4);
     audio.play('explosion', { rate: w.id === 'rocket' ? 0.8 : 1.05, vol: 1 });
     let hit = false;
@@ -355,6 +357,8 @@ export class Game {
   startTurn() {
     const t = this.turnTeam;
     if (this.burnFires(t)) return;
+    this.turnNo++;
+    if (this.turnNo % CRATE_EVERY === 0) this.dropCrate();
     const mine = this.units.filter((u) => u.team === t);
     let u = null;
     for (let k = 0; k < 3; k++) {
@@ -371,6 +375,62 @@ export class Game {
     this.banner = { text: t === 0 ? `내 차례 - ${u.name}` : `상대 차례 - ${u.name}`, color: TEAMS[t].color, t: 0 };
     this.lastTick = 99;
     this.ai = t === 1 ? { phase: 'think', t: 0, walks: 0, target: null } : null;
+  }
+
+  // ---------- 보급 상자 ----------
+  // 하늘에서 낙하산으로 내려오는 체력 상자. 물 위가 아닌 지형, 유닛과 겹치지 않는 곳에 떨어뜨린다.
+  dropCrate() {
+    let x = null;
+    for (let k = 0; k < 40; k++) {
+      const c = rnd(50, W - 50);
+      if (this.terrain.surfaceY(c) > WATER_Y - 40) continue;
+      if (this.units.some((u) => u.alive && Math.abs(u.x - c) < 26)) continue;
+      x = c; break;
+    }
+    if (x === null) return;
+    this.crates.push({ x, y: -30, landed: false, seed: Math.random() * 10 });
+    this.floaters.push({ x, y: 70, text: '보급 상자 투하!', color: '#7dff8a', t: 0 });
+  }
+
+  crateSupported(c) {
+    const t = this.terrain, y = Math.floor(c.y) + 1;
+    return t.solid(c.x - 9, y) || t.solid(c.x, y) || t.solid(c.x + 9, y);
+  }
+
+  updateCrates(dt) {
+    for (const c of this.crates) {
+      if (c.dead) continue;
+      let steps = Math.max(1, Math.ceil(CRATE_FALL * dt));
+      c.landed = true;
+      for (let i = 0; i < steps; i++) {
+        if (this.crateSupported(c)) break;
+        c.landed = false; c.y += (CRATE_FALL * dt) / steps;
+        if (c.y > WATER_Y + 10) { c.dead = true; break; }
+      }
+      if (c.dead || !c.landed) continue;
+      if (!this.crateSupported(c)) { c.landed = false; continue; }
+      for (const u of this.units) {
+        if (!u.alive || Math.abs(u.x - c.x) > CRATE_W / 2 + HALF_W) continue;
+        if (u.y < c.y - CRATE_H || u.y - UNIT_H > c.y) continue;
+        u.hp = Math.min(100, u.hp + CRATE_HEAL);
+        this.floaters.push({ x: u.x, y: u.y - 60, text: '+' + CRATE_HEAL, color: '#5dff6e', t: 0 });
+        for (let k = 0; k < 10; k++) this.particles.push({ type: 'spark', x: c.x + rnd(-8, 8), y: c.y - rnd(0, 20), vx: rnd(-40, 40), vy: rnd(-120, -40), r: rnd(2, 3.5), life: 0, max: rnd(0.4, 0.8), green: true });
+        audio.play('win', { vol: 0.5, rate: 1.4 });
+        c.dead = true; break;
+      }
+    }
+    this.crates = this.crates.filter((c) => !c.dead);
+  }
+
+  // 폭발이 닿으면 상자 파괴
+  blastCrates(x, y, r) {
+    for (const c of this.crates) {
+      if (Math.hypot(c.x - x, (c.y - CRATE_H / 2) - y) >= r + 14) continue;
+      c.dead = true;
+      for (let i = 0; i < 10; i++) this.particles.push({ type: 'debris', x: c.x, y: c.y - 10, vx: rnd(-160, 160), vy: rnd(-220, -60), r: rnd(1.5, 3), life: 0, max: rnd(0.6, 1.1) });
+      this.floaters.push({ x: c.x, y: c.y - 24, text: '상자 파괴', color: '#ddd', t: 0 });
+    }
+    this.crates = this.crates.filter((c) => !c.dead);
   }
 
   // ---------- 화염 지대 ----------
@@ -598,6 +658,7 @@ export class Game {
     this.updateParticles(dt);
     if (this.bolt) { this.bolt.t += dt; if (this.bolt.t > 0.3) this.bolt = null; }
     this.flashT = Math.max(0, this.flashT - dt);
+    this.updateCrates(dt);
     for (const f of this.fires) {
       if (Math.random() < dt * 24) {
         const x = f.x + rnd(-f.r, f.r), gy = this.fireGround(f, x);
@@ -692,6 +753,7 @@ export class Game {
     if (this.shake > 0.3) g.translate(rnd(-this.shake, this.shake), rnd(-this.shake, this.shake));
     g.drawImage(this.bg, 0, 0);
     g.drawImage(this.terrain.canvas, 0, 0);
+    for (const c of this.crates) this.drawCrate(g, c);
     for (const u of this.units) if (u.alive || (!u.drowned && u.deadT < FADE_END)) this.drawUnit(g, u);
     this.drawFires(g);
     this.drawWater(g);
@@ -729,6 +791,33 @@ export class Game {
     g.strokeStyle = 'rgba(70,150,255,0.8)'; g.lineWidth = 9; path();
     g.shadowBlur = 8; g.strokeStyle = '#bfe0ff'; g.lineWidth = 4; path();
     g.shadowBlur = 0; g.strokeStyle = '#fff'; g.lineWidth = 1.8; path();
+    g.restore();
+  }
+
+  // 보급 상자: 나무 상자 + 녹색 십자, 낙하 중에는 낙하산
+  drawCrate(g, c) {
+    const x = c.x, y = c.y, w = CRATE_W, h = CRATE_H;
+    g.save();
+    if (!c.landed) {
+      const sway = Math.sin(this.time * 3 + c.seed) * 3, cx = x + sway, cy = y - h - 34, r = 24;
+      g.strokeStyle = 'rgba(40,40,40,0.8)'; g.lineWidth = 1;
+      g.beginPath();
+      for (const dx of [-r, -r / 3, r / 3, r]) { g.moveTo(cx + dx, cy); g.lineTo(x + Math.sign(dx) * 8, y - h); }
+      g.stroke();
+      for (let i = 0; i < 4; i++) {
+        g.fillStyle = i % 2 ? '#ffffff' : '#e84a3a';
+        g.beginPath(); g.moveTo(cx, cy);
+        g.arc(cx, cy, r, Math.PI + (i * Math.PI) / 4, Math.PI + ((i + 1) * Math.PI) / 4); g.closePath(); g.fill();
+      }
+      g.strokeStyle = '#5a1f18'; g.lineWidth = 1.2;
+      g.beginPath(); g.arc(cx, cy, r, Math.PI, 0); g.closePath(); g.stroke();
+    }
+    g.fillStyle = '#c98a3c'; g.strokeStyle = '#6b4310'; g.lineWidth = 2;
+    g.beginPath(); g.roundRect(x - w / 2, y - h, w, h, 3); g.fill(); g.stroke();
+    g.strokeStyle = 'rgba(107,67,16,0.7)'; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(x - w / 2, y - h / 2); g.lineTo(x + w / 2, y - h / 2); g.stroke();
+    g.fillStyle = '#fff'; g.beginPath(); g.roundRect(x - 7, y - h + 3, 14, h - 6, 2); g.fill();
+    g.fillStyle = '#2fbf4a'; g.fillRect(x - 5, y - h / 2 - 1.5, 10, 3); g.fillRect(x - 1.5, y - h / 2 - 5, 3, 10);
     g.restore();
   }
 
@@ -912,7 +1001,7 @@ export class Game {
       } else if (p.type === 'debris') {
         g.fillStyle = `rgba(110,70,35,${1 - k})`; g.fillRect(p.x, p.y, p.r * 1.6, p.r * 1.6);
       } else if (p.type === 'spark') {
-        g.fillStyle = `rgba(${k < 0.5 ? '255,255,255' : '140,200,255'},${1 - k})`;
+        g.fillStyle = `rgba(${p.green ? (k < 0.5 ? '200,255,200' : '90,230,110') : k < 0.5 ? '255,255,255' : '140,200,255'},${1 - k})`;
         g.beginPath(); g.arc(p.x, p.y, p.r * (1 - k * 0.4), 0, 7); g.fill();
       } else if (p.type === 'splash') {
         g.fillStyle = `rgba(220,240,255,${1 - k})`;
