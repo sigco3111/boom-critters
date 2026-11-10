@@ -17,7 +17,13 @@ const TURN_TIME = 30;
 export const WEAPONS = [
   { id: 'cannon', name: '대포탄', radius: 40, damage: 50, windK: 8, speedK: 1.0, knock: 380 },
   { id: 'rocket', name: '로켓', radius: 58, damage: 42, windK: 3, speedK: 0.85, knock: 470 },
+  { id: 'grenade', name: '수류탄', radius: 55, damage: 60, windK: 1, speedK: 0.9, knock: 640, ammo: 3, fuse: 3, disabled: true },
+  { id: 'lightning', name: '번개', disabled: true },
+  { id: 'fire', name: '화염탄', disabled: true },
 ];
+// 하단 HUD 무기 슬롯 (캔버스 좌표)
+const SLOT = { x: 10, y: H - 56, w: 62, h: 50, gap: 4 };
+export function slotRect(i) { return [SLOT.x + i * (SLOT.w + SLOT.gap), SLOT.y, SLOT.w, SLOT.h]; }
 export const TEAMS = [
   { name: '파랑 팀', color: '#3b82f6' },
   { name: '빨강 팀', color: '#ef4444' },
@@ -112,6 +118,8 @@ export class Game {
     this.turnTeam = 0;
     this.winner = null;
     this.angle = 45; this.power = 0; this.lastPower = 0; this.weapon = 0;
+    // 팀별 무기 탄약 (무한 = Infinity, 비활성 무기는 0)
+    this.ammo = [0, 1].map(() => WEAPONS.map((w) => (w.disabled ? 0 : w.ammo ?? Infinity)));
     this.charging = false; this.ai = null;
     this.banner = null;
     this.startTurn();
@@ -332,7 +340,21 @@ export class Game {
   // ---------- 플레이어 조작 ----------
   setWeapon(i) {
     if (!this.isPlayerTurn || this.charging || this.weapon === i) return;
+    const w = WEAPONS[i], u = this.activeUnit;
+    if (!w) return;
+    if (w.disabled || this.ammo[0][i] <= 0) {
+      this.floaters.push({ x: u.x, y: u.y - 70, text: w.disabled ? '곧 출시' : '탄약 없음', color: '#ffe27a', t: 0 });
+      return;
+    }
     this.weapon = i; audio.play('switch', { vol: 0.7 });
+  }
+  // 캔버스 좌표가 하단 무기 슬롯 위인지 (없으면 -1)
+  slotAt(px, py) {
+    for (let i = 0; i < WEAPONS.length; i++) {
+      const [x, y, w, h] = slotRect(i);
+      if (px >= x && px < x + w && py >= y && py < y + h) return i;
+    }
+    return -1;
   }
   aimBy(d) { this.angle = clamp(this.angle + d, 2, 88); }
   aimTo(px, py) {
@@ -365,6 +387,7 @@ export class Game {
       vx: f * Math.cos(a) * v, vy: -Math.sin(a) * v, w, owner: u, age: 0,
     };
     this.lastPower = power; this.power = power;
+    if (this.ammo[this.turnTeam][this.weapon] !== Infinity) this.ammo[this.turnTeam][this.weapon]--;
     this.state = 'flying';
     u.squash = -0.2; u.shootT = 0.4;
     audio.play('fire', { rate: w.id === 'rocket' ? 0.8 : 1 });
@@ -696,11 +719,50 @@ export class Game {
       g.fillStyle = '#e6e6e6'; g.fillRect(-12, -4, 20, 8);
       g.fillStyle = '#d33'; g.beginPath(); g.moveTo(8, -4); g.lineTo(16, 0); g.lineTo(8, 4); g.fill();
       g.fillStyle = '#555'; g.fillRect(-15, -5, 4, 10);
+    } else if (id === 'grenade') {
+      g.fillStyle = '#4f7a2f'; g.strokeStyle = '#2a4418'; g.lineWidth = 1.5;
+      g.beginPath(); g.ellipse(0, 2, 8, 9, 0, 0, 7); g.fill(); g.stroke();
+      g.strokeStyle = '#2a4418'; g.beginPath(); g.moveTo(-7, 0); g.lineTo(7, 0); g.moveTo(-7, 5); g.lineTo(7, 5); g.stroke();
+      g.fillStyle = '#777'; g.fillRect(-3, -9, 6, 4);
+      g.strokeStyle = '#ccc'; g.lineWidth = 2; g.beginPath(); g.moveTo(3, -8); g.lineTo(9, -10); g.stroke();
+      g.beginPath(); g.arc(11, -8, 2.5, 0, 7); g.stroke();
+    } else if (id === 'lightning') {
+      g.fillStyle = '#ffd92e'; g.strokeStyle = '#a77a00'; g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(3, -12); g.lineTo(-7, 2); g.lineTo(-1, 2); g.lineTo(-4, 12); g.lineTo(8, -3); g.lineTo(1, -3); g.closePath(); g.fill(); g.stroke();
+    } else if (id === 'fire') {
+      g.fillStyle = '#ff7a1a';
+      g.beginPath(); g.moveTo(0, -13); g.bezierCurveTo(10, -3, 10, 10, 0, 11); g.bezierCurveTo(-10, 10, -9, -2, 0, -13); g.fill();
+      g.fillStyle = '#ffd94a';
+      g.beginPath(); g.moveTo(0, -3); g.bezierCurveTo(5, 3, 5, 9, 0, 10); g.bezierCurveTo(-5, 9, -4, 3, 0, -3); g.fill();
     } else {
       g.fillStyle = '#2b2b2b'; g.beginPath(); g.arc(0, 0, 9, 0, 7); g.fill();
       g.fillStyle = 'rgba(255,255,255,0.6)'; g.beginPath(); g.arc(-3, -3, 3, 0, 7); g.fill();
     }
     g.restore();
+  }
+
+  drawWeaponBar(g) {
+    g.fillStyle = 'rgba(8,20,35,0.72)'; g.fillRect(0, H - 62, W, 62);
+    g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(0, H - 62, W, 1);
+    WEAPONS.forEach((w, i) => {
+      const [x, y, sw, sh] = slotRect(i), sel = this.weapon === i;
+      const ammo = this.ammo ? this.ammo[0][i] : (w.ammo ?? Infinity);
+      const off = !!w.disabled, empty = !off && ammo <= 0;
+      g.fillStyle = sel ? 'rgba(255,226,122,0.92)' : 'rgba(255,255,255,0.12)';
+      g.strokeStyle = sel ? '#fff' : 'rgba(255,255,255,0.25)'; g.lineWidth = 1.5;
+      g.beginPath(); g.roundRect(x, y, sw, sh, 7); g.fill(); g.stroke();
+      g.save();
+      if (off || empty) g.globalAlpha = 0.45;
+      this.drawWeaponIcon(g, w.id, x + sw / 2, y + 22, 0.95);
+      this.text(g, String(i + 1), x + 9, y + 9, 10, sel ? '#222' : '#cfe3f7', 'center');
+      if (!off) this.text(g, ammo === Infinity ? '∞' : '×' + ammo, x + sw - 6, y + 9, 11, empty ? '#ff9c9c' : sel ? '#222' : '#ffe27a', 'right');
+      this.text(g, w.name, x + sw / 2, y + 42, 10, sel ? '#222' : '#fff');
+      g.restore();
+      if (off) {
+        g.fillStyle = 'rgba(0,0,0,0.6)'; g.beginPath(); g.roundRect(x + sw / 2 - 18, y + 14, 36, 15, 7); g.fill();
+        this.text(g, 'soon', x + sw / 2, y + 22, 10, '#bbb');
+      }
+    });
   }
 
   drawHUD(g) {
@@ -730,15 +792,8 @@ export class Game {
       g.beginPath(); g.moveTo(x2, 73); g.lineTo(x2 - wd * 9, 67); g.lineTo(x2 - wd * 9, 79); g.fill();
     } else this.text(g, '없음', cx, 73, 12, '#ffe27a');
     this.text(g, String(Math.abs(this.wind)), W / 2 + 68, 73, 12, '#fff', 'right');
-    // 무기
-    for (let i = 0; i < 2; i++) {
-      const x = 14 + i * 114, y = H - 56, sel = this.weapon === i;
-      g.fillStyle = sel ? 'rgba(255,226,122,0.85)' : 'rgba(0,0,0,0.5)';
-      g.beginPath(); g.roundRect(x, y, 106, 42, 8); g.fill();
-      this.drawWeaponIcon(g, WEAPONS[i].id, x + 22, y + 21, 1);
-      this.text(g, `[${i + 1}] ${WEAPONS[i].name}`, x + 38, y + 15, 11, sel ? '#222' : '#fff', 'left');
-      this.text(g, `반경 ${WEAPONS[i].radius}`, x + 38, y + 31, 10, sel ? '#333' : '#bcd', 'left', '400');
-    }
+    // 무기 (하단 HUD)
+    this.drawWeaponBar(g);
     // 파워 바
     if (this.turnTeam === 0 && (this.state === 'aim' || this.state === 'flying')) {
       const bx = W / 2 - 120, by = H - 34;

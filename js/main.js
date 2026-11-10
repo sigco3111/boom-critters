@@ -1,5 +1,5 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
-import { Game, W, H, CHARACTERS, WALK_FRAMES } from './game.js';
+import { Game, W, H, CHARACTERS, WALK_FRAMES, WEAPONS } from './game.js';
 import * as audio from './audio.js';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
@@ -23,6 +23,7 @@ function loadImages() {
 }
 
 let game = null, difficulty = 'normal';
+const weaponBtns = [1, 2, 3, 4, 5].map((n) => $('bW' + n));
 
 function showResult(winner) {
   setTimeout(() => {
@@ -76,8 +77,7 @@ function setup(sprites) {
     if (e.repeat) { if (['Space', 'KeyW'].includes(e.code)) e.preventDefault(); return; }
     if (e.code === 'KeyW') { game.playerJump(); e.preventDefault(); }
     else if (e.code === 'Space') { game.beginCharge(); e.preventDefault(); }
-    else if (e.code === 'Digit1' || e.code === 'Numpad1') game.setWeapon(0);
-    else if (e.code === 'Digit2' || e.code === 'Numpad2') game.setWeapon(1);
+    else if (/^(Digit|Numpad)[1-5]$/.test(e.code)) game.setWeapon(Number(e.code.slice(-1)) - 1);
     else if (e.code === 'KeyM') muteBtn.click();
   });
   window.addEventListener('keyup', (e) => {
@@ -93,8 +93,7 @@ function setup(sprites) {
   bindHold($('bDown'), () => (k.down = true), () => (k.down = false));
   bindHold($('bJump'), () => game.playerJump(), () => {});
   bindHold($('bFire'), () => game.beginCharge(), () => game.releaseCharge());
-  $('bW1').addEventListener('click', () => game.setWeapon(0));
-  $('bW2').addEventListener('click', () => game.setWeapon(1));
+  weaponBtns.forEach((b, i) => b.addEventListener('click', () => game.setWeapon(i)));
 
   // 드래그 조준
   let dragging = false;
@@ -102,7 +101,11 @@ function setup(sprites) {
     const r = canvas.getBoundingClientRect();
     return [((e.clientX - r.left) * W) / r.width, ((e.clientY - r.top) * H) / r.height];
   };
-  canvas.addEventListener('pointerdown', (e) => { dragging = true; canvas.setPointerCapture(e.pointerId); game.aimTo(...toGame(e)); });
+  canvas.addEventListener('pointerdown', (e) => {
+    const [px, py] = toGame(e), slot = game.slotAt(px, py);
+    if (slot >= 0) { game.setWeapon(slot); return; } // 하단 HUD 무기 버튼
+    dragging = true; canvas.setPointerCapture(e.pointerId); game.aimTo(px, py);
+  });
   canvas.addEventListener('pointermove', (e) => { if (dragging) game.aimTo(...toGame(e)); });
   const end = () => { dragging = false; };
   canvas.addEventListener('pointerup', end);
@@ -118,8 +121,13 @@ function setup(sprites) {
       game.draw(g);
     } catch (err) { console.error(err); }
     // 무기 버튼 상태 표시
-    $('bW1').classList.toggle('sel', game.weapon === 0);
-    $('bW2').classList.toggle('sel', game.weapon === 1);
+    weaponBtns.forEach((b, i) => {
+      b.classList.toggle('sel', game.weapon === i);
+      const w = WEAPONS[i], a = game.ammo ? game.ammo[0][i] : 0;
+      b.disabled = !!w.disabled || a <= 0;
+      const label = `${i + 1} ${w.name}${w.disabled ? ' (soon)' : a === Infinity ? '' : ` ×${a}`}`;
+      if (b.textContent !== label) b.textContent = label;
+    });
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
