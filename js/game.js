@@ -478,7 +478,7 @@ export class Game {
         u.hp = Math.min(100, u.hp + CRATE_HEAL);
         this.floaters.push({ x: u.x, y: u.y - 60, text: '+' + CRATE_HEAL, color: '#5dff6e', t: 0 });
         for (let k = 0; k < 10; k++) this.particles.push({ type: 'spark', x: c.x + rnd(-8, 8), y: c.y - rnd(0, 20), vx: rnd(-40, 40), vy: rnd(-120, -40), r: rnd(2, 3.5), life: 0, max: rnd(0.4, 0.8), green: true });
-        audio.play('win', { vol: 0.5, rate: 1.4 });
+        audio.playSynth('heal');
         c.dead = true; break;
       }
     }
@@ -644,6 +644,7 @@ export class Game {
     u.squash = -0.2; u.shootT = 0.4;
     if (w.id === 'cannon' || w.id === 'rocket') audio.play('sea_cannon', { rate: w.id === 'rocket' ? 1.15 : 1, vol: 0.9 });
     else audio.play('fire', { rate: w.id === 'grenade' ? 1.3 : 0.6 });
+    if (w.id === 'grenade') audio.playSynth('grenadeTick', { stage: 0, delay: 0.12 });
   }
 
   // ---------- 공습 ----------
@@ -670,7 +671,7 @@ export class Game {
     }
     for (const b of a.bombs) {
       if (b.done || a.t < AIR_WARN + b.delay) continue;
-      if (!b.p) { b.p = { x: b.x, y: -24, vx: 0, vy: 240, w: a.w, owner: null, age: 0 }; audio.play('fire', { rate: 2.4, vol: 0.3 }); }
+      if (!b.p) { b.p = { x: b.x, y: -24, vx: 0, vy: 240, w: a.w, owner: null, age: 0 }; audio.playSynth('whistle', { vol: 0.5, dur: rnd(0.65, 0.85), pitch: rnd(0.9, 1.12) }); } // 폭탄마다 하강 휘파람
       const r = stepProj(b.p, dt, 0, this.terrain, this.units);
       this.particles.push({ type: 'smoke', x: b.p.x, y: b.p.y - 8, vx: 0, vy: 0, r: 2, life: 0, max: 0.3, color: '230,230,230' });
       if (!r) continue;
@@ -712,8 +713,8 @@ export class Game {
     this.bolt = { x1: ox, y1: oy, x2: ex, y2: ey, t: 0, seed: Math.random() * 1000 };
     this.flashT = 0.14;
     this.kick(2);
-    audio.play('explosion', { rate: 1.9, vol: 0.55 });
-    audio.play('fire', { rate: 1.8, vol: 0.6 });
+    audio.playSynth('lightning'); // 합성: 하이패스 스윕 노이즈 지지직
+    audio.play('explosion', { rate: 1.9, vol: 0.3 });
     u.squash = -0.2; u.shootT = 0.4;
     for (let i = 0; i < 8; i++) this.particles.push({ type: 'spark', x: ox, y: oy, vx: rnd(-90, 90), vy: rnd(-90, 90), r: rnd(1.5, 3), life: 0, max: rnd(0.2, 0.4) });
     if (target) {
@@ -994,7 +995,7 @@ export class Game {
       } else r = stepProj(p, dt, this.wind, this.terrain, this.units);
       if (grenade) {
         const sec = Math.ceil(p.fuse);
-        if (sec < p.tickN && sec > 0) { p.tickN = sec; audio.play('tick', { vol: 0.7 }); }
+        if (sec < p.tickN && sec > 0) { p.tickN = sec; audio.playSynth('grenadeTick', { stage: Math.min(2, Math.round(p.w.fuse - sec)) }); }
         this.particles.push({ type: 'fire', x: p.x + 2, y: p.y - 6, vx: rnd(-15, 15), vy: rnd(-40, -15), r: rnd(1.5, 2.5), life: 0, max: 0.25 });
       } else if (p.w.id === 'fire') {
         this.particles.push({ type: 'fire', x: p.x, y: p.y, vx: rnd(-25, 25), vy: rnd(-25, 25), r: rnd(3, 6), life: 0, max: 0.4 });
