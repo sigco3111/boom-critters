@@ -1358,13 +1358,14 @@ export class Game {
       if (!dom) this.text(g, `각도 ${Math.round(this.angle)}°  파워 ${Math.round(this.power)}`, W / 2, by - 14, 12);
     }
     if (!dom && !this.touchUI && this.turnTeam === 1 && this.state === 'aim') this.text(g, '상대가 조준 중...', W / 2, H - 26, 14, '#fff');
-    // 턴 배너: "내 차례 - 이름" / "상대 차례 - 이름"을 화면 맨 위 중앙(이름표보다 위, 지형 최고점 위 하늘)에 짧은 페이드로 보여줌
+    // 턴 배너: "내 차례 - 이름" / "상대 차례 - 이름"을 상단 중앙 HUD 바로 아래 하늘에 짧은 페이드로 보여줌
     if (this.banner) {
       const b = this.banner, a = Math.min(1, b.t / 0.12, (BANNER_T - b.t) / 0.35);
       const fz = Math.min(34, Math.max(18, 15 / this.viewScale));
       g.font = `800 ${fz}px "Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif`;
       const bw = Math.min(W - 40, Math.ceil(g.measureText(b.text).width) + fz * 1.6), bh = fz * 1.8;
-      const by = 6;
+      // 상단 중앙 HUD(타이머·바람·시드 알약, 가로 폰에서는 hs배 확대)가 끝나는 곳 바로 아래에 놓아 타이머·HUD를 가리지 않게 함. 세로 폰은 DOM HUD라 맨 위
+      const by = dom ? 6 : Math.ceil(107 * hs) + 8;
       const mine = b.color === TEAMS[0].color;
       g.save(); g.globalAlpha = Math.max(0, a) * 0.95;
       g.fillStyle = 'rgba(0,0,0,0.7)'; g.beginPath(); g.roundRect(W / 2 - bw / 2, by, bw, bh, bh / 2); g.fill();
