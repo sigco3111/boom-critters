@@ -5,7 +5,7 @@
 // 번개·공습·수류탄 카운트다운·치유 효과음은 파일 없이 Web Audio(노이즈·오실레이터)로 합성 — 모두 sfxGain을 거치므로 효과음 볼륨·음소거를 따른다
 // OGG를 디코드하지 못하는 기기(구형 iOS Safari 등): 음악은 원곡 MP3(assets/music/enchanted-festival.mp3)로 대체하고,
 // 효과음·결과 징글은 파일 없이 합성한 소리(FALLBACK)로 대체한다 — 효과음은 sfxGain, 징글은 musicGain을 거치므로 볼륨·음소거를 그대로 따른다
-import { local } from './storage.js?v=2026111037';
+import { local } from './storage.js?v=2026111038';
 const NAMES = ['explosion', 'fire', 'land', 'step', 'hit', 'select', 'win', 'lose', 'tick', 'switch',
   'sea_cannon', 'sea_boom', 'sea_boom_big', 'sea_boom_small', 'sea_splash'];
 const MUSIC_URL = 'assets/music/enchanted-festival-loop.ogg';
@@ -53,11 +53,32 @@ const applyGains = () => {
   musicGain.gain.value = muted ? 0 : vols.music;
 };
 
+// 파일 내려받기(바이트): 같은 주소는 한 번만 받아 Promise를 재사용한다. 로딩 화면의 preload()가 첫 화면용 파일을 미리 받아 두면 initAudio가 다시 받지 않는다.
+// 실패하면 캐시에서 빼서 나중에 다시 시도할 수 있게 한다 (컨텍스트 없이 받을 수 있어 사용자 입력 전에도 가능)
+const raw = new Map();
+function fetchRaw(url) {
+  if (!raw.has(url)) {
+    raw.set(url, fetch(url).then((res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.arrayBuffer();
+    }).catch((e) => { raw.delete(url); throw e; }));
+  }
+  return raw.get(url);
+}
+// 첫 화면(시작 메뉴)에 필요한 파일: 배경음악(지원 형식에 맞는 한 가지)과 버튼 효과음. 나머지 효과음·징글은 첫 입력 뒤 initAudio가 뒤에서 받는다
+export function firstScreenFiles() {
+  const f = detectFormats();
+  return f.ogg ? [MUSIC_URL, 'assets/sfx/select.ogg'] : [MUSIC_URL_MP3];
+}
+// 로딩 화면용: 첫 화면 파일을 미리 받는다. 파일 하나가 끝날 때마다 onEach(성공 여부)를 부르며, 실패해도 예외 없이 끝난다
+export function preload(onEach = () => {}) {
+  return Promise.all(firstScreenFiles().map((u) => fetchRaw(u).then(() => onEach(true), () => onEach(false))));
+}
+
 // 파일을 못 받거나 디코드에 실패하면 reject — 호출하는 쪽에서 조용히 무시한다 (Safari 구버전은 Promise 형태가 없어 콜백 형태로 대체)
 async function loadBuffer(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.arrayBuffer();
+  const data = (await fetchRaw(url)).slice(0); // 복사본을 디코드 (원본은 아래에서 비움)
+  raw.delete(url);
   const c = ctx;
   return new Promise((resolve, reject) => {
     try {

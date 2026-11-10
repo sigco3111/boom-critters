@@ -1,11 +1,12 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111037';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig } from './game.js?v=2026111037';
-import * as audio from './audio.js?v=2026111037';
-import * as progress from './progress.js?v=2026111037';
-import { MenuBg } from './menubg.js?v=2026111037';
-import * as store from './storage.js?v=2026111037';
+const VERSION = '2026111038';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig } from './game.js?v=2026111038';
+import * as audio from './audio.js?v=2026111038';
+import * as progress from './progress.js?v=2026111038';
+import { MenuBg } from './menubg.js?v=2026111038';
+import * as store from './storage.js?v=2026111038';
+import * as loader from './loader.js?v=2026111038';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -21,18 +22,11 @@ const g = canvas.getContext('2d');
 }
 canvas.width = W; canvas.height = H;
 
-function loadImages() {
-  const load = (key, pose) => new Promise((res, rej) => {
-    const im = new Image();
-    im.onload = () => res(im);
-    im.onerror = () => rej(new Error(`이미지 로드 실패: ${key}/${pose}`));
-    im.src = `assets/toon/${key}/${pose}.png`;
-  });
-  return Promise.all(CHAR_KEYS.map(async (key) => {
-    const imgs = await Promise.all(POSES.map((p) => load(key, p)));
-    return [key, Object.fromEntries(POSES.map((p, i) => [p, imgs[i]]))];
-  })).then(Object.fromEntries);
-}
+// 로딩 화면에서 받는 캐릭터: 우리 팀 3명과 첫 두 적(빠른 대전 쉬움·스테이지 1~3에 필요). 세 번째 적부터(보통 이상·스테이지 4~)는 뒤에서 받다가 그 경기를 시작할 때 기다린다
+const CORE_KEYS = [...CHARACTERS[0].map(([k]) => k), ...CHARACTERS[1].slice(0, 2).map(([k]) => k)];
+const LAZY_KEYS = [...new Set(CHAR_KEYS)].filter((k) => !CORE_KEYS.includes(k));
+const BOOT_TIMEOUT = 8000, MIN_SHOW = 500; // 로딩이 이 시간 넘게 걸리면 있는 것만으로 시작 / 로딩 화면 최소 표시 시간(ms)
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // 브라우저 정책상 소리는 사용자 동작 뒤에만 가능 — iOS Safari는 touchstart/pointerdown이 아니라 touchend·click·keydown(제스처 완료)부터 인정한다.
 // 이 입력들에서 오디오 컨텍스트를 만들고/깨우고(suspended·interrupted) 배경음악을 시작한다. 이미 running이면 가벼운 확인만 하므로 계속 걸어 둔다
@@ -212,11 +206,25 @@ function showResult(winner) {
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
 window.__audio = audio; // 디버깅/테스트용: __audio.musicInfo()
-window.__sim = (n, opts) => import('./sim.js?v=2026111037').then((m) => m.sim(n, opts));
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111037').then((m) => m.table(n, stages, skills));
-window.__sim.soak = (n, opts) => import('./sim.js?v=2026111037').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
+window.__sim = (n, opts) => import('./sim.js?v=2026111038').then((m) => m.sim(n, opts));
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111038').then((m) => m.table(n, stages, skills));
+window.__sim.soak = (n, opts) => import('./sim.js?v=2026111038').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
 
-function launch(cfg) {
+// 이 경기에 뒤에서 받는 캐릭터가 필요한가: 적이 3마리 이상(보통 이상·스테이지 4~)이거나 무한 모드(웨이브가 오르면 적이 4마리)
+function needsLazy(cfg) {
+  const n = cfg.mode === 'stage' ? stageConfig(cfg.stage).enemies : cfg.mode === 'endless' ? 4 : (DIFF[cfg.diff] || DIFF.normal).enemies;
+  return n >= 3;
+}
+let launching = false;
+async function launch(cfg) {
+  if (launching) return;
+  if (needsLazy(cfg) && !loader.isLoaded(LAZY_KEYS)) { // 대개 이미 받아 둔 상태. 아직이면 잠깐 안내를 띄우고 최대 BOOT_TIMEOUT까지 기다린 뒤 (없는 그림은 임시 그림) 시작
+    launching = true;
+    const ld = $('loading'), timer = setTimeout(() => { $('loadText').textContent = '캐릭터를 불러오는 중...'; ld.classList.remove('hidden', 'fade'); ld.classList.add('slim'); }, 250);
+    await Promise.race([loader.loadChars(window.__sprites, LAZY_KEYS, POSES), wait(BOOT_TIMEOUT)]);
+    clearTimeout(timer); ld.classList.add('hidden'); ld.classList.remove('slim');
+    launching = false;
+  }
   current = cfg; endlessRecord = false;
   audio.stopJingle();
   audio.initAudio();
@@ -663,10 +671,45 @@ function setup(sprites) {
     else if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); }
   });
   window.addEventListener('pagehide', autoPause); // iOS Safari: 앱 전환·홈 이동
-  $('loading').classList.add('hidden');
 }
 
-loadImages().then(setup).catch((err) => {
-  console.error(err);
-  $('loading').textContent = '에셋을 불러오지 못했습니다: ' + err.message;
-});
+// 시작: 로딩 화면(진행 막대)에서 첫 화면에 필요한 소리·그림을 받고, 끝나면(또는 BOOT_TIMEOUT 뒤) 시작 화면으로 부드럽게 넘어간다. 실패해도 게임은 멈추지 않는다
+async function boot() {
+  const ld = $('loading'), fill = $('loadBar').firstElementChild, count = $('loadCount'), note = $('loadNote');
+  $('loadText').textContent = '불러오는 중...';
+  await loader.placeholder();
+  const sprites = loader.createSprites([...new Set(CHAR_KEYS)], POSES);
+  window.__sprites = sprites; // 디버깅/테스트용
+  const sndTotal = audio.firstScreenFiles().length, imgTotal = CORE_KEYS.length * POSES.length, total = sndTotal + imgTotal;
+  let snd = 0, img = 0; // 성공한 개수
+  let sndEnd = 0, imgEnd = 0; // 끝난(성공+실패) 개수
+  const paint = () => {
+    const n = sndEnd + imgEnd;
+    fill.style.width = `${Math.round((100 * n) / total)}%`;
+    $('loadBar').setAttribute('aria-valuenow', String(Math.round((100 * n) / total)));
+    count.textContent = `${n} / ${total}`;
+  };
+  paint();
+  const t0 = performance.now();
+  const work = Promise.all([
+    audio.preload((ok) => { sndEnd++; if (ok) snd++; paint(); }),
+    loader.loadChars(sprites, CORE_KEYS, POSES, (ok) => { imgEnd++; if (ok) img++; paint(); }),
+  ]);
+  await Promise.race([work, wait(BOOT_TIMEOUT)]);
+  const bad = [];
+  if (snd < sndTotal) bad.push('일부 소리를 불러오지 못했어요');
+  if (img < imgTotal) bad.push('일부 그림을 불러오지 못했어요');
+  if (bad.length) { note.textContent = bad.join(' · '); note.classList.remove('hidden'); }
+  await wait(Math.max(bad.length ? 900 : 0, MIN_SHOW - (performance.now() - t0)));
+  try { setup(sprites); } catch (err) {
+    console.error(err);
+    $('loadText').textContent = '에셋을 불러오지 못했습니다: ' + err.message;
+    return;
+  }
+  if (bad.length) showToast(bad.join(' · '));
+  document.body.classList.remove('booting');
+  ld.classList.add('fade'); // 부드럽게 사라진 뒤 숨김
+  setTimeout(() => ld.classList.add('hidden'), 450);
+  setTimeout(() => loader.loadChars(sprites, LAZY_KEYS, POSES), 300); // 나머지 캐릭터는 뒤에서
+}
+boot();
