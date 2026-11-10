@@ -1,10 +1,10 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111052';
-import * as audio from './audio.js?v=2026111052';
-import { t as tr, getLang } from './i18n.js?v=2026111052';
-import * as fx from './fx.js?v=2026111052';
-import { makeProps, drawProp, PW, PH, BARREL_R, BARREL_DMG, MINE_R, MINE_DMG, MINE_TRIGGER, MINE_SEE, PACK_CHANCE } from './props.js?v=2026111052';
-import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111052';
+import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111053';
+import * as audio from './audio.js?v=2026111053';
+import { t as tr, getLang } from './i18n.js?v=2026111053';
+import * as fx from './fx.js?v=2026111053';
+import { makeProps, drawProp, PW, PH, BARREL_R, BARREL_DMG, MINE_R, MINE_DMG, MINE_TRIGGER, MINE_SEE, PACK_CHANCE } from './props.js?v=2026111053';
+import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111053';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -94,7 +94,7 @@ const shortName = (w) => w.short || w.name;
 const isInstantW = (w) => !!(w.instant || w.airstrike || w.teleport || w.shift); // 충전 없이 즉시 쓰는 무기
 // 하단 HUD 무기 슬롯 (캔버스 좌표)
 const SLOT = { x: 10, y: H - 56, w: 54, h: 50, gap: 3 };
-const HUD_CX = 680;  // 하단 가운데 파워 바·안내 글자의 중심 x: 9칸 무기 바(x 10~520) 오른쪽
+const HUD_CX = 598, POW_W = 136;  // 하단 파워 바·안내 글자의 중심 x와 바 폭: 9칸 무기 바(x 10~520)와 오른쪽 DOM 버튼(일시정지 등, x 675~) 사이 빈 자리
 // '큰 HUD 글씨'를 켜면 슬롯 높이만 키우고(글자 +25%) 폭은 거의 그대로 둔다: 파워 바(x 560~)를 가리지 않도록 9칸이 x 520 안에 끝난다
 const SLOT_BIG = { x: 8, y: H - 64, w: 55, h: 58, gap: 2 };
 // 팀별 무기 탄약 (무한 = Infinity, 비활성 무기는 0). 공습은 해금 전(airOk=false)이면 0
@@ -1212,7 +1212,7 @@ export class Game {
     const t = this.teleTarget(), s = this.teleSpot(t.x, t.y);
     if (!s) { // 갈 수 없는 곳: 탄약·턴 그대로
       this.teleP = null; this.charging = false; this.power = 0;
-      this.ft(u.x, u.y - 70, tr('f.noTele'), '#ffb0a0');
+      this.ft(clamp(u.x, 110, W - 110), u.y - 70, tr('f.noTele'), '#ffb0a0');
       audio.play('switch', { vol: 0.8, rate: 0.7 });
       return;
     }
@@ -1223,7 +1223,7 @@ export class Game {
     u.x = s.x; u.y = s.y; u.vx = 0; u.vy = 0; u.grounded = true; u.fallStart = u.y; u.squash = 0.3; u.moving = false;
     this.sparkle(u.x, u.y - 24, true);
     audio.playSynth('teleport');
-    this.ft(u.x, Math.max(26, u.y - 80), tr('f.tele'), '#bfe6ff');
+    this.ft(clamp(u.x, 110, W - 110), Math.max(26, u.y - 80), tr('f.tele'), '#bfe6ff');
     this.teleP = null; this.charging = false; this.power = 0; this.lastPower = 0;
     this.state = 'settle'; this.settleT = 0; this.settleTotal = 0;
   }
@@ -1245,7 +1245,7 @@ export class Game {
     this.wind = sign * Math.floor(rnd(Math.ceil(this.windMax * 0.4), this.windMax + 1));
     this.windLock = { sign, left: WIND_LOCK_TURNS };
     audio.playSynth('whoosh');
-    this.ft(u.x, Math.max(26, u.y - 80), tr('f.windShift', { d: tr(sign > 0 ? 'f.east' : 'f.west') }), '#cfe8ff');
+    this.ft(clamp(u.x, 110, W - 110), Math.max(26, u.y - 80), tr('f.windShift', { d: tr(sign > 0 ? 'f.east' : 'f.west') }), '#cfe8ff');
     for (let i = 0; i < 14; i++) this.pt('smoke', u.x + rnd(-90, 90), u.y - rnd(10, 80), sign * rnd(150, 300), rnd(-12, 12), rnd(2, 4), rnd(0.35, 0.7), '235,245,255');
     u.squash = -0.2; u.shootT = 0.4;
     this.charging = false; this.power = 0; this.lastPower = 0;
@@ -2531,11 +2531,11 @@ export class Game {
     } else if (this.turnTeam === 0 && this.state === 'aim' && (this.teleMode || this.windMode) && !this.touchUI) { // 순간이동·바람 바꾸기 안내
       this.text(g, tr(this.teleMode ? 'hud.tele' : 'hud.shift'), HUD_CX, H - 26, 12 * big);
     } else if (this.turnTeam === 0 && (this.state === 'aim' || this.state === 'flying') && !(this.touchUI && !dom)) { // 가로 터치 화면은 발사 버튼이 각도·파워를 표시
-      const bx = HUD_CX - 120, by = H - 30; // 얇고 반투명한 파워 바: 화면 맨 아래 가장자리에 붙여 조준선·조준점과 겹치지 않게 한다
-      g.fillStyle = 'rgba(0,0,0,0.4)'; g.beginPath(); g.roundRect(bx - 3, by - 3, 246, 16, 6); g.fill();
-      g.globalAlpha = 0.7; g.fillStyle = powerGrad(g, bx); g.fillRect(bx, by, 240 * this.power / 100, 10); g.globalAlpha = 1;
-      g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 1; g.strokeRect(bx, by, 240, 10);
-      if (this.lastPower) { g.fillStyle = '#fff'; g.fillRect(bx + 240 * this.lastPower / 100 - 1, by - 2, 2, 14); }
+      const bx = HUD_CX - POW_W / 2, by = H - 30; // 얇고 반투명한 파워 바: 화면 맨 아래 가장자리에 붙여 조준선·조준점과 겹치지 않게 한다
+      g.fillStyle = 'rgba(0,0,0,0.4)'; g.beginPath(); g.roundRect(bx - 3, by - 3, POW_W + 6, 16, 6); g.fill();
+      g.globalAlpha = 0.7; g.fillStyle = powerGrad(g, bx); g.fillRect(bx, by, POW_W * this.power / 100, 10); g.globalAlpha = 1;
+      g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 1; g.strokeRect(bx, by, POW_W, 10);
+      if (this.lastPower) { g.fillStyle = '#fff'; g.fillRect(bx + POW_W * this.lastPower / 100 - 1, by - 2, 2, 14); }
       if (!dom) this.text(g, tr('hud.aim', { a: Math.round(this.angle), p: Math.round(this.power) }), HUD_CX, by - 14 * big, 12 * big);
     }
     if (!dom && !this.touchUI && this.turnTeam === 1 && this.state === 'aim') this.text(g, tr('hud.foeAim'), HUD_CX, H - 26, 14 * big, '#fff');

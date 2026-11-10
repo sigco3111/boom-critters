@@ -1,6 +1,6 @@
 // 장애물: 나무 상자(30 HP), 폭발 통(20 HP, 연쇄 폭발), 묻힌 지뢰. 지형 위에 생성기가 놓고, 모두 캔버스 코드로 그린다 (외부 이미지 없음)
 // 유닛은 상자·통을 그냥 지나갈 수 있고(걷기 방해 없음), 투사체만 부딪힌다. 지뢰는 눈에 보이지 않는다.
-import { W } from './terrain.js?v=2026111052';
+import { W } from './terrain.js?v=2026111053';
 
 export const CRATE_HP = 30, BARREL_HP = 20;
 export const PW = { crate: 24, barrel: 18 }, PH = { crate: 22, barrel: 28 };

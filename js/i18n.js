@@ -1,7 +1,7 @@
 // 언어(한국어/영어) 사전과 도우미. 기본값은 navigator.language(ko*이면 한국어, 아니면 영어)이고 선택은 localStorage('boom-lang')에 저장한다
 // (저장소가 막힌 환경에서는 storage.js가 메모리에만 보관). index.html의 한국어 문구는 그대로 두고, data-i18n 속성이 붙은 요소만 영어일 때 사전 값으로 바꾼다
 // 사용법: t('키', { 값 }) — JS에서 쓰는 문구. applyDom() — data-i18n(텍스트) · data-i18n-html(서식 포함) · data-i18n-aria · data-i18n-title 속성을 가진 요소를 바꾼다
-import { local } from './storage.js?v=2026111052';
+import { local } from './storage.js?v=2026111053';
 
 const KEY = 'boom-lang';
 export const LANGS = ['ko', 'en'];
@@ -14,10 +14,10 @@ const KO = {
   'team.0': '파랑 팀', 'team.1': '빨강 팀', 'team.short.0': '파랑', 'team.short.1': '빨강', 'who.me': '나', 'who.ai': 'AI',
   'w.cannon': '대포탄', 'w.rocket': '로켓', 'w.grenade': '수류탄', 'w.lightning': '번개', 'w.fire': '화염탄', 'w.airstrike': '공습',
   'w.smoke': '연막탄', 'w.teleport': '순간이동', 'w.windshift': '바람 바꾸기', 'w.windshift.s': '바람',
-  'tr.boss.n': '대왕', 'tr.boss.d': 'HP 400 · 폭발 피해 -15% · 턴마다 HP +5 · 공격력 +60% · 이동 -30%', 'ch.boss': '좀비 대왕',
+  'tr.boss.n': '대왕', 'tr.boss.d': 'HP 400 · 폭발 -15% · 재생 +5 · 공격 +60% · 이동 -30%', 'ch.boss': '좀비 대왕',
   'boss.warn': '보스 등장!', 'boss.name': '좀비 대왕',
   'f.smoke': '연막!', 'f.tele': '순간이동!', 'f.noTele': '여기로는 갈 수 없어요', 'f.windShift': '바람 방향 전환: {d}쪽', 'f.east': '동', 'f.west': '서',
-  'hud.tele': '순간이동 · 이동할 곳을 클릭 / 조준 후 Space', 'hud.shift': '바람 바꾸기 · 클릭/Space로 사용',
+  'hud.tele': '이동할 곳을 클릭 (Space)', 'hud.shift': '클릭/Space로 사용',
   'tr.balanced.n': '균형형', 'tr.balanced.d': '특별한 능력 없음',
   'tr.jump.n': '높이뛰기', 'tr.jump.d': '점프 높이 +10%',
   'tr.tough.n': '튼튼함', 'tr.tough.d': '최대 HP +10',
@@ -35,7 +35,7 @@ const KO = {
   'f.splash': '풍덩!', 'f.crate': '보급 상자 투하!', 'f.crateBreak': '상자 파괴', 'f.barrel': '쾅! 폭발 통', 'f.mine': '지뢰!', 'f.pack': '치유 상자!', 'f.soon': '곧 출시', 'f.unlockWave': '웨이브 3부터 해금', 'f.unlockStage': '스테이지 4부터 해금',
   'f.noAmmo': '탄약 없음', 'f.think': '생각 중...', 'f.timeout': '시간 초과', 'f.turns': '{n}턴',
   'air.warn': '공습 경보! {s}', 'air.target': '공습 목표 · 눌러서 호출', 'air.go': '공습!',
-  'hud.lock': '잠김', 'hud.wind': '바람', 'hud.none': '없음', 'hud.air': '공습 x{x} · 클릭/Space로 호출', 'hud.aim': '각도 {a}°  파워 {p}',
+  'hud.lock': '잠김', 'hud.wind': '바람', 'hud.none': '없음', 'hud.air': '공습 x{x} · 클릭/Space', 'hud.aim': '각도 {a}°  파워 {p}',
   'hud.foeAim': '상대가 조준 중...', 'hud.info': '{label} · {theme} · 시드 {seed}', 'hud.power': '파워 {p}', 'hud.unit': '{name} (HP {hp}/{max}) · {tn}: {td}',
   'st.mineAir': '내 차례 · 공습 목표 {x} · 화면을 눌러 호출', 'st.mineAim': '내 차례 · 각도 {a}° · 파워 {p}', 'st.foe': '상대가 조준 중...', 'st.strike': '공습 중!',
   'st.mineTele': '내 차례 · 순간이동 · 이동할 곳을 눌러 이동', 'st.mineWind': '내 차례 · 바람 바꾸기 · 눌러서 사용', 'fire.tele': '순간이동', 'fire.wind': '바람 바꾸기', 'fire.teleInfo': '이동할 곳', 'fire.windInfo': '바람 반전',
@@ -72,10 +72,10 @@ const EN = {
   'team.0': 'Blue Team', 'team.1': 'Red Team', 'team.short.0': 'Blue', 'team.short.1': 'Red', 'who.me': 'You', 'who.ai': 'AI',
   'w.cannon': 'Cannon', 'w.rocket': 'Rocket', 'w.grenade': 'Grenade', 'w.lightning': 'Bolt', 'w.fire': 'Fire', 'w.airstrike': 'Airstrike',
   'w.smoke': 'Smoke', 'w.teleport': 'Teleport', 'w.windshift': 'Wind Shift', 'w.windshift.s': 'Wind',
-  'tr.boss.n': 'Boss', 'tr.boss.d': 'HP 400 · blast dmg -15% · +5 HP each turn · dmg +60% · move -30%', 'ch.boss': 'Zombie King',
+  'tr.boss.n': 'Boss', 'tr.boss.d': 'HP 400 · blast -15% · regen +5 · dmg +60% · move -30%', 'ch.boss': 'Zombie King',
   'boss.warn': 'BOSS INCOMING!', 'boss.name': 'Zombie King',
   'f.smoke': 'Smoke!', 'f.tele': 'Teleport!', 'f.noTele': "Can't land there", 'f.windShift': 'Wind shifted: {d}', 'f.east': 'east', 'f.west': 'west',
-  'hud.tele': 'Teleport · click a spot / aim and press Space', 'hud.shift': 'Wind Shift · click/Space to use',
+  'hud.tele': 'Click a spot (Space)', 'hud.shift': 'Click/Space to use',
   'tr.balanced.n': 'Balanced', 'tr.balanced.d': 'No special ability',
   'tr.jump.n': 'High jump', 'tr.jump.d': 'Jump +10%',
   'tr.tough.n': 'Tough', 'tr.tough.d': 'Max HP +10',
@@ -93,7 +93,7 @@ const EN = {
   'f.splash': 'Splash!', 'f.crate': 'Supply crate!', 'f.crateBreak': 'Crate broken', 'f.barrel': 'Boom! Barrel', 'f.mine': 'Mine!', 'f.pack': 'Health pack!', 'f.soon': 'Coming soon', 'f.unlockWave': 'Unlocks at wave 3', 'f.unlockStage': 'Unlocks at stage 4',
   'f.noAmmo': 'No ammo', 'f.think': 'Thinking...', 'f.timeout': 'Time up', 'f.turns': '{n} turns',
   'air.warn': 'Air raid! {s}', 'air.target': 'Airstrike target · tap to call', 'air.go': 'Airstrike!',
-  'hud.lock': 'Locked', 'hud.wind': 'Wind', 'hud.none': 'None', 'hud.air': 'Airstrike x{x} · click/Space to call', 'hud.aim': 'Angle {a}°  Power {p}',
+  'hud.lock': 'Locked', 'hud.wind': 'Wind', 'hud.none': 'None', 'hud.air': 'Airstrike x{x} · click/Space', 'hud.aim': 'Angle {a}°  Power {p}',
   'hud.foeAim': 'Enemy is aiming...', 'hud.info': '{label} · {theme} · Seed {seed}', 'hud.power': 'Power {p}', 'hud.unit': '{name} (HP {hp}/{max}) · {tn}: {td}',
   'st.mineAir': 'Your turn · Airstrike {x} · tap the screen to call', 'st.mineAim': 'Your turn · Angle {a}° · Power {p}', 'st.foe': 'Enemy is aiming...', 'st.strike': 'Airstrike!',
   'st.mineTele': 'Your turn · Teleport · tap a spot to jump', 'st.mineWind': 'Your turn · Wind Shift · tap to use', 'fire.tele': 'Teleport', 'fire.wind': 'Wind Shift', 'fire.teleInfo': 'Pick a spot', 'fire.windInfo': 'Flip wind',
