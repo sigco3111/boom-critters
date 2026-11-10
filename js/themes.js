@@ -1,5 +1,5 @@
 // 스테이지 테마: 배경(하늘·구름·별·언덕)과 지형/물 색을 캔버스 코드로 그린다 (외부 이미지 없음)
-import { W, H, mulberry32 } from './terrain.js?v=2026111036';
+import { W, H, mulberry32 } from './terrain.js?v=2026111037';
 
 export const THEMES = [
   {
@@ -150,4 +150,80 @@ export function drawBackgroundFx(g, bg, time) {
     const l = 3 + 4 * k;
     g.fillRect(s.x - l, s.y - 0.5, 2 * l, 1); g.fillRect(s.x - 0.5, s.y - l, 1, 2 * l);
   }
+}
+
+// ---------- 잔잔한 날씨 효과 (캔버스, 파티클 합계 WEATHER_MAX 이하) ----------
+// 초원: 꽃잎·나뭇잎 / 사막: 모래 알갱이 / 설원: 눈 / 밤: 반딧불. 배경 이미지는 그대로 두고 위에 가볍게만 그린다.
+export const WEATHER_MAX = 80;
+const WEATHER = { grass: ['leaf', 26], desert: ['dust', 44], snow: ['snow', 70], night: ['firefly', 20] };
+const WEATHER_BOTTOM = 496; // 물 높이(WATER_Y): 이 아래로는 그리지 않고 위에서 다시 시작
+
+function spawnWeather(kind, p, first) {
+  p.x = Math.random() * W;
+  if (kind === 'snow' || kind === 'leaf') p.y = first ? Math.random() * WEATHER_BOTTOM : -6;
+  else if (kind === 'dust') { if (!first) p.x = -6; p.y = 150 + Math.random() * 320; }
+  else p.y = 150 + Math.random() * 320;
+  p.s = Math.random(); p.p = Math.random() * 6.283; p.c = Math.random() < 0.5 ? 0 : 1;
+  p.r = kind === 'snow' ? 1 + p.s * 1.6 : kind === 'leaf' ? 3 + p.s * 2 : kind === 'dust' ? 1.1 + p.s * 1.3 : 1.9 + p.s * 0.9;
+  p.a = Math.random() * 6.283; // 반딧불 진행 방향
+  return p;
+}
+
+export function makeWeather(theme) {
+  const [kind, n] = WEATHER[theme.id] || [null, 0];
+  if (!kind) return null;
+  const parts = [];
+  for (let i = 0; i < Math.min(n, WEATHER_MAX); i++) parts.push(spawnWeather(kind, {}, true));
+  return { kind, parts, t: 0 };
+}
+
+export function stepWeather(w, dt, wind = 0) {
+  w.t += dt;
+  const t = w.t, k = w.kind;
+  for (const p of w.parts) {
+    if (k === 'snow') {
+      p.y += (24 + p.s * 30) * dt; p.x += (Math.sin(t * 0.8 + p.p) * 14 + wind * 2.2) * dt;
+    } else if (k === 'leaf') {
+      p.y += (14 + p.s * 16) * dt; p.x += (10 + Math.sin(t * 0.9 + p.p) * 24 + wind * 3) * dt;
+    } else if (k === 'dust') {
+      p.x += (34 + p.s * 46 + wind * 4) * dt; p.y += Math.sin(t * 1.3 + p.p) * 9 * dt;
+    } else { // 반딧불: 천천히 헤매며 날고, 범위를 벗어나면 안쪽으로 방향을 튼다
+      p.a += Math.sin(t * 0.7 + p.p) * 1.6 * dt;
+      p.x += Math.cos(p.a) * 16 * dt; p.y += Math.sin(p.a) * 12 * dt;
+      if (p.y < 150) p.a = 0.6 + Math.random() * 1.9; else if (p.y > 470) p.a = -(0.6 + Math.random() * 1.9);
+    }
+    if (p.x > W + 8) p.x = -8; else if (p.x < -8) p.x = W + 8;
+    if (p.y > WEATHER_BOTTOM) spawnWeather(k, p, false);
+  }
+}
+
+export function drawWeather(g, w) {
+  const P = w.parts, t = w.t;
+  g.save();
+  if (w.kind === 'snow') {
+    g.fillStyle = 'rgba(240,247,255,0.92)'; g.strokeStyle = 'rgba(110,140,185,0.4)'; g.lineWidth = 0.8;
+    g.beginPath();
+    for (const p of P) { g.moveTo(p.x + p.r, p.y); g.arc(p.x, p.y, p.r, 0, 6.283); }
+    g.fill(); g.stroke();
+  } else if (w.kind === 'dust') {
+    for (let c = 0; c < 2; c++) {
+      g.fillStyle = c ? 'rgba(130,80,40,0.45)' : 'rgba(255,240,200,0.7)';
+      g.beginPath();
+      for (const p of P) if (p.c === c) g.rect(p.x, p.y, p.r * 1.6, p.r);
+      g.fill();
+    }
+  } else if (w.kind === 'leaf') {
+    for (const p of P) {
+      g.fillStyle = p.c ? 'rgba(255,205,220,0.88)' : 'rgba(176,228,110,0.88)';
+      g.beginPath(); g.ellipse(p.x, p.y, p.r * 1.5, p.r * 0.75, t * (0.8 + p.s) + p.p, 0, 6.283); g.fill();
+    }
+  } else {
+    for (const p of P) {
+      const a = Math.max(0, Math.sin(t * 1.7 + p.p * 3)); // 깜빡임
+      if (a < 0.03) continue;
+      g.fillStyle = `rgba(200,255,110,${0.26 * a})`; g.beginPath(); g.arc(p.x, p.y, p.r * 3.6, 0, 6.283); g.fill();
+      g.fillStyle = `rgba(235,255,170,${0.4 + 0.6 * a})`; g.beginPath(); g.arc(p.x, p.y, p.r, 0, 6.283); g.fill();
+    }
+  }
+  g.restore();
 }

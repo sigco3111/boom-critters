@@ -1,7 +1,7 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111036';
-import * as audio from './audio.js?v=2026111036';
-import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111036';
+import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111037';
+import * as audio from './audio.js?v=2026111037';
+import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111037';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -153,6 +153,7 @@ export class Game {
     this.sprites = sprites;     // 캐릭터 키 -> { 포즈 이름 -> Image }
     this.time = 0;
     this.bg = null; this.theme = THEMES[0];
+    this.weather = null;        // 잔잔한 날씨 파티클(눈·모래·꽃잎·반딧불), 헤드리스에서는 없음
     this.state = 'idle';
     this.units = []; this.particles = []; this.floaters = [];
     this.proj = null; this.shake = 0;
@@ -220,6 +221,7 @@ export class Game {
     this.theme = theme;
     this.terrain = new Terrain(seed, theme, this.headless);
     this.bg = this.headless ? null : makeBackground(theme, seed);
+    this.weather = this.headless ? null : makeWeather(theme);
     this.units = []; this.particles = []; this.floaters = []; this.proj = null;
     this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.turnNo = 0; this.air = null;
     const rng = mulberry32(seed ^ 0x5bd1e995), jit = () => (rng() * 2 - 1) * 25;
@@ -1066,6 +1068,7 @@ export class Game {
     this.time += dt;
     if (this.state === 'idle') return;
     this.updateParticles(dt);
+    if (this.weather && !this.reduceMotion) stepWeather(this.weather, dt, this.wind || 0);
     if (this.bolt) { this.bolt.t += dt; if (this.bolt.t > 0.3) this.bolt = null; }
     this.flashT = Math.max(0, this.flashT - dt);
     this.updateCrates(dt);
@@ -1199,6 +1202,7 @@ export class Game {
     g.drawImage(this.bg, 0, 0);
     drawBackgroundFx(g, this.bg, this.time);
     g.drawImage(this.terrain.canvas, 0, 0);
+    if (this.weather && !this.reduceMotion) drawWeather(g, this.weather);
     for (const c of this.crates) this.drawCrate(g, c);
     for (const u of this.units) if (u.alive || (!u.drowned && u.deadT < FADE_END)) this.drawUnit(g, u);
     this.drawFires(g);
