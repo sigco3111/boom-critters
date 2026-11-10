@@ -1,8 +1,8 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111040';
-import * as audio from './audio.js?v=2026111040';
-import { t as tr } from './i18n.js?v=2026111040';
-import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111040';
+import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111041';
+import * as audio from './audio.js?v=2026111041';
+import { t as tr, getLang } from './i18n.js?v=2026111041';
+import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111041';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -25,6 +25,19 @@ const AI_MAX_TRIES = 3;      // AI가 유효한 사격(물/화면 밖이 아닌 
 const AI_TURN_MAX = 22;      // AI 한 턴의 최대 시간(초): 이 안에 쏘지 못하면 강제로 넘김 (제한 시간 30초보다 먼저)
 const SETTLE_MAX = 8;        // 발사 후 유닛이 안정되길 기다리는 최대 시간(초)
 const DRAG_MIN = 14; // 터치 드래그 조준: 발사에 필요한 최소 드래그 거리 (캔버스 px)
+
+const FONT = '"Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif';
+const _grads = {};
+const fireGlow = (g, r) => _grads['glow' + r] || (_grads['glow' + r] = (() => { const o = g.createRadialGradient(0, 0, 4, 0, 0, r); o.addColorStop(0, 'rgba(255,120,30,0.30)'); o.addColorStop(1, 'rgba(255,60,0,0)'); return o; })());
+const fireBall = (g) => _grads.ball || (_grads.ball = (() => { const o = g.createRadialGradient(0, 0, 1, 0, 0, 9); o.addColorStop(0, '#fff3a0'); o.addColorStop(0.5, '#ff9a2a'); o.addColorStop(1, 'rgba(255,60,0,0)'); return o; })());
+const powerGrad = (g, bx) => _grads['pw' + bx] || (_grads['pw' + bx] = (() => { const o = g.createLinearGradient(bx, 0, bx + 240, 0); o.addColorStop(0, '#7be04a'); o.addColorStop(0.6, '#ffd13a'); o.addColorStop(1, '#ff3d2e'); return o; })());
+const _smoke = {};
+const smokeStyle = (c) => _smoke[c] || (_smoke[c] = `rgb(${c})`);
+const WBAR_H = 72; // 무기 바 오프스크린 높이 (큰 HUD 글씨일 때 70px)
+const TOP_HUD_H = 176; // 상단 HUD 오프스크린 높이 (hs 최대 1.5배일 때 알약 아래끝 약 161px)
+const TEXT_CACHE = new Map(), TEXT_CACHE_MAX = 600, WIDTH_CACHE = new Map();
+let _mctx = null;
+const measureCtx = () => _mctx || (_mctx = document.createElement('canvas').getContext('2d'));
 
 export const WEAPONS = [
   { id: 'cannon', get name() { return tr('w.cannon'); }, radius: 40, damage: 50, windK: 8, speedK: 1.0, knock: 380 },
@@ -179,6 +192,8 @@ export class Game {
     this.stepTimer = 0;
     this.stats = blankStats();  // 우리 팀(팀 0) 경기 기록: 결과 화면에 표시
     this.hover = null;          // 마우스를 올려 둔 유닛 (유닛 정보 줄에 표시)
+    this.lowFx = false;         // 프레임이 느린 기기에서 main.js가 켬: 날씨 파티클·폭발 파티클을 줄임
+    this.sc = 1;                // 글자 캐시용: 지금 캔버스에 걸린 확대 배율
     this.headless = false;      // true면 렌더링 없이 계산만 (window.__sim)
     this.sim = null;            // 시뮬레이션 설정: { skill: [팀0 AI 프로필 | null, ...] } — 있으면 해당 팀을 AI가 조작
   }
@@ -465,16 +480,16 @@ export class Game {
   emitExplosion(x, y, r) {
     const P = this.particles;
     P.push({ type: 'flash', x, y, r, life: 0, max: 0.22 });
-    const nf = 18 + (r / 2) | 0;
+    const q = this.lowFx ? 0.5 : 1, nf = (18 + (r / 2) | 0) * q | 0; // 느린 기기(lowFx)에서는 파티클을 절반만
     for (let i = 0; i < nf; i++) {
       const a = rnd(0, 6.283), s = rnd(40, 240);
       P.push({ type: 'fire', x: x + Math.cos(a) * r * 0.2, y: y + Math.sin(a) * r * 0.2, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 40, r: rnd(r * 0.2, r * 0.45), life: 0, max: rnd(0.35, 0.8) });
     }
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0, ns = 14 * q | 0; i < ns; i++) {
       const a = rnd(0, 6.283), s = rnd(10, 90);
       P.push({ type: 'smoke', x: x + Math.cos(a) * r * 0.4, y: y + Math.sin(a) * r * 0.4, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 50, r: rnd(r * 0.2, r * 0.4), life: 0, max: rnd(1.0, 1.9), color: '70,70,70' });
     }
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0, nd = 16 * q | 0; i < nd; i++) {
       const a = rnd(-3.0, -0.15), s = rnd(120, 320);
       P.push({ type: 'debris', x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, r: rnd(1.5, 3.5), life: 0, max: rnd(0.8, 1.4) });
     }
@@ -1073,7 +1088,7 @@ export class Game {
     this.time += dt;
     if (this.state === 'idle') return;
     this.updateParticles(dt);
-    if (this.weather && !this.reduceMotion) stepWeather(this.weather, dt, this.wind || 0);
+    if (this.weather && !this.reduceMotion) { this.weather.active = this.lowFx ? Math.ceil(this.weather.parts.length * 0.4) : this.weather.parts.length; stepWeather(this.weather, dt, this.wind || 0); }
     if (this.bolt) { this.bolt.t += dt; if (this.bolt.t > 0.3) this.bolt = null; }
     this.flashT = Math.max(0, this.flashT - dt);
     this.updateCrates(dt);
@@ -1174,11 +1189,50 @@ export class Game {
   }
 
   // ---------- 렌더링 ----------
+  // 윤곽선 글자(strokeText+fillText)는 비싸서(약한 폰에서 프레임 시간의 큰 몫) 같은 글자는 한 번만 오프스크린에 그려 두고 drawImage로 찍는다.
+  // this.sc: 지금 캔버스에 걸린 확대 배율(HUD 배율 hs, 이름표 배율 ts). 그 배율로 구워 두므로 확대해도 또렷하다. 캐시는 TEXT_CACHE_MAX개를 넘으면 오래된 것부터 버린다.
   text(g, str, x, y, size, color = '#fff', align = 'center', weight = '700') {
-    g.font = `${weight} ${size}px "Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif`;
+    if (this.headless || typeof document === 'undefined') return this.textRaw(g, str, x, y, size, color, align, weight);
+    const sc = this.sc || 1, key = `${weight}|${size}|${color}|${sc}|${str}`;
+    let e = TEXT_CACHE.get(key);
+    if (!e) {
+      const font = `${weight} ${size}px ${FONT}`, k = measureCtx();
+      k.font = font;
+      const tw = k.measureText(str).width, pad = Math.ceil(Math.max(2, size / 5)) + 2, wl = tw + pad * 2, hl = Math.ceil(size * 1.5) + pad * 2;
+      const c = document.createElement('canvas'); c.width = Math.ceil(wl * sc); c.height = Math.ceil(hl * sc);
+      const q = c.getContext('2d');
+      q.scale(sc, sc); q.font = font; q.textAlign = 'left'; q.textBaseline = 'middle';
+      q.lineWidth = Math.max(2, size / 5); q.strokeStyle = 'rgba(0,0,0,0.6)'; q.lineJoin = 'round';
+      q.strokeText(str, pad, hl / 2); q.fillStyle = color; q.fillText(str, pad, hl / 2);
+      e = { c, tw, pad, wl: c.width / sc, hl: c.height / sc };
+      if (TEXT_CACHE.size >= TEXT_CACHE_MAX) { let n = 0; for (const kk of TEXT_CACHE.keys()) { TEXT_CACHE.delete(kk); if (++n > TEXT_CACHE_MAX / 4) break; } }
+      TEXT_CACHE.set(key, e);
+    }
+    let dx = align === 'center' ? -e.tw / 2 : align === 'right' ? -e.tw : 0;
+    let dy = -e.hl / 2;
+    dx -= e.pad; // 글자 시작이 x가 되도록 여백만큼 당김
+    if (sc === 1) { dx = Math.round(x + dx); dy = Math.round(y + dy); } else { dx += x; dy += y; } // 배율 1이면 정수 좌표로 찍어 흐려지지 않게
+    g.drawImage(e.c, dx, dy, e.wl, e.hl);
+  }
+
+  // 캐시 없이 바로 그리는 글자 (크기가 프레임마다 달라지는 피해 숫자 등)
+  textRaw(g, str, x, y, size, color = '#fff', align = 'center', weight = '700') {
+    g.font = `${weight} ${size}px ${FONT}`;
     g.textAlign = align; g.textBaseline = 'middle';
     g.lineWidth = Math.max(2, size / 5); g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineJoin = 'round';
     g.strokeText(str, x, y); g.fillStyle = color; g.fillText(str, x, y);
+  }
+
+  // 글자 폭 캐시 (프레임마다 measureText를 부르지 않도록)
+  textW(str, weight, size) {
+    const key = `${weight}|${size}|${str}`;
+    let w = WIDTH_CACHE.get(key);
+    if (w === undefined) {
+      const k = measureCtx(); k.font = `${weight} ${size}px ${FONT}`; w = k.measureText(str).width;
+      if (WIDTH_CACHE.size > 400) WIDTH_CACHE.clear();
+      WIDTH_CACHE.set(key, w);
+    }
+    return w;
   }
 
   // 팀 표시 도형: 파랑 팀은 원, 빨강 팀은 마름모 (색 없이도 구분). 흰 테두리 + 검은 바깥 윤곽으로 대비를 높인다
@@ -1224,7 +1278,8 @@ export class Game {
     for (const f of this.floaters) {
       const k = f.t / 1.2, pop = f.dmg ? 1 + Math.max(0, 0.35 - f.t * 1.6) : 1;
       g.globalAlpha = Math.max(0, Math.min(1, (1 - k) * 2));
-      this.text(g, f.text, f.x, f.y - f.t * 34, fs * pop, f.color, 'center', '800');
+      if (pop === 1) this.text(g, f.text, f.x, f.y - f.t * 34, fs, f.color, 'center', '800');
+      else this.textRaw(g, f.text, f.x, f.y - f.t * 34, fs * pop, f.color, 'center', '800'); // 튀어나오는 0.2초 동안은 크기가 매 프레임 달라 캐시하지 않음
     }
     g.globalAlpha = 1;
     g.restore();
@@ -1285,9 +1340,9 @@ export class Game {
     const t = this.time;
     for (const f of this.fires) {
       g.save();
-      const glow = g.createRadialGradient(f.x, f.y + 4, 4, f.x, f.y + 4, f.r);
-      glow.addColorStop(0, 'rgba(255,120,30,0.30)'); glow.addColorStop(1, 'rgba(255,60,0,0)');
-      g.fillStyle = glow; g.beginPath(); g.arc(f.x, f.y + 4, f.r, 0, 7); g.fill();
+      g.translate(f.x, f.y + 4); // 원점에 만든 그라디언트를 재사용 (프레임마다 새로 만들지 않음)
+      g.fillStyle = fireGlow(g, f.r); g.beginPath(); g.arc(0, 0, f.r, 0, 7); g.fill();
+      g.translate(-f.x, -f.y - 4);
       for (let x = f.x - f.r + 3; x < f.x + f.r; x += 5) {
         const gy = this.fireGround(f, Math.round(x));
         if (gy === null) continue;
@@ -1305,14 +1360,15 @@ export class Game {
   }
 
   drawWater(g) {
-    const t = this.time;
+    const t = this.time, ys = this._waveY || (this._waveY = new Float32Array(W / 8 + 1));
+    for (let i = 0; i < ys.length; i++) ys[i] = WATER_Y + Math.sin(i * 8 / 40 + t * 2) * 3; // 파도 높이는 한 번만 계산해 채우기·선에 함께 씀
     g.fillStyle = this.theme.water;
     g.beginPath(); g.moveTo(0, H);
-    for (let x = 0; x <= W; x += 8) g.lineTo(x, WATER_Y + Math.sin(x / 40 + t * 2) * 3);
+    for (let i = 0; i < ys.length; i++) g.lineTo(i * 8, ys[i]);
     g.lineTo(W, H); g.fill();
     g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 2;
-    g.beginPath();
-    for (let x = 0; x <= W; x += 8) { const y = WATER_Y + Math.sin(x / 40 + t * 2) * 3; x ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.beginPath(); g.moveTo(0, ys[0]);
+    for (let i = 1; i < ys.length; i++) g.lineTo(i * 8, ys[i]);
     g.stroke();
   }
 
@@ -1369,9 +1425,8 @@ export class Game {
   drawTags(g) {
     let ts = Math.min(1.7, Math.max(1, 0.8 / this.viewScale)); // 작은 화면에서는 이름표를 키움
     if (this.bigHud) ts = Math.min(2.1, ts * 1.25);   // 큰 HUD 글씨: 이름표도 25% 키움
-    g.font = '700 10px "Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif';
     const tags = this.units.filter((u) => u.alive).map((u) => ({
-      u, w: Math.max(46, Math.ceil(g.measureText(u.name).width) + 10 + (this.teamMarks ? 14 : 0)), x: u.x, y: u.y - TAG_TOP,
+      u, w: Math.max(46, Math.ceil(this.textW(u.name, 700, 10)) + 10 + (this.teamMarks ? 14 : 0)), x: u.x, y: u.y - TAG_TOP,
     }));
     // 가로로 겹치는(세로 범위도 겹치는) 블록 쌍을 서로 밀어낸다
     tags.sort((p, q) => p.u.x - q.u.x);
@@ -1392,7 +1447,9 @@ export class Game {
       if (ts === 1) { this.drawTag(g, t, 1); continue; }
       const ay = t.y + TAG_H; // 블록 아래 중앙을 기준으로 확대 (머리 위쪽으로 자란다)
       g.save(); g.translate(t.x, ay); g.scale(ts, ts); g.translate(-t.x, -ay);
+      this.sc = ts;
       this.drawTag(g, t, ts);
+      this.sc = 1;
       g.restore();
     }
   }
@@ -1499,9 +1556,7 @@ export class Game {
       g.fillStyle = '#d33'; g.beginPath(); g.moveTo(5, -3); g.lineTo(11, 0); g.lineTo(5, 3); g.fill();
       g.fillStyle = '#555'; g.fillRect(-11, -4, 3, 8);
     } else if (p.w.id === 'fire') {
-      const gr = g.createRadialGradient(0, 0, 1, 0, 0, 9);
-      gr.addColorStop(0, '#fff3a0'); gr.addColorStop(0.5, '#ff9a2a'); gr.addColorStop(1, 'rgba(255,60,0,0)');
-      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 9, 0, 7); g.fill();
+      g.fillStyle = fireBall(g); g.beginPath(); g.arc(0, 0, 9, 0, 7); g.fill();
     } else if (p.w.id === 'grenade') {
       const hot = p.fuse < 1 && Math.floor(p.fuse * 8) % 2 === 0;
       g.rotate(p.age * 6);
@@ -1520,43 +1575,59 @@ export class Game {
     g.restore();
   }
 
+  // 파티클: 색 문자열을 매 프레임 만들지 않도록 색은 고정 문자열, 투명도는 globalAlpha로 준다 (최대 500개)
   drawParticles(g) {
-    for (const p of this.particles) {
-      const k = p.life / p.max;
-      if (p.type === 'flash') {
-        g.fillStyle = `rgba(255,250,200,${0.8 * (1 - k)})`;
-        g.beginPath(); g.arc(p.x, p.y, p.r * (0.6 + k * 0.7), 0, 7); g.fill();
-      } else if (p.type === 'fire') {
-        const col = k < 0.3 ? '255,240,150' : k < 0.65 ? '255,150,40' : '200,50,30';
-        g.fillStyle = `rgba(${col},${1 - k})`;
-        g.beginPath(); g.arc(p.x, p.y, p.r * (1 - k * 0.5), 0, 7); g.fill();
-      } else if (p.type === 'smoke') {
-        g.fillStyle = `rgba(${p.color},${0.55 * (1 - k)})`;
-        g.beginPath(); g.arc(p.x, p.y, p.r, 0, 7); g.fill();
-      } else if (p.type === 'poof') { // 뽕! 연기 구름 7덩이가 퍼지고 반짝이 4개가 튄다
-        const e = 1 - (1 - k) * (1 - k);
-        g.fillStyle = `rgba(255,255,255,${0.9 * (1 - k)})`;
-        for (let i = 0; i < 7; i++) {
-          const a = i * 0.8976 + 0.3;
-          g.beginPath(); g.arc(p.x + Math.cos(a) * p.r * 1.25 * e, p.y + Math.sin(a) * p.r * 0.95 * e, p.r * (0.62 - 0.28 * k), 0, 7); g.fill();
+    const P = this.particles;
+    if (!P.length) return;
+    g.save();
+    const debris = this.theme.debris;
+    let dstyle = this._debrisStyle;
+    if (this._debrisFor !== debris) { this._debrisFor = debris; dstyle = this._debrisStyle = `rgb(${debris})`; }
+    for (let n = 0; n < P.length; n++) {
+      const p = P[n], k = p.life / p.max;
+      switch (p.type) {
+        case 'flash':
+          g.globalAlpha = 0.8 * (1 - k); g.fillStyle = '#fffac8';
+          g.beginPath(); g.arc(p.x, p.y, p.r * (0.6 + k * 0.7), 0, 7); g.fill();
+          break;
+        case 'fire':
+          g.globalAlpha = 1 - k; g.fillStyle = k < 0.3 ? '#fff096' : k < 0.65 ? '#ff9628' : '#c8321e';
+          g.beginPath(); g.arc(p.x, p.y, p.r * (1 - k * 0.5), 0, 7); g.fill();
+          break;
+        case 'smoke':
+          g.globalAlpha = 0.55 * (1 - k); g.fillStyle = smokeStyle(p.color);
+          g.beginPath(); g.arc(p.x, p.y, p.r, 0, 7); g.fill();
+          break;
+        case 'poof': { // 뽕! 연기 구름 7덩이가 퍼지고 반짝이 4개가 튄다
+          const e = 1 - (1 - k) * (1 - k);
+          g.globalAlpha = 0.9 * (1 - k); g.fillStyle = '#fff';
+          for (let i = 0; i < 7; i++) {
+            const a = i * 0.8976 + 0.3;
+            g.beginPath(); g.arc(p.x + Math.cos(a) * p.r * 1.25 * e, p.y + Math.sin(a) * p.r * 0.95 * e, p.r * (0.62 - 0.28 * k), 0, 7); g.fill();
+          }
+          g.beginPath(); g.arc(p.x, p.y, p.r * (0.9 - 0.5 * k), 0, 7); g.fill();
+          g.globalAlpha = 1 - k; g.strokeStyle = '#ffec96'; g.lineWidth = 2; g.beginPath();
+          for (let i = 0; i < 4; i++) {
+            const a = i * 1.5708 + 0.785, d0 = p.r * (1.5 + 1.3 * e), d1 = d0 + 5 * (1 - k);
+            g.moveTo(p.x + Math.cos(a) * d0, p.y + Math.sin(a) * d0); g.lineTo(p.x + Math.cos(a) * d1, p.y + Math.sin(a) * d1);
+          }
+          g.stroke();
+          break;
         }
-        g.beginPath(); g.arc(p.x, p.y, p.r * (0.9 - 0.5 * k), 0, 7); g.fill();
-        g.strokeStyle = `rgba(255,236,150,${1 - k})`; g.lineWidth = 2; g.beginPath();
-        for (let i = 0; i < 4; i++) {
-          const a = i * 1.5708 + 0.785, d0 = p.r * (1.5 + 1.3 * e), d1 = d0 + 5 * (1 - k);
-          g.moveTo(p.x + Math.cos(a) * d0, p.y + Math.sin(a) * d0); g.lineTo(p.x + Math.cos(a) * d1, p.y + Math.sin(a) * d1);
-        }
-        g.stroke();
-      } else if (p.type === 'debris') {
-        g.fillStyle = `rgba(${this.theme.debris},${1 - k})`; g.fillRect(p.x, p.y, p.r * 1.6, p.r * 1.6);
-      } else if (p.type === 'spark') {
-        g.fillStyle = `rgba(${p.green ? (k < 0.5 ? '200,255,200' : '90,230,110') : k < 0.5 ? '255,255,255' : '140,200,255'},${1 - k})`;
-        g.beginPath(); g.arc(p.x, p.y, p.r * (1 - k * 0.4), 0, 7); g.fill();
-      } else if (p.type === 'splash') {
-        g.fillStyle = `rgba(220,240,255,${1 - k})`;
-        g.beginPath(); g.arc(p.x, p.y, p.r, 0, 7); g.fill();
+        case 'debris':
+          g.globalAlpha = 1 - k; g.fillStyle = dstyle; g.fillRect(p.x, p.y, p.r * 1.6, p.r * 1.6);
+          break;
+        case 'spark':
+          g.globalAlpha = 1 - k; g.fillStyle = p.green ? (k < 0.5 ? '#c8ffc8' : '#5ae66e') : k < 0.5 ? '#fff' : '#8cc8ff';
+          g.beginPath(); g.arc(p.x, p.y, p.r * (1 - k * 0.4), 0, 7); g.fill();
+          break;
+        case 'splash':
+          g.globalAlpha = 1 - k; g.fillStyle = '#dcf0ff';
+          g.beginPath(); g.arc(p.x, p.y, p.r, 0, 7); g.fill();
+          break;
       }
     }
+    g.restore();
   }
 
   drawWeaponIcon(g, id, x, y, s = 1) {
@@ -1594,7 +1665,25 @@ export class Game {
     g.restore();
   }
 
+  // 무기 바는 선택·탄약·해금·언어가 바뀔 때만 오프스크린에 다시 그리고 평소에는 한 번 찍는다
   drawWeaponBar(g) {
+    const key = `${this.weapon}|${this.ammo ? this.ammo[0].join() : ''}|${this.airOk}|${this.bigHud}|${getLang()}`;
+    let c = this._wbar;
+    if (!c) {
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = WBAR_H;
+      c = this._wbar = { cv, q: cv.getContext('2d'), key: '' };
+    }
+    if (c.key !== key) {
+      c.key = key;
+      c.q.clearRect(0, 0, W, WBAR_H);
+      c.q.save(); c.q.translate(0, WBAR_H - H); // 화면 맨 아래 WBAR_H만큼만 잘라 담는다
+      this.paintWeaponBar(c.q);
+      c.q.restore();
+    }
+    g.drawImage(c.cv, 0, H - WBAR_H);
+  }
+
+  paintWeaponBar(g) {
     const big = this.bigHud, f = big ? 1.25 : 1, top = big ? H - 70 : H - 62;   // 큰 HUD 글씨: 라벨·탄약 +25%
     g.fillStyle = 'rgba(8,20,35,0.72)'; g.fillRect(0, top, W, H - top);
     g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(0, top, W, 1);
@@ -1625,53 +1714,15 @@ export class Game {
     const dom = this.domHud, big = this.bigHud ? 1.25 : 1;
     // 작은 화면(가로 폰)에서는 상단 HUD를 키워서 글자 크기를 확보 (hs: 1~1.3). 세로 폰은 DOM HUD가 대신 그림.
     const hs = this.hudScale;
-    if (!dom) {
-      // 팀 HP
-      for (let t = 0; t < 2; t++) {
-        const mem = this.units.filter((u) => u.team === t), cap = mem.reduce((s, u) => s + u.maxHp, 0);
-        const tot = mem.reduce((s, u) => s + u.hp, 0);
-        const x = t === 0 ? 14 : W - 14 - 230, y = 12;
-        g.save(); g.translate(t === 0 ? 14 : W - 14, 12); g.scale(hs, hs); g.translate(t === 0 ? -14 : -(W - 14), -12);
-        g.fillStyle = 'rgba(0,0,0,0.5)'; g.beginPath(); g.roundRect(x, y, 230, 40, 8); g.fill();
-        if (this.teamMarks) this.mark(g, t, x + 15, y + 11, 5);
-        this.text(g, `${TEAMS[t].name} (${tr(t === 0 ? 'who.me' : 'who.ai')})`, x + (this.teamMarks ? 26 : 8), y + 11, 13, '#fff', 'left');
-        this.text(g, `${tot}/${cap}`, x + 222, y + 11, 13, '#fff', 'right');
-        g.fillStyle = 'rgba(255,255,255,0.2)'; g.fillRect(x + 8, y + 22, 214, 10);
-        g.fillStyle = TEAMS[t].color; g.fillRect(x + 8, y + 22, 214 * tot / cap, 10);
-        // 유닛별 구분선
-        g.fillStyle = 'rgba(0,0,0,0.5)';
-        for (let k = 1; k < mem.length; k++) g.fillRect(x + 8 + (214 * k) / mem.length, y + 22, 1, 10);
-        g.restore();
-      }
-      // 타이머 + 바람
-      g.save(); g.translate(W / 2, 0); g.scale(hs, hs); g.translate(-W / 2, 0);
-      const tm = Math.max(0, Math.ceil(this.timer));
-      g.fillStyle = 'rgba(0,0,0,0.55)'; g.beginPath(); g.arc(W / 2, 30, 24, 0, 7); g.fill();
-      this.text(g, String(tm), W / 2, 31, 24, this.timer <= 5 && this.state === 'aim' ? '#ff6b5a' : '#fff');
-      g.fillStyle = 'rgba(0,0,0,0.5)'; g.beginPath(); g.roundRect(W / 2 - 80, 60, 160, 26, 13); g.fill();
-      this.text(g, tr('hud.wind'), W / 2 - 62, 73, 12, '#cfe8ff', 'left');
-      const wl = Math.abs(this.wind) * 4.5, wd = Math.sign(this.wind), cx = W / 2 + 8;
-      if (wd) {
-        g.strokeStyle = '#ffe27a'; g.fillStyle = '#ffe27a'; g.lineWidth = 3;
-        const x1 = cx - wd * wl / 2, x2 = cx + wd * wl / 2;
-        g.beginPath(); g.moveTo(x1, 73); g.lineTo(x2 - wd * 4, 73); g.stroke();
-        g.beginPath(); g.moveTo(x2, 73); g.lineTo(x2 - wd * 9, 67); g.lineTo(x2 - wd * 9, 79); g.fill();
-      } else this.text(g, tr('hud.none'), cx, 73, 12, '#ffe27a');
-      this.text(g, String(Math.abs(this.wind)), W / 2 + 68, 73, 12, '#fff', 'right');
-      g.restore();
-    }
-    if (!dom) this.drawUnitInfo(g, hs);
+    if (!dom) this.drawTopHud(g, hs);
     // 무기 (하단 HUD)
-    if (!this.touchUI) this.drawWeaponBar(g);
-    // 파워 바
+    if (!this.touchUI) this.drawWeaponBar(g);    // 파워 바
     if (this.turnTeam === 0 && this.airMode && this.state === 'aim' && !this.touchUI) { // 공습 조준 안내 (파워 바 대신)
       this.text(g, tr('hud.air', { x: Math.round(this.airX) }), W / 2, H - 26, 12 * big);
     } else if (this.turnTeam === 0 && (this.state === 'aim' || this.state === 'flying') && !(this.touchUI && !dom)) { // 가로 터치 화면은 발사 버튼이 각도·파워를 표시
       const bx = W / 2 - 120, by = H - 34;
       g.fillStyle = 'rgba(0,0,0,0.55)'; g.beginPath(); g.roundRect(bx - 4, by - 4, 248, 24, 8); g.fill();
-      const gr = g.createLinearGradient(bx, 0, bx + 240, 0);
-      gr.addColorStop(0, '#7be04a'); gr.addColorStop(0.6, '#ffd13a'); gr.addColorStop(1, '#ff3d2e');
-      g.fillStyle = gr; g.fillRect(bx, by, 240 * this.power / 100, 16);
+      g.fillStyle = powerGrad(g, bx); g.fillRect(bx, by, 240 * this.power / 100, 16);
       g.strokeStyle = 'rgba(255,255,255,0.6)'; g.lineWidth = 1; g.strokeRect(bx, by, 240, 16);
       if (this.lastPower) { g.fillStyle = '#fff'; g.fillRect(bx + 240 * this.lastPower / 100 - 1, by - 3, 2, 22); }
       if (!dom) this.text(g, tr('hud.aim', { a: Math.round(this.angle), p: Math.round(this.power) }), W / 2, by - 14 * big, 12 * big);
@@ -1692,13 +1743,73 @@ export class Game {
       this.text(g, btxt, W / 2, by + bh / 2 + 1, fz, mine ? '#b5d3ff' : '#ffb3b3', 'center', '800');
       g.restore();
     }
-    const label = this.modeLabel;
-    // 모드·시드 표시: 양 팀 HUD(상단 좌우)와 겹치지 않도록 바람 표시 바로 아래 중앙에 작은 알약 모양으로 그림
-    if (dom) return;
-    const info = tr('hud.info', { label, theme: this.theme.name, seed: this.seed });
-    g.font = '400 11px "Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif';
-    const iw = Math.ceil(g.measureText(info).width) + 20;
+  }
+
+  // 상단 HUD(팀 HP·타이머·바람·유닛 정보 줄·모드/시드 알약)는 값이 바뀔 때만 오프스크린에 다시 그리고 평소에는 한 번 찍는다.
+  // 화면 위 기준 TOP_HUD_H(=hs 최대 1.5배일 때 알약 아래끝) 높이만 쓰므로 전체 화면 크기 복사가 아니다
+  drawTopHud(g, hs) {
+    let tot0 = 0, cap0 = 0, n0 = 0, tot1 = 0, cap1 = 0, n1 = 0;
+    for (const u of this.units) {
+      if (u.team === 0) { tot0 += u.hp; cap0 += u.maxHp; n0++; } else { tot1 += u.hp; cap1 += u.maxHp; n1++; }
+    }
+    const iu = this.infoUnit, urgent = this.timer <= 5 && this.state === 'aim';
+    const key = `${hs}|${this.bigHud}|${this.teamMarks}|${getLang()}|${tot0}/${cap0}/${n0}|${tot1}/${cap1}/${n1}|${Math.max(0, Math.ceil(this.timer))}|${urgent}|${this.wind}|${iu ? `${iu.team}:${iu.idx}:${iu.hp}/${iu.maxHp}` : ''}|${this.modeLabel}|${this.theme.id}|${this.seed}`;
+    let c = this._topHud;
+    if (!c) {
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = TOP_HUD_H;
+      c = this._topHud = { cv, q: cv.getContext('2d'), key: '' };
+    }
+    if (c.key !== key) {
+      c.key = key;
+      const q = c.q;
+      q.clearRect(0, 0, W, TOP_HUD_H);
+      this.paintTopHud(q, hs, [[tot0, cap0, n0], [tot1, cap1, n1]], urgent);
+      this.sc = 1;
+    }
+    g.drawImage(c.cv, 0, 0);
+  }
+
+  paintTopHud(g, hs, sums, urgent) {
+    // 팀 HP
+    for (let t = 0; t < 2; t++) {
+      const [tot, cap, n] = sums[t];
+      const x = t === 0 ? 14 : W - 14 - 230, y = 12;
+      g.save(); g.translate(t === 0 ? 14 : W - 14, 12); g.scale(hs, hs); g.translate(t === 0 ? -14 : -(W - 14), -12);
+      this.sc = hs;
+      g.fillStyle = 'rgba(0,0,0,0.5)'; g.beginPath(); g.roundRect(x, y, 230, 40, 8); g.fill();
+      if (this.teamMarks) this.mark(g, t, x + 15, y + 11, 5);
+      this.text(g, `${TEAMS[t].name} (${tr(t === 0 ? 'who.me' : 'who.ai')})`, x + (this.teamMarks ? 26 : 8), y + 11, 13, '#fff', 'left');
+      this.text(g, `${tot}/${cap}`, x + 222, y + 11, 13, '#fff', 'right');
+      g.fillStyle = 'rgba(255,255,255,0.2)'; g.fillRect(x + 8, y + 22, 214, 10);
+      g.fillStyle = TEAMS[t].color; g.fillRect(x + 8, y + 22, 214 * tot / cap, 10);
+      // 유닛별 구분선
+      g.fillStyle = 'rgba(0,0,0,0.5)';
+      for (let k = 1; k < n; k++) g.fillRect(x + 8 + (214 * k) / n, y + 22, 1, 10);
+      g.restore();
+    }
+    // 타이머 + 바람
     g.save(); g.translate(W / 2, 0); g.scale(hs, hs); g.translate(-W / 2, 0);
+    this.sc = hs;
+    const tm = Math.max(0, Math.ceil(this.timer));
+    g.fillStyle = 'rgba(0,0,0,0.55)'; g.beginPath(); g.arc(W / 2, 30, 24, 0, 7); g.fill();
+    this.text(g, String(tm), W / 2, 31, 24, urgent ? '#ff6b5a' : '#fff');
+    g.fillStyle = 'rgba(0,0,0,0.5)'; g.beginPath(); g.roundRect(W / 2 - 80, 60, 160, 26, 13); g.fill();
+    this.text(g, tr('hud.wind'), W / 2 - 62, 73, 12, '#cfe8ff', 'left');
+    const wl = Math.abs(this.wind) * 4.5, wd = Math.sign(this.wind), cx = W / 2 + 8;
+    if (wd) {
+      g.strokeStyle = '#ffe27a'; g.fillStyle = '#ffe27a'; g.lineWidth = 3;
+      const x1 = cx - wd * wl / 2, x2 = cx + wd * wl / 2;
+      g.beginPath(); g.moveTo(x1, 73); g.lineTo(x2 - wd * 4, 73); g.stroke();
+      g.beginPath(); g.moveTo(x2, 73); g.lineTo(x2 - wd * 9, 67); g.lineTo(x2 - wd * 9, 79); g.fill();
+    } else this.text(g, tr('hud.none'), cx, 73, 12, '#ffe27a');
+    this.text(g, String(Math.abs(this.wind)), W / 2 + 68, 73, 12, '#fff', 'right');
+    g.restore();
+    this.drawUnitInfo(g, hs);
+    // 모드·시드 표시: 양 팀 HUD(상단 좌우)와 겹치지 않도록 바람 표시 바로 아래 중앙에 작은 알약 모양으로 그림
+    const info = tr('hud.info', { label: this.modeLabel, theme: this.theme.name, seed: this.seed });
+    const iw = Math.ceil(this.textW(info, 400, 11)) + 20;
+    g.save(); g.translate(W / 2, 0); g.scale(hs, hs); g.translate(-W / 2, 0);
+    this.sc = hs;
     g.fillStyle = 'rgba(0,0,0,0.45)'; g.beginPath(); g.roundRect(W / 2 - iw / 2, 90, iw, 17, 8.5); g.fill();
     this.text(g, info, W / 2, 98.5, 11, 'rgba(255,255,255,0.9)', 'center', '400');
     g.restore();
@@ -1727,13 +1838,13 @@ export class Game {
     if (!u) return;
     const left = u.team === 0, x = left ? 14 : W - 14 - 230, y = 56, ax = left ? 14 : W - 14;
     g.save(); g.translate(ax, 12); g.scale(hs, hs); g.translate(-ax, -12);
+    this.sc = hs;
     g.fillStyle = 'rgba(0,0,0,0.5)'; g.beginPath(); g.roundRect(x, y, 230, 34, 8); g.fill();
     g.strokeStyle = u.tagColor; g.lineWidth = 1.5; g.stroke();
     this.text(g, u.name, x + 8, y + 10, 12, '#fff', 'left');
     this.text(g, `HP ${u.hp}/${u.maxHp}`, x + 222, y + 10, 12, '#fff', 'right');
     const tr = `${u.trait.name}: ${u.trait.desc}`;
-    g.font = '600 11px "Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif';
-    this.text(g, tr, x + 8, y + 25, Math.min(11, (11 * 214) / Math.max(1, g.measureText(tr).width)), '#ffe27a', 'left', '600'); // 길면 글자를 줄여 박스 안에 맞춤
+    this.text(g, tr, x + 8, y + 25, Math.min(11, (11 * 214) / Math.max(1, this.textW(tr, 600, 11))), '#ffe27a', 'left', '600'); // 길면 글자를 줄여 박스 안에 맞춤
     g.restore();
   }
 

@@ -1,13 +1,13 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111040';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig } from './game.js?v=2026111040';
-import * as audio from './audio.js?v=2026111040';
-import * as progress from './progress.js?v=2026111040';
-import { MenuBg } from './menubg.js?v=2026111040';
-import * as store from './storage.js?v=2026111040';
-import * as loader from './loader.js?v=2026111040';
-import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111040';
+const VERSION = '2026111041';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig } from './game.js?v=2026111041';
+import * as audio from './audio.js?v=2026111041';
+import * as progress from './progress.js?v=2026111041';
+import { MenuBg } from './menubg.js?v=2026111041';
+import * as store from './storage.js?v=2026111041';
+import * as loader from './loader.js?v=2026111041';
+import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111041';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -211,9 +211,9 @@ function showResult(winner) {
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
 window.__audio = audio; // 디버깅/테스트용: __audio.musicInfo()
-window.__sim = (n, opts) => import('./sim.js?v=2026111040').then((m) => m.sim(n, opts));
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111040').then((m) => m.table(n, stages, skills));
-window.__sim.soak = (n, opts) => import('./sim.js?v=2026111040').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
+window.__sim = (n, opts) => import('./sim.js?v=2026111041').then((m) => m.sim(n, opts));
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111041').then((m) => m.table(n, stages, skills));
+window.__sim.soak = (n, opts) => import('./sim.js?v=2026111041').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
 
 // 이 경기에 뒤에서 받는 캐릭터가 필요한가: 적이 3마리 이상(보통 이상·스테이지 4~)이거나 무한 모드(웨이브가 오르면 적이 4마리)
 function needsLazy(cfg) {
@@ -641,8 +641,17 @@ function setup(sprites) {
   // 시작·스테이지 선택 화면 배경(index.html의 canvas.menuBg): 메뉴가 보이는 동안에는 경기 대신 이 배경만 그린다. 없으면(구버전 HTML) 예전처럼 경기 화면
   const menuCanvases = [...document.querySelectorAll('canvas.menuBg')], menuBg = menuCanvases.length ? new MenuBg() : null;
   window.__menuBg = menuBg; // 디버깅/테스트용: frames(그린 프레임 수), mode('animated'|'still'|'idle'), t
+  // 적응형 품질: 프레임 간격의 이동평균이 20ms를 넘는 상태가 1초 이어지면 날씨·폭발 파티클을 줄이고(game.lowFx), 14ms 아래가 5초 이어지면 되돌린다
+  const perf = window.__perf = { ema: 16.7, low: false, slow: 0, fast: 0 };
   function frame(now) {
-    const dt = Math.min(0.033, (now - last) / 1000);
+    const raw = now - last;
+    if (raw < 250 && !document.hidden) { // 탭 전환·일시정지 뒤 큰 간격은 무시
+      perf.ema += (raw - perf.ema) * 0.08;
+      if (perf.ema > 20) { perf.slow += raw; perf.fast = 0; } else if (perf.ema < 14) { perf.fast += raw; perf.slow = 0; } else { perf.slow = 0; perf.fast = 0; }
+      if (!perf.low && perf.slow > 1000) { perf.low = true; perf.fast = 0; } else if (perf.low && perf.fast > 5000) { perf.low = false; perf.slow = 0; }
+      game.lowFx = perf.low;
+    }
+    const dt = Math.min(0.033, raw / 1000);
     last = now;
     try {
       const menuEl = menuBg && menuCanvases.find((c) => !c.parentElement.classList.contains('hidden'));

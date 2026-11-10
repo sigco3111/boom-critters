@@ -1,6 +1,6 @@
 // 스테이지 테마: 배경(하늘·구름·별·언덕)과 지형/물 색을 캔버스 코드로 그린다 (외부 이미지 없음)
-import { W, H, mulberry32 } from './terrain.js?v=2026111040';
-import { t as tr } from './i18n.js?v=2026111040';
+import { W, H, mulberry32 } from './terrain.js?v=2026111041';
+import { t as tr } from './i18n.js?v=2026111041';
 
 export const THEMES = [
   {
@@ -180,8 +180,9 @@ export function makeWeather(theme) {
 
 export function stepWeather(w, dt, wind = 0) {
   w.t += dt;
-  const t = w.t, k = w.kind;
-  for (const p of w.parts) {
+  const t = w.t, k = w.kind, N = w.active ?? w.parts.length; // active: 느린 기기에서는 앞쪽 일부만 움직이고 그린다
+  for (let i = 0; i < N; i++) {
+    const p = w.parts[i];
     if (k === 'snow') {
       p.y += (24 + p.s * 30) * dt; p.x += (Math.sin(t * 0.8 + p.p) * 14 + wind * 2.2) * dt;
     } else if (k === 'leaf') {
@@ -199,31 +200,35 @@ export function stepWeather(w, dt, wind = 0) {
 }
 
 export function drawWeather(g, w) {
-  const P = w.parts, t = w.t;
+  const P = w.parts, t = w.t, N = w.active ?? P.length;
   g.save();
   if (w.kind === 'snow') {
     g.fillStyle = 'rgba(240,247,255,0.92)'; g.strokeStyle = 'rgba(110,140,185,0.4)'; g.lineWidth = 0.8;
     g.beginPath();
-    for (const p of P) { g.moveTo(p.x + p.r, p.y); g.arc(p.x, p.y, p.r, 0, 6.283); }
+    for (let i = 0; i < N; i++) { const p = P[i]; g.moveTo(p.x + p.r, p.y); g.arc(p.x, p.y, p.r, 0, 6.283); }
     g.fill(); g.stroke();
   } else if (w.kind === 'dust') {
     for (let c = 0; c < 2; c++) {
       g.fillStyle = c ? 'rgba(130,80,40,0.45)' : 'rgba(255,240,200,0.7)';
       g.beginPath();
-      for (const p of P) if (p.c === c) g.rect(p.x, p.y, p.r * 1.6, p.r);
+      for (let i = 0; i < N; i++) { const p = P[i]; if (p.c === c) g.rect(p.x, p.y, p.r * 1.6, p.r); }
       g.fill();
     }
   } else if (w.kind === 'leaf') {
-    for (const p of P) {
-      g.fillStyle = p.c ? 'rgba(255,205,220,0.88)' : 'rgba(176,228,110,0.88)';
-      g.beginPath(); g.ellipse(p.x, p.y, p.r * 1.5, p.r * 0.75, t * (0.8 + p.s) + p.p, 0, 6.283); g.fill();
+    g.globalAlpha = 0.88; // 색 문자열을 매번 만들지 않도록 투명도는 globalAlpha로
+    for (let c = 0; c < 2; c++) { // 꽃잎(분홍)과 나뭇잎(연두)을 색별로 묶어 그린다
+      g.fillStyle = c ? '#ffcddc' : '#b0e46e';
+      for (let i = 0; i < N; i++) {
+        const p = P[i]; if (p.c !== c) continue;
+        g.beginPath(); g.ellipse(p.x, p.y, p.r * 1.5, p.r * 0.75, t * (0.8 + p.s) + p.p, 0, 6.283); g.fill();
+      }
     }
   } else {
-    for (const p of P) {
-      const a = Math.max(0, Math.sin(t * 1.7 + p.p * 3)); // 깜빡임
+    for (let i = 0; i < N; i++) {
+      const p = P[i], a = Math.max(0, Math.sin(t * 1.7 + p.p * 3)); // 깜빡임
       if (a < 0.03) continue;
-      g.fillStyle = `rgba(200,255,110,${0.26 * a})`; g.beginPath(); g.arc(p.x, p.y, p.r * 3.6, 0, 6.283); g.fill();
-      g.fillStyle = `rgba(235,255,170,${0.4 + 0.6 * a})`; g.beginPath(); g.arc(p.x, p.y, p.r, 0, 6.283); g.fill();
+      g.globalAlpha = 0.26 * a; g.fillStyle = '#c8ff6e'; g.beginPath(); g.arc(p.x, p.y, p.r * 3.6, 0, 6.283); g.fill();
+      g.globalAlpha = 0.4 + 0.6 * a; g.fillStyle = '#ebffaa'; g.beginPath(); g.arc(p.x, p.y, p.r, 0, 6.283); g.fill();
     }
   }
   g.restore();

@@ -42,6 +42,7 @@ export class Terrain {
     this.theme = theme || DEFAULT_THEME;
     this.headless = headless;
     this.alpha = new Uint8Array(W * H);
+    this.top = new Int16Array(W).fill(H); // 열마다 첫 지형 픽셀의 y (surfaceY 캐시): 폭발이 지형을 깎을 때 영향받은 열만 다시 계산한다
     if (!headless) {
       this.canvas = document.createElement('canvas');
       this.canvas.width = W; this.canvas.height = H;
@@ -67,6 +68,7 @@ export class Terrain {
     this.heights = h;
     if (this.headless) {
       for (let x = 0; x < W; x++) for (let y = Math.ceil(h[x]); y < H; y++) this.alpha[y * W + x] = 255;
+      this.scanTop(0, W, true);
       return;
     }
     const g = this.ctx;
@@ -111,6 +113,17 @@ export class Terrain {
       const row = (y + j) * W + x;
       for (let i = 0; i < w; i++) this.alpha[row + i] = d[(j * w + i) * 4 + 3];
     }
+    this.scanTop(x, w, x === 0 && w === W && y === 0 && h === H);
+  }
+
+  // x0부터 n개 열의 첫 지형 픽셀 y를 다시 구한다. 지형은 깎이기만 하므로 전체를 새로 만들 때(full)가 아니면 이전 값부터 내려가며 찾는다
+  scanTop(x0, n, full) {
+    const A = this.alpha, T = this.top;
+    for (let x = x0; x < x0 + n; x++) {
+      let y = full ? 0 : T[x];
+      while (y < H && A[y * W + x] <= 100) y++;
+      T[x] = y;
+    }
   }
 
   solid(x, y) {
@@ -121,9 +134,7 @@ export class Terrain {
 
   // 첫 번째 지형 픽셀의 y (위에서 아래로)
   surfaceY(x) {
-    x = Math.max(0, Math.min(W - 1, Math.floor(x)));
-    for (let y = 0; y < H; y++) if (this.alpha[y * W + x] > 100) return y;
-    return H;
+    return this.top[Math.max(0, Math.min(W - 1, Math.floor(x)))];
   }
 
   crater(x, y, r) {
@@ -131,6 +142,7 @@ export class Terrain {
       const x0 = Math.max(0, Math.floor(x - r)), x1 = Math.min(W - 1, Math.ceil(x + r));
       const y0 = Math.max(0, Math.floor(y - r)), y1 = Math.min(H - 1, Math.ceil(y + r));
       for (let j = y0; j <= y1; j++) for (let i = x0; i <= x1; i++) if ((i - x) * (i - x) + (j - y) * (j - y) <= r * r) this.alpha[j * W + i] = 0;
+      this.scanTop(x0, x1 - x0 + 1, false);
       return;
     }
     const g = this.ctx;
