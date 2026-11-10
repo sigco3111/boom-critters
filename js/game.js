@@ -1,5 +1,5 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, W, H } from './terrain.js';
+import { Terrain, W, H, mulberry32 } from './terrain.js';
 import * as audio from './audio.js';
 
 export { W, H };
@@ -37,11 +37,30 @@ export const CHARACTERS = [
   [['maleAdventurer', '남자 모험가'], ['femaleAdventurer', '여자 모험가'], ['malePerson', '남자']],
   [['robot', '로봇'], ['zombie', '좀비'], ['femalePerson', '여자']],
 ];
+// 4번째 적 유닛(스테이지 후반): 로봇 스프라이트를 색조만 바꿔 재사용
+const EXTRA_ENEMY = ['robot', '로봇 2', 'hue-rotate(150deg) saturate(1.4)'];
 export const WALK_FRAMES = 8;
 const STEP_LEN = 6;      // 걷기 프레임 하나당 이동 거리 (px)
 const SPRITE_H = 64;     // 포즈 이미지(96x128) 표시 높이 -> 캐릭터 키 약 52px
 const FADE_START = 0.6, FADE_END = 1.6; // 사망 후 페이드 (초)
 const DIFF = { easy: { a: 7, p: 14, label: '쉬움' }, normal: { a: 3, p: 6, label: '보통' }, hard: { a: 1, p: 2, label: '어려움' } };
+const ENEMY_X = { 1: [760], 2: [650, 820], 3: [600, 730, 865], 4: [560, 670, 780, 885] };
+
+// ---------- 스테이지 / 무한 모드 설정 ----------
+export const STAGE_COUNT = 10;
+// 스테이지 s(1~10): 고정 시드, 적 수 2→4, 바람 범위와 AI 정확도가 단계마다 증가
+export function stageConfig(s) {
+  return { mode: 'stage', stage: s, seed: 20240 + s * 7919, enemies: s <= 3 ? 2 : s <= 6 ? 3 : 4, windMax: 3 + s, level: s };
+}
+// 무한 모드 웨이브 w(1~): 웨이브마다 적 수 2→4, 바람·AI 정확도 증가 (매번 새 지형)
+export function waveConfig(w) {
+  return { mode: 'endless', wave: w, enemies: Math.min(4, 2 + Math.floor((w - 1) / 2)), windMax: Math.min(14, 5 + w), level: Math.min(10, w + 1) };
+}
+// AI 오차 단계(1~10) -> 각도·파워 오차 계수 (1: 쉬움 수준 → 10: 어려움 수준)
+export function levelErr(level) {
+  const t = (clamp(level, 1, 10) - 1) / 9, e = DIFF.easy, h = DIFF.hard;
+  return { a: e.a + (h.a - e.a) * t, p: e.p + (h.p - e.p) * t, pick: level <= 3 };
+}
 
 const rad = (d) => (d * Math.PI) / 180;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -83,6 +102,7 @@ class Unit {
     this.fallStart = y; this.moving = false; this.phase = Math.random() * 6;
     this.squash = 0; this.hurt = 0;
     this.walkDist = 0; this.shootT = 0; this.deadT = 0; this.drowned = false; this.cvy = 0;
+    this.tint = null;
   }
 }
 
@@ -96,31 +116,23 @@ export class Game {
     this.proj = null; this.shake = 0;
     this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.turnNo = 0;
     this.keys = { left: false, right: false, up: false, down: false };
-    this.onOver = () => {};
+    this.onOver = () => {}; this.onWave = () => {};
+    this.mode = 'quick'; this.stage = 0; this.wave = 0; this.cleared = 0; this.windMax = 10; this.level = null;
     this.ammo = freshAmmo();    // 매치 시작 전에도 버튼 표시가 올바르도록
     this.stepTimer = 0;
   }
 
   // ---------- 매치 ----------
-  newMatch(difficulty) {
+  // opts: { mode: 'quick'|'stage'|'endless', seed, enemies, windMax, level, stage, wave }
+  newMatch(difficulty, opts = {}) {
     this.difficulty = difficulty;
-    this.seed = (Math.random() * 1e9) | 0;
-    this.terrain = new Terrain(this.seed);
-    this.bg = this.makeBackground(this.seed);
+    this.mode = opts.mode || 'quick';
+    this.stage = opts.stage || 0;
+    this.wave = opts.wave || 0; this.cleared = 0;
+    this.windMax = opts.windMax ?? 10;
+    this.level = opts.level ?? null;      // null이면 난이도(쉬움/보통/어려움)의 오차를 사용
     this.units = []; this.particles = []; this.floaters = []; this.proj = null;
-    this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.turnNo = 0;
-    const baseX = [[95, 230, 360], [600, 730, 865]];
-    for (let t = 0; t < 2; t++) {
-      for (let i = 0; i < 3; i++) {
-        const x = clamp(baseX[t][i] + rnd(-25, 25), 20, W - 20);
-        const sy = this.terrain.surfaceY(x);
-        const [sp, nm] = CHARACTERS[t][i];
-        const u = new Unit(t, i, sp, nm, x, sy - 1);
-        for (let k = 0; k < 20 && this.blocked(u.x, u.y); k++) u.y--;
-        u.fallStart = u.y;
-        this.units.push(u);
-      }
-    }
+    this.buildField(opts.seed ?? ((Math.random() * 1e9) | 0), opts.enemies ?? 3, null);
     this.nextIdx = [0, 0];
     this.turnTeam = 0;
     this.winner = null;
@@ -130,6 +142,52 @@ export class Game {
     this.charging = false; this.ai = null;
     this.banner = null;
     this.startTurn();
+  }
+
+  // 지형·배경·유닛을 새로 배치. carry가 있으면 그 팀0 유닛의 체력/생존을 이어받는다 (무한 모드 웨이브 전환)
+  buildField(seed, enemies, carry) {
+    this.seed = seed;
+    this.terrain = new Terrain(seed);
+    this.bg = this.makeBackground(seed);
+    this.units = []; this.particles = []; this.floaters = []; this.proj = null;
+    this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.turnNo = 0;
+    const rng = mulberry32(seed ^ 0x5bd1e995), jit = () => (rng() * 2 - 1) * 25;
+    const baseX = [[95, 230, 360], ENEMY_X[enemies] || ENEMY_X[3]];
+    for (let t = 0; t < 2; t++) {
+      for (let i = 0; i < baseX[t].length; i++) {
+        const x = clamp(baseX[t][i] + jit(), 20, W - 20);
+        const sy = this.terrain.surfaceY(x);
+        const [sp, nm, tint] = t === 1 && i >= 3 ? EXTRA_ENEMY : CHARACTERS[t][i];
+        const u = new Unit(t, i, sp, nm, x, sy - 1);
+        u.tint = tint || null;
+        for (let k = 0; k < 20 && this.blocked(u.x, u.y); k++) u.y--;
+        u.fallStart = u.y;
+        if (t === 0 && carry) {
+          const old = carry[i];
+          if (old && old.alive) u.hp = old.hp;
+          else if (old) { u.alive = false; u.hp = 0; u.deadT = 99; }
+        }
+        this.units.push(u);
+      }
+    }
+  }
+
+  // 무한 모드: 다음 웨이브 시작. 생존 유닛은 체력 +35, 3의 배수 웨이브 직전엔 쓰러진 유닛 1명이 HP 50으로 복귀
+  startWave(w) {
+    const carry = this.units.filter((u) => u.team === 0);
+    for (const u of carry) if (u.alive) u.hp = Math.min(100, u.hp + 35);
+    if ((w - 1) % 3 === 0 && w > 1) {
+      const dead = carry.find((u) => !u.alive);
+      if (dead) { dead.alive = true; dead.hp = 50; dead.drowned = false; dead.deadT = 0; }
+    }
+    const cfg = waveConfig(w);
+    this.wave = w; this.windMax = cfg.windMax; this.level = cfg.level;
+    this.buildField((Math.random() * 1e9) | 0, cfg.enemies, carry);
+    this.ammo = freshAmmo();
+    this.nextIdx = [0, 0]; this.turnTeam = 0; this.winner = null;
+    this.angle = 45; this.power = 0; this.weapon = 0; this.charging = false; this.ai = null;
+    this.startTurn();
+    this.banner = { text: `웨이브 ${w}`, color: TEAMS[0].color, t: 0 };
   }
 
   makeBackground(seed) {
@@ -361,12 +419,12 @@ export class Game {
     if (this.turnNo % CRATE_EVERY === 0) this.dropCrate();
     const mine = this.units.filter((u) => u.team === t);
     let u = null;
-    for (let k = 0; k < 3; k++) {
-      const c = mine[(this.nextIdx[t] + k) % 3];
-      if (c.alive) { u = c; this.nextIdx[t] = (this.nextIdx[t] + k + 1) % 3; break; }
+    for (let k = 0; k < mine.length; k++) {
+      const c = mine[(this.nextIdx[t] + k) % mine.length];
+      if (c.alive) { u = c; this.nextIdx[t] = (this.nextIdx[t] + k + 1) % mine.length; break; }
     }
     this.activeUnit = u;
-    this.wind = Math.floor(rnd(-10, 11));
+    this.wind = Math.floor(rnd(-this.windMax, this.windMax + 1));
     this.timer = TURN_TIME;
     this.state = 'aim';
     this.power = 0; this.charging = false;
@@ -471,6 +529,13 @@ export class Game {
   checkWinner() {
     const a = [0, 1].map((t) => this.units.some((u) => u.team === t && u.alive));
     if (a[0] && a[1]) return false;
+    if (this.mode === 'endless' && a[0] && !a[1]) { // 웨이브 클리어: 잠시 후 다음 웨이브
+      this.cleared = this.wave; this.state = 'wave'; this.waveT = 0;
+      this.banner = { text: `웨이브 ${this.wave} 클리어!`, color: TEAMS[0].color, t: 0 };
+      audio.play('win');
+      this.onWave(this.cleared);
+      return true;
+    }
     this.winner = a[0] ? 0 : a[1] ? 1 : -1;
     this.state = 'over';
     audio.play(this.winner === 0 ? 'win' : 'lose');
@@ -606,6 +671,7 @@ export class Game {
 
   // AI 오차 계수 (스테이지/웨이브 단계가 있으면 단계별, 없으면 난이도별)
   aiErr() {
+    if (this.level != null) return levelErr(this.level);
     const d = DIFF[this.difficulty] || DIFF.normal;
     return { a: d.a, p: d.p, pick: this.difficulty === 'easy' };
   }
@@ -853,12 +919,16 @@ export class Game {
       }
     } else if (this.state === 'settle') {
       this.settleTotal += dt;
+    } else if (this.state === 'wave') {
+      this.waveT += dt;
     }
 
     for (const u of this.units) {
       if (u.alive) this.updateUnit(u, dt);
       else if (!u.drowned) this.updateCorpse(u, dt);
     }
+
+    if (this.state === 'wave' && this.waveT > 2.4) this.startWave(this.wave + 1);
 
     if (this.state === 'settle') {
       const calm = this.units.every((u) => !u.alive || u.grounded);
@@ -1007,6 +1077,7 @@ export class Game {
     if (!u.alive) g.globalAlpha = clamp(1 - (u.deadT - FADE_START) / (FADE_END - FADE_START), 0, 1);
     g.translate(u.x, u.y + 1); // 발(이미지 하단)이 지형 위 u.y
     g.scale(sx * (u.facing < 0 ? -1 : 1), sy);
+    if (u.tint) g.filter = u.tint;
     g.drawImage(img, -w / 2, -h, w, h);
     g.restore();
     if (u.hurt > 0 && u.alive) {
@@ -1196,15 +1267,17 @@ export class Game {
   drawHUD(g) {
     // 팀 HP
     for (let t = 0; t < 2; t++) {
-      const tot = this.units.filter((u) => u.team === t).reduce((s, u) => s + u.hp, 0);
+      const mem = this.units.filter((u) => u.team === t), cap = mem.length * 100;
+      const tot = mem.reduce((s, u) => s + u.hp, 0);
       const x = t === 0 ? 14 : W - 14 - 230, y = 12;
       g.fillStyle = 'rgba(0,0,0,0.5)'; g.beginPath(); g.roundRect(x, y, 230, 40, 8); g.fill();
       this.text(g, `${TEAMS[t].name}${t === 0 ? ' (나)' : ' (AI)'}`, x + 8, y + 11, 13, '#fff', 'left');
-      this.text(g, `${tot}/300`, x + 222, y + 11, 13, '#fff', 'right');
+      this.text(g, `${tot}/${cap}`, x + 222, y + 11, 13, '#fff', 'right');
       g.fillStyle = 'rgba(255,255,255,0.2)'; g.fillRect(x + 8, y + 22, 214, 10);
-      g.fillStyle = TEAMS[t].color; g.fillRect(x + 8, y + 22, 214 * tot / 300, 10);
+      g.fillStyle = TEAMS[t].color; g.fillRect(x + 8, y + 22, 214 * tot / cap, 10);
       // 유닛별 구분선
-      g.fillStyle = 'rgba(0,0,0,0.5)'; g.fillRect(x + 8 + 214 / 3, y + 22, 1, 10); g.fillRect(x + 8 + 428 / 3, y + 22, 1, 10);
+      g.fillStyle = 'rgba(0,0,0,0.5)';
+      for (let k = 1; k < mem.length; k++) g.fillRect(x + 8 + (214 * k) / mem.length, y + 22, 1, 10);
     }
     // 타이머 + 바람
     const tm = Math.max(0, Math.ceil(this.timer));
@@ -1242,6 +1315,7 @@ export class Game {
       this.text(g, b.text, W / 2, 133, 20, b.color === TEAMS[0].color ? '#9cc4ff' : '#ff9c9c');
       g.restore();
     }
-    this.text(g, `${DIFF[this.difficulty]?.label || ''} · 시드 ${this.seed}`, W - 16, 64, 10, 'rgba(255,255,255,0.85)', 'right', '400');
+    const label = this.mode === 'stage' ? `스테이지 ${this.stage}` : this.mode === 'endless' ? `무한 모드 · 웨이브 ${this.wave} (클리어 ${this.cleared})` : DIFF[this.difficulty]?.label || '';
+    this.text(g, `${label} · 시드 ${this.seed}`, W - 16, 64, 10, 'rgba(255,255,255,0.85)', 'right', '400');
   }
 }
