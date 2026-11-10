@@ -13,7 +13,17 @@ button { font: inherit; color: #fff; background: #2f6fb5; border: 0; border-bott
 button:hover { background: #3b82d0; }
 button.down, button:active { transform: translateY(2px); filter: brightness(1.15); }
 .overlay button { font-size: 2.6cqw; padding: 1.2cqw 3cqw; }
-#muteBtn { position: absolute; right: 1%; bottom: 1.5%; font-size: 1.7cqw; padding: 0.5cqw 1.2cqw; background: rgba(0, 0, 0, 0.55); border-bottom-width: 2px; border-color: #0006; }
+#topBtns { position: absolute; right: 1%; bottom: 1.5%; display: flex; gap: 0.6cqw; z-index: 5; }
+#topBtns button { font-size: 1.7cqw; padding: 0.5cqw 1.2cqw; background: rgba(0, 0, 0, 0.55); border-bottom-width: 2px; border-color: #0006; }
+#topBtns button:hover { background: rgba(40, 70, 110, 0.8); }
+#gearBtn { font-size: 2cqw; line-height: 1; }
+.overlay.modal { z-index: 10; background: rgba(10, 25, 45, 0.94); }
+.panel { display: flex; flex-direction: column; gap: 1.6cqw; padding: 2.4cqw 3cqw; min-width: 46cqw; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 12px; }
+.vol { display: flex; align-items: center; gap: 1.6cqw; font-size: 2.4cqw; }
+.vol > span { width: 9cqw; text-align: left; }
+.vol input[type=range] { flex: 1; accent-color: #d9a31b; height: 3cqw; cursor: pointer; touch-action: auto; }
+.vol output { width: 6cqw; text-align: right; color: #cfe3f7; }
+.vol button { font-size: 2cqw; padding: 0.6cqw 2cqw; margin-left: auto; }
 #controls { display: flex; flex-wrap: wrap; gap: 8px 18px; justify-content: center; padding: 0 8px; }
 #controls .grp { display: flex; gap: 6px; }
 #controls button { min-width: 52px; min-height: 44px; font-size: 15px; }
