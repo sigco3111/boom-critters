@@ -1,9 +1,9 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111024';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, stageConfig, waveConfig } from './game.js?v=2026111024';
-import * as audio from './audio.js?v=2026111024';
-import * as progress from './progress.js?v=2026111024';
+const VERSION = '2026111025';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, stageConfig, waveConfig } from './game.js?v=2026111025';
+import * as audio from './audio.js?v=2026111025';
+import * as progress from './progress.js?v=2026111025';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -119,8 +119,8 @@ function showResult(winner) {
 
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
-window.__sim = (n, opts) => import('./sim.js?v=2026111024').then((m) => m.sim(n, opts));
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111024').then((m) => m.table(n, stages, skills));
+window.__sim = (n, opts) => import('./sim.js?v=2026111025').then((m) => m.sim(n, opts));
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111025').then((m) => m.table(n, stages, skills));
 
 function launch(cfg) {
   current = cfg; endlessRecord = false;
@@ -177,7 +177,7 @@ function makeHud() {
   const q = (sel) => document.querySelector(sel), cache = {};
   const set = (key, el, prop, val) => { if (cache[key] !== val) { cache[key] = val; el[prop] = val; } };
   const teams = [q('#hudMe'), q('#hudFoe')].map((el) => ({ el, name: el.querySelector('.hud-name'), tot: el.querySelector('.hud-tot'), bar: el.querySelector('.hud-bar i'), units: el.querySelector('.hud-units') }));
-  const timer = $('hudTimer'), arrow = $('hudWindArrow'), num = $('hudWindNum'), mode = $('hudMode'), status = $('hudStatus');
+  const unitEl = $('hudUnit'), timer = $('hudTimer'), arrow = $('hudWindArrow'), num = $('hudWindNum'), mode = $('hudMode'), status = $('hudStatus');
   const windSvg = (w) => {
     if (!w) return '<span style="font-size:14px">없음</span>';
     const len = 16 + Math.abs(w) * 7, h = 20, y = h / 2;
@@ -186,7 +186,7 @@ function makeHud() {
   return {
     update(gm) {
       for (let t = 0; t < 2; t++) {
-        const mem = gm.units.filter((u) => u.team === t), tot = mem.reduce((a, u) => a + u.hp, 0), cap = mem.length * 100, T = teams[t];
+        const mem = gm.units.filter((u) => u.team === t), tot = mem.reduce((a, u) => a + u.hp, 0), cap = mem.reduce((a, u) => a + u.maxHp, 0), T = teams[t];
         set('n' + t, T.name, 'textContent', TEAMS[t].name.replace(' 팀', '') + (t === 0 ? '(나)' : '(AI)'));
         set('t' + t, T.tot, 'textContent', `${tot}/${cap}`);
         set('b' + t, T.bar, 'style', `width:${cap ? (100 * tot) / cap : 0}%;--tc:${TEAMS[t].color}`);
@@ -203,6 +203,10 @@ function makeHud() {
       if (gm.state === 'aim') st = gm.turnTeam === 0 ? (gm.airMode ? `내 차례 · 공습 목표 ${Math.round(gm.airX)} · 화면을 눌러 호출` : `내 차례 · 각도 ${Math.round(gm.angle)}° · 파워 ${Math.round(gm.power)}`) : '상대가 조준 중...';
       else if (gm.state === 'strike') st = '공습 중!';
       set('st', status, 'textContent', st);
+      if (unitEl) { // 지금 차례인 유닛(또는 마우스를 올린 유닛)의 이름·HP·특성
+        const u = gm.infoUnit;
+        set('un', unitEl, 'textContent', u ? `${u.name} (HP ${u.hp}/${u.maxHp}) · ${u.trait.name}: ${u.trait.desc}` : '');
+      }
     },
   };
 }
@@ -380,6 +384,7 @@ function setup(sprites) {
     dragging = e.pointerId; canvas.setPointerCapture(e.pointerId); game.aimTo(px, py);
   });
   canvas.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'mouse') game.hover = game.unitAt(...toGame(e)); // 마우스를 유닛에 올리면 정보 줄에 그 유닛의 특성이 보인다
     if (e.pointerId === airPtr) game.setAirX(toGame(e)[0]);
     else if (e.pointerId === aimPtr) game.dragMove(...toGame(e));
     else if (e.pointerId === dragging) game.aimTo(...toGame(e));
@@ -394,6 +399,7 @@ function setup(sprites) {
   };
   canvas.addEventListener('pointerup', endDrag(true));
   canvas.addEventListener('pointercancel', endDrag(false));
+  canvas.addEventListener('pointerleave', () => { game.hover = null; });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   document.addEventListener('gesturestart', (e) => e.preventDefault()); // iOS 핀치 줌 방지
 

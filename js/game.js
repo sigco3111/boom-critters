@@ -1,7 +1,7 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111024';
-import * as audio from './audio.js?v=2026111024';
-import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111024';
+import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111025';
+import * as audio from './audio.js?v=2026111025';
+import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111025';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -17,6 +17,7 @@ const BOUNCE_E = 0.55, BOUNCE_FRICTION = 0.85; // 수류탄 반발/마찰 계수
 const CRATE_W = 22, CRATE_H = 20, CRATE_FALL = 85, CRATE_HEAL = 30, CRATE_EVERY = 4; // 보급 상자
 const FALL_T = 80;       // 낙하 데미지 임계 높이
 const TURN_TIME = 30;
+const CHARGE_T = 1.6;    // 파워 0→100 충전 시간(초)
 const AIR_WARN = 1.0, AIR_W = 120, AIR_N = 5, AIR_IDX = 5; // 공습: 경고 마커 1초 → 폭탄 5발이 폭 120px 구역에 순서 없이 떨어짐 (무기 슬롯 6번)
 const MAX_PARTICLES = 500, MAX_FLOATERS = 24; // 파티클·떠오르는 글자 상한 (넘치면 가장 오래된 것부터 재활용=제거)
 const AI_MAX_TRIES = 3;      // AI가 유효한 사격(물/화면 밖이 아닌 착탄)을 못 찾을 때 다시 계산해 보는 횟수. 넘으면 턴을 넘긴다
@@ -43,12 +44,23 @@ export const TEAMS = [
   { name: '빨강 팀', color: '#ef4444' },
 ];
 // Kenney Toon Characters 1 (assets/toon/<key>/<pose>.png)
+// [스프라이트 키, 이름, 특성]
 export const CHARACTERS = [
-  [['maleAdventurer', '남자 모험가'], ['femaleAdventurer', '여자 모험가'], ['malePerson', '남자']],
-  [['robot', '로봇'], ['zombie', '좀비'], ['femalePerson', '여자']],
+  [['maleAdventurer', '남자 모험가', 'balanced'], ['femaleAdventurer', '여자 모험가', 'jump'], ['malePerson', '남자', 'tough']],
+  [['robot', '로봇', 'armor'], ['zombie', '좀비', 'regen'], ['femalePerson', '여자', 'steady']],
 ];
-// 4번째 적 유닛(스테이지 후반): 남자(malePerson) 스프라이트를 쓰고 이름표·HP 바 색을 주황으로 구분
-const EXTRA_ENEMY = ['malePerson', '남자 2', '#f59e0b'];
+// 4번째 적 유닛(스테이지 후반): 남자(malePerson) 스프라이트를 쓰고 이름표·HP 바 색을 주황으로 구분. 특성 없음(균형형)
+const EXTRA_ENEMY = ['malePerson', '남자 2', 'balanced', '#f59e0b'];
+// 캐릭터 특성 (작은 보정만): jumpK 점프 높이 배율, maxHp 최대 HP, blastK 폭발 피해 배율, speedK 이동 속도 배율, regen 팀 턴 시작 시 HP 회복, steady 조준 안정(AI 오차 감소 비율 = 파워 충전 시간 증가 비율)
+export const TRAITS = {
+  balanced: { name: '균형형', desc: '특별한 능력 없음' },
+  jump: { name: '높이뛰기', desc: '점프 높이 +10%', jumpK: 1.1 },
+  tough: { name: '튼튼함', desc: '최대 HP +10', maxHp: 110 },
+  armor: { name: '철갑', desc: '폭발 피해 -15% · 이동 -20%', blastK: 0.85, speedK: 0.8 },
+  regen: { name: '재생', desc: '팀 턴 시작 시 HP +5', regen: 5 },
+  steady: { name: '안정 조준', desc: '조준 안정 +15% (AI 오차↓ · 충전 여유↑)', steady: 0.15 },
+};
+const BASE_HP = 100;
 export const WALK_FRAMES = 8;
 const STEP_LEN = 6;      // 걷기 프레임 하나당 이동 거리 (px)
 const SPRITE_H = 64;     // 포즈 이미지(96x128) 표시 높이 -> 캐릭터 키 약 52px
@@ -112,10 +124,12 @@ export function stepProj(p, dt, wind, terrain, units) {
 }
 
 class Unit {
-  constructor(team, idx, sprite, name, x, y) {
+  constructor(team, idx, sprite, name, x, y, traitKey = 'balanced') {
     this.team = team; this.idx = idx; this.sprite = sprite; this.name = name;
+    this.traitKey = traitKey; this.trait = TRAITS[traitKey] || TRAITS.balanced;
+    this.maxHp = this.trait.maxHp || BASE_HP;
     this.x = x; this.y = y; this.vx = 0; this.vy = 0;
-    this.hp = 100; this.alive = true; this.grounded = true;
+    this.hp = this.maxHp; this.alive = true; this.grounded = true;
     this.facing = team === 0 ? 1 : -1;
     this.fallStart = y; this.moving = false; this.phase = Math.random() * 6;
     this.squash = 0; this.hurt = 0;
@@ -146,6 +160,7 @@ export class Game {
     this.airX = W / 2;          // 공습 목표 x (조준 마커)
     this.ammo = freshAmmo();    // 매치 시작 전에도 버튼 표시가 올바르도록
     this.stepTimer = 0;
+    this.hover = null;          // 마우스를 올려 둔 유닛 (유닛 정보 줄에 표시)
     this.headless = false;      // true면 렌더링 없이 계산만 (window.__sim)
     this.sim = null;            // 시뮬레이션 설정: { skill: [팀0 AI 프로필 | null, ...] } — 있으면 해당 팀을 AI가 조작
   }
@@ -199,8 +214,8 @@ export class Game {
       for (let i = 0; i < baseX[t].length; i++) {
         const x = clamp(baseX[t][i] + jit(), 20, W - 20);
         const sy = this.terrain.surfaceY(x);
-        const [sp, nm, tagColor] = t === 1 && i >= 3 ? EXTRA_ENEMY : CHARACTERS[t][i];
-        const u = new Unit(t, i, sp, nm, x, sy - 1);
+        const [sp, nm, trait, tagColor] = t === 1 && i >= 3 ? EXTRA_ENEMY : CHARACTERS[t][i];
+        const u = new Unit(t, i, sp, nm, x, sy - 1, trait);
         u.tagColor = tagColor || TEAMS[t].color;
         for (let k = 0; k < 20 && this.blocked(u.x, u.y); k++) u.y--;
         u.fallStart = u.y;
@@ -217,7 +232,7 @@ export class Game {
   // 무한 모드: 다음 웨이브 시작. 생존 유닛은 체력 +35, 3의 배수 웨이브 직전엔 쓰러진 유닛 1명이 HP 50으로 복귀
   startWave(w) {
     const carry = this.units.filter((u) => u.team === 0);
-    for (const u of carry) if (u.alive) u.hp = Math.min(100, u.hp + 35);
+    for (const u of carry) if (u.alive) u.hp = Math.min(u.maxHp, u.hp + 35);
     if ((w - 1) % 3 === 0 && w > 1) {
       const dead = carry.find((u) => !u.alive);
       if (dead) { dead.alive = true; dead.hp = 50; dead.drowned = false; dead.deadT = 0; }
@@ -248,7 +263,7 @@ export class Game {
 
   walk(u, dir, dt) {
     u.facing = dir; u.moving = true;
-    const nx = clamp(u.x + dir * 70 * dt, 12, W - 12), ox = u.x;
+    const nx = clamp(u.x + dir * 70 * (u.trait.speedK || 1) * dt, 12, W - 12), ox = u.x;
     for (let c = 0; c <= 4; c++) {
       if (!this.blocked(nx, u.y - c)) { u.x = nx; u.y -= c; break; }
     }
@@ -262,7 +277,7 @@ export class Game {
 
   jump(u, dirHeld) {
     if (!u.grounded) return;
-    u.grounded = false; u.vy = -330; u.vx = dirHeld * 110; u.fallStart = u.y; u.y -= 1;
+    u.grounded = false; u.vy = -330 * Math.sqrt(u.trait.jumpK || 1); u.vx = dirHeld * 110; // 점프 높이는 vy²에 비례하므로 +10% 높이 = vy ×√1.1 u.fallStart = u.y; u.y -= 1;
     if (dirHeld) u.facing = dirHeld;
     u.squash = -0.25;
   }
@@ -390,7 +405,7 @@ export class Game {
       const reach = r + 12;
       if (d >= reach) continue;
       const f = 1 - d / reach;
-      const dmg = Math.max(2, Math.round(w.damage * f));
+      const dmg = Math.max(2, Math.round(w.damage * f * (u.trait.blastK || 1)));
       let nx = (cx - x) / (d || 1), ny = (cy - y) / (d || 1);
       this.damage(u, dmg, '#ff6b5a'); hit = true;
       if (u.alive) {
@@ -449,6 +464,7 @@ export class Game {
     const t = this.turnTeam;
     if (this.burnFires(t)) return;
     this.turnNo++;
+    this.regenTeam(t);
     if (this.turnNo % CRATE_EVERY === 0) this.dropCrate();
     const mine = this.units.filter((u) => u.team === t);
     let u = null;
@@ -466,6 +482,17 @@ export class Game {
     this.banner = { text: t === 0 ? `내 차례 - ${u.name}` : `상대 차례 - ${u.name}`, color: TEAMS[t].color, t: 0 };
     this.lastTick = 99;
     this.ai = this.isAI(t) ? { phase: 'think', t: 0, walks: 0, crateWalks: 0, fled: 0, tries: 0, total: 0, target: null } : null;
+  }
+
+  // 재생 특성: 팀 턴이 시작될 때 그 팀의 살아 있는 재생형 유닛이 HP를 회복한다 (최대 HP까지)
+  regenTeam(t) {
+    for (const u of this.units) {
+      const r = u.trait.regen;
+      if (!r || !u.alive || u.team !== t || u.hp >= u.maxHp) continue;
+      const h = Math.min(r, u.maxHp - u.hp);
+      u.hp += h;
+      this.floaters.push({ x: u.x, y: Math.max(26, u.y - 92), text: '+' + h, color: '#5dff6e', t: 0 });
+    }
   }
 
   // ---------- 보급 상자 ----------
@@ -503,7 +530,7 @@ export class Game {
       for (const u of this.units) {
         if (!u.alive || Math.abs(u.x - c.x) > CRATE_W / 2 + HALF_W) continue;
         if (u.y < c.y - CRATE_H || u.y - UNIT_H > c.y) continue;
-        u.hp = Math.min(100, u.hp + CRATE_HEAL);
+        u.hp = Math.min(u.maxHp, u.hp + CRATE_HEAL);
         this.floaters.push({ x: u.x, y: u.y - 60, text: '+' + CRATE_HEAL, color: '#5dff6e', t: 0 });
         for (let k = 0; k < 10; k++) this.particles.push({ type: 'spark', x: c.x + rnd(-8, 8), y: c.y - rnd(0, 20), vx: rnd(-40, 40), vy: rnd(-120, -40), r: rnd(2, 3.5), life: 0, max: rnd(0.4, 0.8), green: true });
         audio.playSynth('heal');
@@ -782,6 +809,10 @@ export class Game {
 
   // AI 오차 계수 (스테이지/웨이브 단계가 있으면 단계별, 없으면 난이도별)
   aiErr() {
+    const e = this.aiBaseErr(), st = (this.activeUnit && this.activeUnit.trait.steady) || 0; // 안정 조준 특성: 오차 -15%
+    return { a: e.a * (1 - st), p: e.p * (1 - st), pick: e.pick };
+  }
+  aiBaseErr() {
     const sk = this.sim && this.sim.skill[this.turnTeam]; // 시뮬레이션에서 AI가 조작하는 우리 팀의 숙련도 프로필
     if (sk) return { a: sk.a, p: sk.p, pick: !!sk.pick };
     if (this.sim && this.sim.err) return { ...this.sim.err }; // 시뮬레이션: 적 AI 오차를 직접 지정해 보는 실험용
@@ -986,7 +1017,7 @@ export class Game {
         else { a.phase = 'charge'; a.t = 0; this.charging = true; this.power = 0; }
       }
     } else if (a.phase === 'charge') {
-      this.power = Math.min(100, this.power + 100 * dt / 1.6);
+      this.power = Math.min(100, this.power + 100 * dt / CHARGE_T);
       if (this.power >= a.plan.power) { this.charging = false; this.fire(a.plan.power); this.ai = null; }
     }
   }
@@ -1021,7 +1052,7 @@ export class Game {
         if (d) this.airX = clamp(this.airX + d * 200 * dt, 20, W - 20);
       } else if (human) {
         if (this.charging) {
-          this.power = Math.min(100, this.power + 100 * dt / 1.6);
+          this.power = Math.min(100, this.power + 100 * dt / (CHARGE_T * (1 + (hu.trait.steady || 0)))); // 안정 조준: 충전이 15% 느려져 원하는 파워에서 떼기 쉽다
         } else if (hu.grounded) {
           const dir = (this.keys.right ? 1 : 0) - (this.keys.left ? 1 : 0);
           if (dir) this.walk(hu, dir, dt);
@@ -1286,8 +1317,8 @@ export class Game {
     // HP 바 (이름표 바로 아래, 숫자는 바 안)
     const by = y + 15;
     g.fillStyle = 'rgba(0,0,0,0.7)'; g.fillRect(left, by, w, 11);
-    g.fillStyle = col; g.fillRect(left + 1, by + 1, (w - 2) * (u.hp / 100), 9);
-    g.fillStyle = 'rgba(255,255,255,0.3)'; g.fillRect(left + 1, by + 1, (w - 2) * (u.hp / 100), 3);
+    g.fillStyle = col; g.fillRect(left + 1, by + 1, (w - 2) * (u.hp / u.maxHp), 9);
+    g.fillStyle = 'rgba(255,255,255,0.3)'; g.fillRect(left + 1, by + 1, (w - 2) * (u.hp / u.maxHp), 3);
     this.text(g, String(u.hp), x, by + 6, 9);
     // 머리와 어긋났을 때 연결선 (확대 좌표계에서도 실제 머리 위치로 향하도록 보정)
     if (Math.abs(x - u.x) * ts > 6) {
@@ -1491,7 +1522,7 @@ export class Game {
     if (!dom) {
       // 팀 HP
       for (let t = 0; t < 2; t++) {
-        const mem = this.units.filter((u) => u.team === t), cap = mem.length * 100;
+        const mem = this.units.filter((u) => u.team === t), cap = mem.reduce((s, u) => s + u.maxHp, 0);
         const tot = mem.reduce((s, u) => s + u.hp, 0);
         const x = t === 0 ? 14 : W - 14 - 230, y = 12;
         g.save(); g.translate(t === 0 ? 14 : W - 14, 12); g.scale(hs, hs); g.translate(t === 0 ? -14 : -(W - 14), -12);
@@ -1522,6 +1553,7 @@ export class Game {
       this.text(g, String(Math.abs(this.wind)), W / 2 + 68, 73, 12, '#fff', 'right');
       g.restore();
     }
+    if (!dom) this.drawUnitInfo(g, hs);
     // 무기 (하단 HUD)
     if (!this.touchUI) this.drawWeaponBar(g);
     // 파워 바
@@ -1562,6 +1594,39 @@ export class Game {
     g.save(); g.translate(W / 2, 0); g.scale(hs, hs); g.translate(-W / 2, 0);
     g.fillStyle = 'rgba(0,0,0,0.45)'; g.beginPath(); g.roundRect(W / 2 - iw / 2, 90, iw, 17, 8.5); g.fill();
     this.text(g, info, W / 2, 98.5, 11, 'rgba(255,255,255,0.9)', 'center', '400');
+    g.restore();
+  }
+
+  // 정보를 보여 줄 유닛: 마우스를 올린 유닛, 없으면 지금 차례인 유닛
+  get infoUnit() {
+    const h = this.hover;
+    if (h && h.alive) return h;
+    const a = this.activeUnit;
+    return a && a.alive && ['aim', 'flying', 'strike', 'settle'].includes(this.state) ? a : null;
+  }
+  // 마우스 위치 (캔버스 좌표)에 있는 살아 있는 유닛 (몸통 중심에서 24px 안)
+  unitAt(px, py) {
+    let best = null, bd = 24;
+    for (const u of this.units) {
+      if (!u.alive) continue;
+      const d = Math.hypot(u.x - px, Math.max(0, Math.abs(py - (u.y - BODY_CY)) - BODY_HALF));
+      if (d < bd) { bd = d; best = u; }
+    }
+    return best;
+  }
+  // 유닛 정보 줄: 해당 팀 HP 박스 바로 아래에 이름 · HP · 특성을 표시 (가로 폰에서는 HUD와 같은 배율 hs)
+  drawUnitInfo(g, hs) {
+    const u = this.infoUnit;
+    if (!u) return;
+    const left = u.team === 0, x = left ? 14 : W - 14 - 230, y = 56, ax = left ? 14 : W - 14;
+    g.save(); g.translate(ax, 12); g.scale(hs, hs); g.translate(-ax, -12);
+    g.fillStyle = 'rgba(0,0,0,0.5)'; g.beginPath(); g.roundRect(x, y, 230, 34, 8); g.fill();
+    g.strokeStyle = u.tagColor; g.lineWidth = 1.5; g.stroke();
+    this.text(g, u.name, x + 8, y + 10, 12, '#fff', 'left');
+    this.text(g, `HP ${u.hp}/${u.maxHp}`, x + 222, y + 10, 12, '#fff', 'right');
+    const tr = `${u.trait.name}: ${u.trait.desc}`;
+    g.font = '600 11px "Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif';
+    this.text(g, tr, x + 8, y + 25, Math.min(11, (11 * 214) / Math.max(1, g.measureText(tr).width)), '#ffe27a', 'left', '600'); // 길면 글자를 줄여 박스 안에 맞춤
     g.restore();
   }
 
