@@ -11,13 +11,14 @@ const BODY_CY = 26;      // 몸통 중심 높이 (발 기준 위쪽, 스프라�
 const BODY_R = 15;       // 투사체 명중 판정 반경(몸통 중심 기준)
 const TAG_TOP = 84, TAG_H = 26; // 이름표+HP 블록: 발 위 84px부터 높이 26px
 const BODY_HALF = 8;     // 몸통 캡슐의 세로 반길이 (중심에서 위/아래)
+const BOUNCE_E = 0.55, BOUNCE_FRICTION = 0.85; // 수류탄 반발/마찰 계수
 const FALL_T = 80;       // 낙하 데미지 임계 높이
 const TURN_TIME = 30;
 
 export const WEAPONS = [
   { id: 'cannon', name: '대포탄', radius: 40, damage: 50, windK: 8, speedK: 1.0, knock: 380 },
   { id: 'rocket', name: '로켓', radius: 58, damage: 42, windK: 3, speedK: 0.85, knock: 470 },
-  { id: 'grenade', name: '수류탄', radius: 55, damage: 60, windK: 1, speedK: 0.9, knock: 640, ammo: 3, fuse: 3, disabled: true },
+  { id: 'grenade', name: '수류탄', radius: 55, damage: 60, windK: 1, speedK: 0.9, knock: 640, ammo: 3, fuse: 3 },
   { id: 'lightning', name: '번개', disabled: true },
   { id: 'fire', name: '화염탄', disabled: true },
 ];
@@ -240,6 +241,52 @@ export class Game {
     }
   }
 
+  // ---------- 수류탄 ----------
+  // 지형 표면의 바깥쪽 법선 (주변 빈 칸 방향의 합)
+  terrainNormal(x, y) {
+    let nx = 0, ny = 0;
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * 6.2832, cx = Math.cos(a), cy = Math.sin(a);
+      if (!this.terrain.solid(x + cx * 5, y + cy * 5)) { nx += cx; ny += cy; }
+    }
+    const l = Math.hypot(nx, ny);
+    return l < 0.01 ? [0, -1] : [nx / l, ny / l];
+  }
+
+  // 수류탄 한 스텝: 지형에서 튕기고, 퓨즈가 끝나면 'explode', 물에 빠지면 'water'
+  stepGrenade(p, dt) {
+    p.vx += this.wind * p.w.windK * dt;
+    p.vy += PROJ_G * dt;
+    p.age += dt; p.fuse -= dt;
+    if (p.fuse <= 0) return 'explode';
+    const dx = p.vx * dt, dy = p.vy * dt;
+    const n = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 2));
+    for (let i = 0; i < n; i++) {
+      const nx = p.x + dx / n, ny = p.y + dy / n;
+      if (ny > WATER_Y) { p.x = nx; p.y = WATER_Y; return 'water'; }
+      if (nx < 4 || nx > W - 4) { // 좌우 벽
+        p.vx = -p.vx * 0.6; p.x = clamp(p.x, 4, W - 4);
+        break;
+      }
+      if (this.terrain.solid(nx, ny)) {
+        const [tx, ty] = this.terrainNormal(nx, ny);
+        const vn = p.vx * tx + p.vy * ty;
+        if (vn < 0) {
+          const speed = Math.hypot(p.vx, p.vy);
+          const px = p.vx - vn * tx, py = p.vy - vn * ty; // 접선 성분
+          p.vx = px * BOUNCE_FRICTION - BOUNCE_E * vn * tx;
+          p.vy = py * BOUNCE_FRICTION - BOUNCE_E * vn * ty;
+          if (speed > 70) audio.play('land', { vol: Math.min(0.6, speed / 400), rate: 1.7 });
+        }
+        break;
+      }
+      p.x = nx; p.y = ny;
+    }
+    // 거의 멈추면 바닥에 정지
+    if (Math.hypot(p.vx, p.vy) < 28 && this.terrain.solid(p.x, p.y + 3)) { p.vx *= 0.8; p.vy = 0; }
+    return null;
+  }
+
   // ---------- 폭발 ----------
   explode(x, y, w) {
     const r = w.radius;
@@ -386,11 +433,12 @@ export class Game {
       x: u.x + f * Math.cos(a) * 18, y: u.y - 20 - Math.sin(a) * 18,
       vx: f * Math.cos(a) * v, vy: -Math.sin(a) * v, w, owner: u, age: 0,
     };
+    if (w.fuse) { this.proj.fuse = w.fuse; this.proj.tickN = Math.ceil(w.fuse); }
     this.lastPower = power; this.power = power;
     if (this.ammo[this.turnTeam][this.weapon] !== Infinity) this.ammo[this.turnTeam][this.weapon]--;
     this.state = 'flying';
     u.squash = -0.2; u.shootT = 0.4;
-    audio.play('fire', { rate: w.id === 'rocket' ? 0.8 : 1 });
+    audio.play('fire', { rate: w.id === 'rocket' ? 0.8 : w.id === 'grenade' ? 1.3 : 1 });
   }
 
   // ---------- AI ----------
@@ -502,8 +550,13 @@ export class Game {
       }
     } else if (this.state === 'flying') {
       const p = this.proj;
-      const r = stepProj(p, dt, this.wind, this.terrain, this.units);
-      if (p.w.id === 'rocket') {
+      const grenade = p.w.id === 'grenade';
+      const r = grenade ? this.stepGrenade(p, dt) : stepProj(p, dt, this.wind, this.terrain, this.units);
+      if (grenade) {
+        const sec = Math.ceil(p.fuse);
+        if (sec < p.tickN && sec > 0) { p.tickN = sec; audio.play('tick', { vol: 0.7 }); }
+        this.particles.push({ type: 'fire', x: p.x + 2, y: p.y - 6, vx: rnd(-15, 15), vy: rnd(-40, -15), r: rnd(1.5, 2.5), life: 0, max: 0.25 });
+      } else if (p.w.id === 'rocket') {
         this.particles.push({ type: 'fire', x: p.x, y: p.y, vx: rnd(-20, 20), vy: rnd(-20, 20), r: rnd(3, 5), life: 0, max: 0.3 });
         this.particles.push({ type: 'smoke', x: p.x, y: p.y, vx: rnd(-10, 10), vy: rnd(-10, 10), r: rnd(3, 5), life: 0, max: 0.8, color: '120,120,120' });
       } else {
@@ -511,7 +564,7 @@ export class Game {
       }
       if (r) {
         this.proj = null;
-        if (r === 'terrain' || r === 'unit') this.explode(p.x, p.y, p.w);
+        if (r === 'terrain' || r === 'unit' || r === 'explode') this.explode(p.x, p.y, p.w);
         else if (r === 'water') {
           for (let i = 0; i < 14; i++) this.particles.push({ type: 'splash', x: p.x, y: WATER_Y, vx: rnd(-70, 70), vy: rnd(-250, -90), r: rnd(2, 4), life: 0, max: rnd(0.5, 0.9) });
           audio.play('land', { rate: 1.6, vol: 0.7 });
@@ -683,6 +736,17 @@ export class Game {
       g.fillStyle = '#e6e6e6'; g.fillRect(-9, -3, 14, 6);
       g.fillStyle = '#d33'; g.beginPath(); g.moveTo(5, -3); g.lineTo(11, 0); g.lineTo(5, 3); g.fill();
       g.fillStyle = '#555'; g.fillRect(-11, -4, 3, 8);
+    } else if (p.w.id === 'grenade') {
+      const hot = p.fuse < 1 && Math.floor(p.fuse * 8) % 2 === 0;
+      g.rotate(p.age * 6);
+      g.fillStyle = hot ? '#b84a2a' : '#4f7a2f'; g.strokeStyle = '#223a12'; g.lineWidth = 1.5;
+      g.beginPath(); g.arc(0, 0, 6, 0, 7); g.fill(); g.stroke();
+      g.fillStyle = '#888'; g.fillRect(-1.5, -9, 3, 4);
+      g.restore();
+      // 카운트다운 숫자 (회전 없이 위에 표시)
+      const cy = Math.max(16, p.y - 16);
+      this.text(g, String(Math.max(1, Math.ceil(p.fuse))), p.x, cy, 18, p.fuse < 1 ? '#ff6b5a' : '#fff');
+      return;
     } else {
       g.fillStyle = '#2b2b2b'; g.beginPath(); g.arc(0, 0, 5, 0, 7); g.fill();
       g.fillStyle = 'rgba(255,255,255,0.6)'; g.beginPath(); g.arc(-1.5, -1.5, 1.6, 0, 7); g.fill();
