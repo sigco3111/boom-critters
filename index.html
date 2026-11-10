@@ -9,7 +9,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/icons/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=2026111033">
+  <link rel="stylesheet" href="style.css?v=2026111034">
 </head>
 <body>
   <div id="app">
@@ -74,6 +74,7 @@
           <button type="button" id="againBtn">다시 하기</button>
           <button type="button" id="stageSelBtn" class="hidden">스테이지 선택</button>
           <button type="button" id="menuBtn">처음으로</button>
+          <button type="button" id="shareBtn" class="share">결과 공유</button>
         </div>
       </div>
 
@@ -96,6 +97,7 @@
               <tr><th>소리</th><td>M 음소거 · ⚙ 설정(음악/효과음 볼륨). 번개 지직, 공습 휘파람, 수류탄 똑딱, 치유 차임 효과음도 효과음 볼륨·음소거를 따릅니다. 결과 화면의 승리·패배 징글은 음악 볼륨·음소거를 따르고, 나오는 동안 배경음악이 잠깐 작아집니다</td></tr>
               <tr><th>접근성</th><td>⚙ 설정에서 <b>HUD 큰 글씨</b>(HUD 글자와 하단 무기 버튼의 이름·탄약 +25%)와 <b>고대비 팀 표시</b>(우리 팀 파랑 ● 원, 상대 팀 빨강 ◆ 마름모를 이름표·팀 HP 박스·턴 배너에 표시)를 켤 수 있습니다. 설정은 저장됩니다</td></tr>
               <tr><th>시작 화면 배경</th><td>별밤 하늘의 구름과 별이 천천히 흐릅니다. 기기의 '움직임 줄이기' 설정을 켜면 정지 화면으로 보이고, 탭이 가려지면 애니메이션을 멈춰 배터리를 아낍니다</td></tr>
+              <tr><th>결과 공유</th><td>결과 화면의 <b>결과 공유</b> 버튼은 스테이지(또는 모드)·결과·별과 게임 주소를 공유합니다. 공유 기능이 있는 기기에서는 공유 창이 열리고, 없으면 같은 글이 클립보드에 복사되며 작은 안내가 잠깐 뜹니다</td></tr>
               <tr><th>앱 설치</th><td>브라우저 메뉴의 '앱 설치' / '홈 화면에 추가'로 <b>포탄 동물원</b> 아이콘을 만들어 전체 화면 앱처럼 실행할 수 있습니다. 서비스 워커를 쓰지 않아 업데이트는 항상 최신 파일로 받습니다. 진행 기록은 이 브라우저에 저장됩니다</td></tr>
               <tr><th>튜토리얼</th><td>처음 실행하면 4단계 안내가 한 번 나옵니다. 아래 '튜토리얼 보기'로 언제든 다시 볼 수 있어요 (←/→ 이동, Esc 건너뛰기)</td></tr>
             </table>
@@ -170,9 +172,9 @@
             <li><b>Battle at sea</b> by Thimras (CC0)<br><a href="https://opengameart.org/content/battle-at-sea" target="_blank" rel="noopener">https://opengameart.org/content/battle-at-sea</a></li>
             <li class="must"><b>Enchanted Festival by Matthew Pablo, <a href="https://opengameart.org/content/enchanted-festival" target="_blank" rel="noopener">https://opengameart.org/content/enchanted-festival</a>, licensed <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener">CC-BY 3.0</a></b><br>배경음악 (원곡의 루프 버전을 OGG로 변환하고 루프 이음매에 0.4초 크로스페이드를 적용함)</li>
           </ul>
-          <p class="note">CC0 에셋은 표기 의무가 없지만 감사의 뜻으로 적습니다. 게임 코드는 MIT 라이선스입니다. 지형·스테이지 테마 배경(초원·사막·설원·밤)·이펙트·무기 아이콘은 외부 이미지 없이 캔버스 코드로 직접 그렸습니다.</p>
+          <p class="note">CC0 에셋은 표기 의무가 없지만 감사의 뜻으로 적습니다. 게임 코드는 MIT 라이선스입니다. 지형·스테이지 테마 배경(초원·사막·설원·밤)·이펙트·무기 아이콘은 외부 이미지 없이 캔버스 코드로 직접 그렸습니다. 앱 아이콘(대포와 별)도 직접 그린 그림입니다.</p>
         </div>
-        <p class="ver">버전 <span id="verHtml">2026111033</span> · 스크립트 <span id="verJs">-</span></p>
+        <p class="ver">버전 <span id="verHtml">2026111034</span> · 스크립트 <span id="verJs">-</span></p>
         <button type="button" id="creditsCloseBtn">닫기</button>
       </div>
 
@@ -198,6 +200,8 @@
         <button type="button" id="settingsCloseBtn">닫기</button>
       </div>
     </div>
+
+    <div id="toast" class="hidden" role="status" aria-live="polite"></div>
 
     <div id="hud" aria-hidden="true">
       <div class="hud-team me" id="hudMe"><div class="hud-head"><span class="hud-name"></span><b class="hud-tot"></b></div><div class="hud-bar"><i></i></div><div class="hud-units"></div></div>
@@ -231,6 +235,6 @@
       </div>
     </div>
   </div>
-  <script type="module" src="js/main.js?v=2026111033"></script>
+  <script type="module" src="js/main.js?v=2026111034"></script>
 </body>
 </html>
