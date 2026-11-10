@@ -1,6 +1,7 @@
-// 스프라이트 이펙트: 폭발(Explosions by chabull), 타격(Pixelated Hit Animations), 머즐 플래시(Gun Muzzle Flash Effects), 발사체(Blue projectile)
+// 스프라이트 이펙트: 폭발(Explosions by chabull), 타격(Pixelated Hit Animations), 머즐 플래시(Gun Muzzle Flash Effects), 발사체(Blue projectile),
+// 번개(Lightning effect), 화염(Fire Aura), 치유(Heal effect)
 // 시트는 로딩 화면에서 미리 받는다. 실패한 시트는 null로 남고, 그 이펙트를 쓰는 곳은 예전 캔버스 그림으로 대신한다
-const SHEETS = { expl: 'assets/fx/explosions.png', hit: 'assets/fx/hit.png', muz: 'assets/fx/muzzle.png', orb: 'assets/fx/orb.png' };
+const SHEETS = { expl: 'assets/fx/explosions.png', hit: 'assets/fx/hit.png', muz: 'assets/fx/muzzle.png', orb: 'assets/fx/orb.png', bolt: 'assets/fx/bolt.png', flame: 'assets/fx/flame.png', heal: 'assets/fx/heal.png' };
 export const FX_FILES = Object.keys(SHEETS);
 const img = {}; // 시트 이름 -> Image (받기 성공한 것만)
 
@@ -11,6 +12,10 @@ export const ANIMS = {
   hit: { s: 'hit', sx: 0, sy: 0, fw: 64, fh: 64, cols: 5, n: 10, fps: 36, still: 4, ax: 0.5, ay: 0.5, fade: 0.2, blend: true },       // 유닛 타격
   muzF: { s: 'muz', sx: 0, sy: 0, fw: 80, fh: 80, cols: 3, n: 3, fps: 18, still: 1, ax: 0.04, ay: 0.5, fade: 0.2, blend: true },      // 노란 머즐 플래시
   muzI: { s: 'muz', sx: 0, sy: 80, fw: 80, fh: 80, cols: 3, n: 3, fps: 18, still: 1, ax: 0.04, ay: 0.5, fade: 0.2, blend: true },    // 파란 이온 플래시 (번개)
+  zap: { s: 'bolt', sx: 0, sy: 0, fw: 128, fh: 128, cols: 4, n: 4, fps: 16, still: 1, ax: 0.5, ay: 0.5, fade: 0.4, blend: true },        // 번개 타격점의 전기 불꽃 (Lightning effect, 파랗게 다시 칠함)
+  flameBurst: { s: 'flame', sx: 0, sy: 0, fw: 112, fh: 96, cols: 4, n: 14, fps: 18, still: 5, ax: 0.5, ay: 0.66, fade: 0.3, blend: true }, // 화염탄 착탄 (Fire Aura 한 번 재생)
+  flame: { s: 'flame', sx: 0, sy: 0, fw: 112, fh: 96, cols: 4, n: 14, fps: 14, still: 5, ax: 0.5, ay: 0.66, fade: 0, blend: true },       // 화염 지대 (Fire Aura 반복, 지면 위에 여러 개를 어긋나게 깜빡임)
+  heal: { s: 'heal', sx: 0, sy: 0, fw: 128, fh: 128, cols: 3, n: 3, fps: 4.5, still: 1, ax: 0.5, ay: 0.5, fade: 0.35, blend: true, grow: 0.5 }, // 보급 상자 치유 (Heal effect, 초록으로 다시 칠함, 커지며 사라짐)
   orb: { s: 'orb', sx: 0, sy: 0, fw: 24, fh: 24, cols: 4, n: 4, fps: 10, still: 0, ax: 0.5, ay: 0.5, fade: 0, blend: false },         // 대포탄
 };
 

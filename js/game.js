@@ -1,9 +1,9 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111047';
-import * as audio from './audio.js?v=2026111047';
-import { t as tr, getLang } from './i18n.js?v=2026111047';
-import * as fx from './fx.js?v=2026111047';
-import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111047';
+import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111048';
+import * as audio from './audio.js?v=2026111048';
+import { t as tr, getLang } from './i18n.js?v=2026111048';
+import * as fx from './fx.js?v=2026111048';
+import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111048';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -531,6 +531,7 @@ export class Game {
     // 스프라이트 폭발(fx.js): 로켓·수류탄은 큰 것, 대포·화염탄·공습은 작은 것. 블래스트 반경에 맞춰 크기를 정한다. 못 받았으면 예전 캔버스 불꽃·연기
     const big = id === 'rocket' || id === 'grenade';
     const sprite = this.sfxAdd(big ? 'boomL' : 'boomS', x, y, r * (big ? 2.5 : 2.8), 0);
+    if (id === 'fire') this.sfxAdd('flameBurst', x, y + r * 0.35, r * 3.2, 0); // 화염탄: 폭발 위에 불꽃 오라 한 번 (못 받았으면 건너뜀)
     if (!sprite) {
       this.pt('flash', x, y, 0, 0, r, 0.22);
       const nf = (18 + (r / 2) | 0) * q | 0; // 느린 기기(lowFx)에서는 파티클을 절반만
@@ -580,7 +581,8 @@ export class Game {
     for (let i = 0; i < S.length; i++) {
       const e = S[i], a = e.a, k = Math.min(1, e.t / e.dur);
       const f = e.still >= 0 ? e.still : Math.min(a.n - 1, (k * a.n) | 0);
-      fx.drawFrame(g, a, f, e.x, e.y, e.size, e.rot, a.fade && k > 1 - a.fade ? (1 - k) / a.fade : 1, glow);
+      const sz = a.grow && !this.reduceMotion ? e.size * (0.75 + a.grow * k) : e.size; // grow: 시간이 지나며 커지는 이펙트(치유)
+      fx.drawFrame(g, a, f, e.x, e.y, sz, e.rot, a.fade && k > 1 - a.fade ? (1 - k) / a.fade : 1, glow);
     }
   }
 
@@ -706,7 +708,8 @@ export class Game {
         if (u.y < c.y - CRATE_H || u.y - UNIT_H > c.y) continue;
         u.hp = Math.min(u.maxHp, u.hp + CRATE_HEAL);
         this.ft(u.x, u.y - 60, '+' + CRATE_HEAL, '#5dff6e');
-        for (let k = 0; k < 10; k++) this.pt('spark', c.x + rnd(-8, 8), c.y - rnd(0, 20), rnd(-40, 40), rnd(-120, -40), rnd(2, 3.5), rnd(0.4, 0.8), '', true);
+        const healSprite = this.sfxAdd('heal', u.x, u.y - 34, 96, 0); // 유닛 위치에서 치유 이펙트 (못 받았으면 초록 불똥만)
+        for (let k = 0, nk = healSprite ? 4 : 10; k < nk; k++) this.pt('spark', c.x + rnd(-8, 8), c.y - rnd(0, 20), rnd(-40, 40), rnd(-120, -40), rnd(2, 3.5), rnd(0.4, 0.8), '', true);
         audio.playSynth('heal');
         c.dead = true; break;
       }
@@ -962,7 +965,8 @@ export class Game {
     for (let i = 0; i < 8; i++) this.pt('spark', ox, oy, rnd(-90, 90), rnd(-90, 90), rnd(1.5, 3), rnd(0.2, 0.4));
     if (target) {
       this.damage(target, w.damage, '#9fd0ff', ex, ey);
-      this.pt('flash', ex, ey, 0, 0, 34, 0.25);
+      if (!this.sfxAdd('zap', ex, ey, 120, rnd(0, 6.283))) this.pt('flash', ex, ey, 0, 0, 34, 0.25); // 전기 스프라이트, 못 받았으면 예전 번쩍임
+      else this.pt('flash', ex, ey, 0, 0, 22, 0.18);
       for (let i = 0; i < 16; i++) this.pt('spark', ex, ey, rnd(-220, 220), rnd(-220, 160), rnd(1.5, 3.5), rnd(0.25, 0.55));
       audio.play('hit', { vol: 0.8 });
       if (target.alive) {
@@ -1434,6 +1438,7 @@ export class Game {
   drawBolt(g) {
     const b = this.bolt; if (!b) return;
     const len = Math.hypot(b.x2 - b.x1, b.y2 - b.y1), ux = (b.x2 - b.x1) / len, uy = (b.y2 - b.y1) / len;
+    if (fx.ready('zap')) { this.drawBoltSprites(g, b, len, ux, uy, Math.max(0, 1 - b.t / 0.3)); return; }
     const n = Math.max(2, Math.round(len / 16)), amp = 9;
     const pts = [];
     for (let i = 0; i <= n; i++) {
@@ -1448,6 +1453,25 @@ export class Game {
     g.strokeStyle = 'rgba(70,150,255,0.8)'; g.lineWidth = 9; path();
     g.shadowBlur = 8; g.strokeStyle = '#bfe0ff'; g.lineWidth = 4; path();
     g.shadowBlur = 0; g.strokeStyle = '#fff'; g.lineWidth = 1.8; path();
+    g.restore();
+  }
+
+  // 번개 스프라이트판(Lightning effect): 줄기를 따라 전기 조각을 겹쳐 놓고 가는 흰 심지를 얹는다. 조각 위치·방향은 번개마다 고정(b.seed), 그림 번호만 20fps로 바뀐다
+  // 모션 줄이기: 그림 한 장을 0.14초만. 느린 기기(lowFx): 더해 그리기와 글로우 생략
+  drawBoltSprites(g, b, len, ux, uy, fade) {
+    const a = fx.ANIMS.zap, rm = this.reduceMotion, glow = !this.lowFx;
+    if (rm && b.t > 0.14) return;
+    const step = this.lowFx ? 70 : 46, n = Math.min(24, Math.max(1, Math.ceil(len / step)));
+    const sk = b.seed, hash = (i) => { const v = Math.sin(sk * 12.9898 + i * 78.233) * 43758.5453; return v - Math.floor(v); };
+    for (let i = 0; i < n; i++) {
+      const k = (i + 0.5) / n, f = rm ? a.still : (((b.t * 20) | 0) + i) % a.n;
+      fx.drawFrame(g, a, f, b.x1 + ux * len * k, b.y1 + uy * len * k, 96, hash(i) * 6.283, fade * 0.95, glow);
+    }
+    g.save();
+    g.globalAlpha = fade; g.lineCap = 'round';
+    g.strokeStyle = '#eaf6ff'; g.lineWidth = 2.2;
+    if (glow) { g.shadowColor = '#4aa8ff'; g.shadowBlur = 10; }
+    g.beginPath(); g.moveTo(b.x1, b.y1); g.lineTo(b.x2, b.y2); g.stroke();
     g.restore();
   }
 
@@ -1481,11 +1505,22 @@ export class Game {
   // 화염 지대: 지면을 따라 깜빡이는 불꽃 + 붉은 바닥 광원 + 남은 턴
   drawFires(g) {
     const t = this.time;
+    let budget = this.lowFx ? 6 : 12; // 화염 스프라이트 그림 수 상한(지대 전체 합계)
     for (const f of this.fires) {
       g.save();
       g.translate(f.x, f.y + 4); // 원점에 만든 그라디언트를 재사용 (프레임마다 새로 만들지 않음)
       g.fillStyle = fireGlow(g, f.r); g.beginPath(); g.arc(0, 0, f.r, 0, 7); g.fill();
       g.translate(-f.x, -f.y - 4);
+      if (fx.ready('flame')) { // Fire Aura 스프라이트: 지면 위에 몇 개를 어긋난 박자로 깜빡이게 겹친다 (모션 줄이기: 정지 프레임)
+        const a = fx.ANIMS.flame, n = this.lowFx ? 2 : 3, glow = !this.lowFx;
+        for (let i = 0; i < n && budget > 0; i++, budget--) {
+          const x = f.x + (i - (n - 1) / 2) * f.r * 0.8, gy = this.fireGround(f, Math.round(x));
+          if (gy === null) continue;
+          const fr = this.reduceMotion ? a.still : (((t * a.fps + i * 5 + f.seed) | 0) % a.n + a.n) % a.n;
+          const fl = this.reduceMotion ? 0.8 : 0.72 + 0.2 * Math.sin(t * 11 + i * 2.1 + f.seed);
+          fx.drawFrame(g, a, fr, x, gy + 2, 62 - Math.abs(i - (n - 1) / 2) * 8, 0, fl, glow);
+        }
+      }
       for (let x = f.x - f.r + 3; x < f.x + f.r; x += 5) {
         const gy = this.fireGround(f, Math.round(x));
         if (gy === null) continue;
