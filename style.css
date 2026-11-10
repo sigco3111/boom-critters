@@ -147,9 +147,10 @@ body.touch .overlay.modal > .doc { flex: 0 1 auto; min-height: 0; }
 
 @media (orientation: landscape) {
   body.touch #stage { width: min(100vw, calc(100vh * 16 / 9)); width: min(100vw, calc(100dvh * 16 / 9)); }
-  /* 가로: 팀 HP 박스 바로 아래 가로 한 줄 (유닛·이름표는 이 높이 아래에 있음) */
-  body.touch #topBtns { left: 1%; right: auto; top: 13%; bottom: auto; flex-direction: row; gap: 4px; }
+  /* 가로: 팀 HP 박스와 유닛 정보 줄 아래 가로 한 줄 (유닛·이름표는 이 높이 아래에 있음) */
+  body.touch #topBtns { left: 1%; right: auto; top: 21%; bottom: auto; flex-direction: row; gap: 4px; }
   body.touch #topBtns button { width: 40px; height: 40px; min-width: 40px; min-height: 40px; padding: 0; }
+  body.touch.bighud #topBtns { top: 24.5%; } /* 큰 HUD 글씨: 유닛 정보 줄이 더 커지므로 그 아래로 */
 }
 
 @media (orientation: portrait) {
@@ -343,3 +344,18 @@ body.bighud.domhud #hud { grid-template-columns: 1fr 70px 1fr; }
 body.touch .overlay > .menuBg { margin: 0; }
 body.touch .overlay > .menuBg + * { margin-top: auto; } /* 터치 화면의 세로 가운데 정렬 규칙(:first-child)을 캔버스 다음 요소로 옮김 */
 @media (orientation: portrait) { body.touch .menuBg { position: fixed; } }
+
+/* ---------- 큰 HUD 글씨: 하단 무기 버튼의 이름·탄약도 +25% (높이는 그대로라 44px 터치 크기와 유닛 영역은 유지) ---------- */
+body.bighud #controls .weapons button { font-size: 18.75px; }
+body.bighud #controls .weapons .wk { font-style: normal; }
+@media (max-height: 460px) { body:not(.touch).bighud #controls .weapons button { font-size: 16.25px; } }
+body.touch.bighud #controls .weapons .wk { display: none; } /* 터치: 번호 대신 이름·탄약을 크게 */
+@media (orientation: portrait) {
+  body.touch.bighud #controls .weapons button { font-size: clamp(12.5px, 4vw, 16px); }
+  body.touch.bighud #controls .weapons .wa { font-size: clamp(12.5px, 3.75vw, 15px); }
+}
+@media (orientation: landscape) {
+  body.touch.bighud #controls .weapons button { font-size: clamp(12.5px, 1.8vw, 15px); min-width: 44px; max-width: 72px; }
+  body.touch.bighud #controls .weapons .wa { font-size: clamp(12.5px, 1.75vw, 15px); }
+}
+@media (orientation: landscape) and (max-width: 700px) { body.touch.bighud #controls .weapons button { min-width: 40px; } } /* 아주 좁은 가로 화면: 한 줄에 다 들어가도록 기존 최소 폭 */
