@@ -360,6 +360,7 @@ function setup(sprites) {
   applyA11y();
   const refreshMute = () => {
     muteBtn.innerHTML = audio.isMuted() ? '🔇<span class="tx"> 소리 꺼짐</span>' : '🔊<span class="tx"> 소리 켜짐</span>';
+    muteBtn.setAttribute('aria-label', audio.isMuted() ? '소리 켜기' : '소리 끄기');
     $('muteToggle').textContent = audio.isMuted() ? '꺼짐 (누르면 켜기)' : '켜짐 (누르면 끄기)';
   };
   muteBtn.addEventListener('click', () => { audio.initAudio(); audio.setMuted(!audio.isMuted()); refreshMute(); });
@@ -372,16 +373,46 @@ function setup(sprites) {
     if (kind === 'sfx') input.addEventListener('change', () => audio.play('sea_boom_small', { vol: 0.8 })); // 조절 후 미리 듣기
   }
   refreshMute();
-  const openModal = (id) => {
-    modalOpen = true; show(id); $('controls').inert = true;
-    for (const n in k) k[n] = false; game.releaseCharge(); game.drag = null;
+  // 모달 접근성: 열릴 때 안으로 포커스를 옮기고, Tab은 맨 위 모달 안에서만 돌며(포커스 트랩), 뒤쪽 화면은 inert로 막고, 닫히면 연 버튼으로 포커스를 돌려준다. Esc로 닫기는 키보드 처리에서
+  const openers = {};  // 모달 id -> 열기 직전 포커스 요소
+  const isOpen = (id) => !$(id).classList.contains('hidden');
+  const topModal = () => { const t = MODALS.filter(isOpen); return t.includes('tutorialScreen') ? 'tutorialScreen' : t[t.length - 1] || null; }; // 튜토리얼은 항상 위
+  const focusables = (root) => [...root.querySelectorAll('button, input, a[href], select, textarea, [tabindex]')]
+    .filter((el) => el.tabIndex >= 0 && !el.disabled && !el.hidden && !el.closest('[hidden], .hidden') && el.getClientRects().length > 0);
+  const syncModal = () => {
+    const top = topModal();
+    modalOpen = !!top;
+    // 맨 위 모달만 조작 가능, 나머지 화면·버튼·HUD는 inert (포커스·스크린리더 접근 차단)
+    document.querySelectorAll('#stage > *, #controls, #hud, #rotateHint').forEach((el) => { el.inert = modalOpen && el.id !== top; });
   };
-  const closeModal = (id) => { show(id, false); modalOpen = MODALS.some((m) => !$(m).classList.contains('hidden')); $('controls').inert = modalOpen; };
+  const openModal = (id) => {
+    openers[id] = document.activeElement;
+    show(id); syncModal();
+    for (const n in k) k[n] = false; game.releaseCharge(); game.drag = null;
+    const root = $(id);
+    if (id !== 'tutorialScreen') (focusables(root)[0] || root).focus({ preventScroll: true }); // 튜토리얼은 render()가 '다음'에 포커스
+  };
+  const closeModal = (id) => {
+    show(id, false); syncModal();
+    const back = openers[id]; openers[id] = null;
+    if (back && back.focus && document.contains(back) && back.getClientRects().length > 0 && !back.disabled) back.focus({ preventScroll: true });
+    else { const t = topModal(); if (t) (focusables($(t))[0] || $(t)).focus({ preventScroll: true }); }
+  };
+  const trapTab = (e) => {
+    const t = topModal();
+    if (!t) return;
+    const list = focusables($(t)), root = $(t);
+    if (!list.length) { e.preventDefault(); root.focus(); return; }
+    const first = list[0], last = list[list.length - 1], cur = document.activeElement;
+    if (!root.contains(cur)) { e.preventDefault(); first.focus(); }
+    else if (e.shiftKey && cur === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && cur === last) { e.preventDefault(); first.focus(); }
+  };
   // 튜토리얼: 키보드(→/←/Enter/Space/Esc)와 터치(다음·이전·건너뛰기 버튼) 모두 지원. 게임 방법 화면 위에서도 열 수 있음
   const tutorial = (() => {
     const scr = $('tutorialScreen');
     if (!scr) return { open() {}, close() {}, next() {}, prev() {}, isOpen: () => false };
-    let i = 0, back = null;
+    let i = 0;
     const render = () => {
       const st = TUT_STEPS[i];
       $('tutStep').textContent = `${i + 1} / ${TUT_STEPS.length}`;
@@ -401,14 +432,13 @@ function setup(sprites) {
       isOpen: () => !scr.classList.contains('hidden'),
       open() {
         if (api.isOpen()) return;
-        back = document.activeElement; i = 0;
+        i = 0;
         store.local.set(TUT_KEY, '1'); // 저장이 막혀 있으면 이번 접속 동안만 기억
         openModal('tutorialScreen'); render();
       },
       close() {
         if (!api.isOpen()) return;
         closeModal('tutorialScreen');
-        if (back && back.focus && document.contains(back)) back.focus({ preventScroll: true });
       },
       next() { if (i >= TUT_STEPS.length - 1) api.close(); else { i++; render(); } },
       prev() { if (i > 0) { i--; render(); } },
@@ -491,7 +521,8 @@ function setup(sprites) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (modalOpen) { // 모달이 열려 있으면 게임 키 대신 M(음소거)·Esc(닫기)만 처리
       if (e.code === 'KeyM' && !e.repeat) muteBtn.click();
-      else if (e.code === 'Escape') { if (tutorial.isOpen()) tutorial.close(); else MODALS.forEach((m) => !$(m).classList.contains('hidden') && closeModal(m)); }
+      else if (e.code === 'Escape') { const t = topModal(); if (t === 'tutorialScreen') tutorial.close(); else if (t) closeModal(t); } // 맨 위 모달 하나만 닫음 (일시정지면 계속하기)
+      else if (e.code === 'Tab') trapTab(e);
       else if (tutorial.isOpen() && (e.code === 'ArrowRight' || e.code === 'ArrowLeft')) { e.code === 'ArrowRight' ? tutorial.next() : tutorial.prev(); e.preventDefault(); }
       return;
     }
