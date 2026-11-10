@@ -1,10 +1,10 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111050';
-import * as audio from './audio.js?v=2026111050';
-import { t as tr, getLang } from './i18n.js?v=2026111050';
-import * as fx from './fx.js?v=2026111050';
-import { makeProps, drawProp, PW, PH, BARREL_R, BARREL_DMG, MINE_R, MINE_DMG, MINE_TRIGGER, MINE_SEE, PACK_CHANCE } from './props.js?v=2026111050';
-import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111050';
+import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111051';
+import * as audio from './audio.js?v=2026111051';
+import { t as tr, getLang } from './i18n.js?v=2026111051';
+import * as fx from './fx.js?v=2026111051';
+import { makeProps, drawProp, PW, PH, BARREL_R, BARREL_DMG, MINE_R, MINE_DMG, MINE_TRIGGER, MINE_SEE, PACK_CHANCE } from './props.js?v=2026111051';
+import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111051';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -136,7 +136,7 @@ const AI_UNLOCK = { 2: 2, 3: 3, 4: 4, 5: 4 };
 const BONUS_LEVEL = 7, BONUS_GRENADE = 1, BONUS_BOLT = 1; // 우리 팀 보너스 탄약: 적 4마리 구간(level 7+)에서 수류탄 +1, 번개 +1
 // 스테이지 모드 AI 오차 [각도 오차 °, 파워 오차]: window.__sim 승률 측정으로 정한 값 (README "밸런스" 표). 보통 플레이어(3°/6 오차) 목표 승률 약 스테이지 1 95% · 3 88% · 5 70% · 7 55% · 9 40% · 10 30%.
 // 지형마다 난이도가 달라 오차가 단조롭지 않다(4는 3보다, 10은 9보다 오차가 크다). 스테이지 1~3은 상위 6개 후보 중 무작위로 고르는(pick) 부정확한 조준
-const STAGE_AI = [null, [17, 34], [13, 26], [9, 18], [13, 26], [4.6, 9.2], [8, 16], [5.6, 11.2], [3.2, 6.4], [3.3, 6.6], [5.2, 10.4], [4.8, 9.6], [4.6, 9.2], [5.2, 10.4]];
+const STAGE_AI = [null, [17, 34], [13, 26], [9, 18], [13, 26], [4.6, 9.2], [8, 16], [5.6, 11.2], [3.2, 6.4], [3.3, 6.6], [5.2, 10.4], [4.8, 9.6], [4.6, 9.2], [3.4, 6.8]];
 // 스테이지 s(1~10): 고정 시드, 적 수 2→4(1~3: 2마리, 4~6: 3마리, 7~10: 4마리), 바람 범위 ±(3+s), AI level = s
 export function stageConfig(s) {
   return { mode: 'stage', stage: s, seed: 20240 + s * 7919, enemies: s <= 3 ? 2 : s <= 6 ? 3 : 4, windMax: Math.min(14, 3 + s), level: s, terrain: STAGE_TERRAIN[s] };

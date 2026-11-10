@@ -1,7 +1,7 @@
 // 언어(한국어/영어) 사전과 도우미. 기본값은 navigator.language(ko*이면 한국어, 아니면 영어)이고 선택은 localStorage('boom-lang')에 저장한다
 // (저장소가 막힌 환경에서는 storage.js가 메모리에만 보관). index.html의 한국어 문구는 그대로 두고, data-i18n 속성이 붙은 요소만 영어일 때 사전 값으로 바꾼다
 // 사용법: t('키', { 값 }) — JS에서 쓰는 문구. applyDom() — data-i18n(텍스트) · data-i18n-html(서식 포함) · data-i18n-aria · data-i18n-title 속성을 가진 요소를 바꾼다
-import { local } from './storage.js?v=2026111050';
+import { local } from './storage.js?v=2026111051';
 
 const KEY = 'boom-lang';
 export const LANGS = ['ko', 'en'];
@@ -52,7 +52,7 @@ const KO = {
   'tut.1.t': '이동과 점프', 'tut.1.a.k': '키보드', 'tut.1.a.v': 'A·D (또는 ←·→)로 걷고, W로 점프', 'tut.1.b.k': '터치', 'tut.1.b.v': '화면의 ◀ ▶ 와 점프 버튼', 'tut.1.c.k': '팁', 'tut.1.c.v': '턴마다 30초! 같은 팀 유닛이 차례로 움직여요',
   'tut.2.t': '조준하고 힘을 모아 발사', 'tut.2.a.k': '키보드', 'tut.2.a.v': '↑·↓ 로 각도 → Space를 꾹 눌러 파워를 모았다가 떼면 발사', 'tut.2.b.k': '터치', 'tut.2.b.v': '오른쪽 화면을 끌어 각도·파워를 정하고 손을 떼면 발사 (발사 버튼 꾹도 가능). 끄는 동안 점선 궤적 힌트가 보여요', 'tut.2.c.k': '팁', 'tut.2.c.v': '바람 화살표를 보고 보정하세요',
   'tut.3.t': '무기 1~6', 'tut.3.a.k': '교체', 'tut.3.a.v': '숫자 1~6 키 또는 무기 버튼 (무기 바를 빠르게 두 번 누르면 다음 무기로)', 'tut.3.b.k': '종류', 'tut.3.b.v': '1 대포탄 · 2 로켓 · 3 수류탄(3초 뒤 폭발) · 4 번개(직선) · 5 화염탄(불길 3턴) · 6 공습(목표 지정 후 폭탄 5발)', 'tut.3.c.k': '탄약', 'tut.3.c.v': '3~6번은 개수가 제한돼요 (공습은 스테이지 4부터)',
-  'tut.4.t': '보급 상자와 화염 지대', 'tut.4.a.k': '상자', 'tut.4.a.v': '4턴마다 낙하산 상자가 떨어져요. 닿으면 HP +30', 'tut.4.b.k': '화염', 'tut.4.b.v': '불길 안에 서 있으면 턴 시작 때 8 피해 — 벗어나세요', 'tut.4.c.k': '주의', 'tut.4.c.v': '물에 빠지면 즉사! 섬 가장자리와 구덩이를 조심',
+  'tut.4.t': '보급 상자·장애물·화염', 'tut.4.a.k': '상자', 'tut.4.a.v': '4턴마다 낙하산 상자가 떨어져요. 닿으면 HP +30', 'tut.4.b.k': '화염', 'tut.4.b.v': '불길 안에 서 있으면 턴 시작 때 8 피해 — 벗어나세요', 'tut.4.c.k': '주의', 'tut.4.c.v': '물에 빠지면 즉사! 섬 가장자리와 구덩이를 조심', 'tut.4.d.k': '장애물', 'tut.4.d.v': '나무 상자는 부수면 치유 상자가 나오고, 폭발 통은 연쇄로 터져요. 땅속 지뢰(깜빡이는 점)는 밟으면 턴이 끝나요',
   'lang.name': '한국어', 'lang.btn': 'English로 전환',
 };
 
@@ -103,7 +103,7 @@ const EN = {
   'tut.1.t': 'Move and jump', 'tut.1.a.k': 'Keyboard', 'tut.1.a.v': 'A·D (or ←·→) to walk, W to jump', 'tut.1.b.k': 'Touch', 'tut.1.b.v': 'Use ◀ ▶ and the Jump button', 'tut.1.c.k': 'Tip', 'tut.1.c.v': '30 seconds per turn! Your units take turns',
   'tut.2.t': 'Aim, charge and fire', 'tut.2.a.k': 'Keyboard', 'tut.2.a.v': '↑·↓ sets the angle. Hold Space to charge, release to fire', 'tut.2.b.k': 'Touch', 'tut.2.b.v': 'Drag on the right side to set angle and power, release to fire (or hold the Fire button). A dotted trajectory hint shows while you drag', 'tut.2.c.k': 'Tip', 'tut.2.c.v': 'Watch the wind arrow and adjust',
   'tut.3.t': 'Weapons 1-6', 'tut.3.a.k': 'Switch', 'tut.3.a.v': 'Keys 1-6 or the weapon buttons (double-tap the weapon bar to cycle to the next weapon)', 'tut.3.b.k': 'Types', 'tut.3.b.v': '1 Cannon · 2 Rocket · 3 Grenade (explodes in 3s) · 4 Bolt (straight line) · 5 Fire (burns 3 turns) · 6 Airstrike (pick a target, 5 bombs)', 'tut.3.c.k': 'Ammo', 'tut.3.c.v': 'Weapons 3-6 are limited (Airstrike from stage 4)',
-  'tut.4.t': 'Supply crates and fire', 'tut.4.a.k': 'Crate', 'tut.4.a.v': 'A parachute crate drops every 4 turns. Touch it for HP +30', 'tut.4.b.k': 'Fire', 'tut.4.b.v': 'Standing in flames costs 8 HP at turn start - move away', 'tut.4.c.k': 'Careful', 'tut.4.c.v': 'Falling in water is instant defeat! Watch island edges and craters',
+  'tut.4.t': 'Crates, obstacles and fire', 'tut.4.a.k': 'Crate', 'tut.4.a.v': 'A parachute crate drops every 4 turns. Touch it for HP +30', 'tut.4.b.k': 'Fire', 'tut.4.b.v': 'Standing in flames costs 8 HP at turn start - move away', 'tut.4.c.k': 'Careful', 'tut.4.c.v': 'Falling in water is instant defeat! Watch island edges and craters', 'tut.4.d.k': 'Obstacles', 'tut.4.d.v': 'Wooden crates may drop a health pack, barrels explode in chains, and a buried mine (blinking dot) ends your turn when stepped on',
   'lang.name': 'English', 'lang.btn': '한국어로 전환',
 
   // ---------- index.html 정적 문구 ----------
@@ -152,6 +152,7 @@ const EN = {
   'hp.c6.k': 'Woman', 'hp.c6.v': 'Steady aim +15% - AI aim error -15%; when you control her, power charges 15% slower so it is easier to release at the right power (enemy team)',
   'hp.c7.k': 'Man 2', 'hp.c7.v': 'Balanced - the 4th enemy unit with an orange name tag',
   'hp.crate.h': 'Supply crates', 'hp.crate.p': 'A parachute crate drops every 4th turn. A unit touching it gets HP +30 (max 100) and a clear chime. Explosions destroy it. Standing in flames costs HP at turn start, so move away.',
+  'hp.obs.h': 'Obstacles', 'hp.obs.crate.k': 'Wooden crate', 'hp.obs.crate.v': '30 HP. Breaking it has a 25% chance to drop a health pack (HP +30)', 'hp.obs.barrel.k': 'Explosive barrel', 'hp.obs.barrel.v': '20 HP. Explodes with radius 45 and 30 damage, leaves a crater and scorch, and chains into nearby barrels and crates', 'hp.obs.mine.k': 'Mine', 'hp.obs.mine.v': 'Buried; stepping within 14px blasts radius 40 for 35 damage and ends that unit\'s turn. A blinking dot shows within 70px, or when a nearby blast reveals it. The AI avoids mines it knows. Units walk through obstacles; only shots and grenades collide',
   'hp.modes.h': 'Modes',
   'hp.m1.k': 'Quick Match', 'hp.m1.v': 'Pick a difficulty on the start screen and press "Start Quick Match". Easy (2 enemies, big AI error) · Normal (3 enemies) · Hard (4 enemies, small AI error). You can also pick the map: Theme (Random · Meadow · Desert · Snow · Night) and Terrain (Random · Gentle · Hills · Canyon · Island · Bridge). Your choices are saved and shown on the result screen',
   'hp.m2.k': 'Stages', 'hp.m2.v': '13 stages; winning unlocks the next (stage 11 islands, 12 bridge at night, 13 canyon bridge). 1-3 stars by survivors. From stage 7 there are 4 enemies, so your team gets +1 grenade (4) and +1 bolt (3)',
