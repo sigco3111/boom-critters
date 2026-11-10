@@ -27,8 +27,15 @@
 | 발사 | Space 꾹 눌러 파워 충전 → 떼면 발사 (번개는 파워와 무관, 각도 방향으로 즉시 발사) | 발사 버튼 꾹 → 떼기 |
 | 무기 변경 | 1 대포탄 · 2 로켓 · 3 수류탄 · 4 번개 · 5 화염탄 | 하단 HUD 무기 버튼 / 화면 무기 버튼 |
 | 음소거 | M | 우하단 소리 버튼 |
+| 설정 | Esc로 닫기 | 우하단 ⚙ 버튼 (음악·효과음 볼륨 슬라이더, 음소거) |
 
 > 참고: 점프와 발사 모두 Space를 쓰면 충돌하므로 점프는 W, 발사 충전은 Space로 나눴습니다.
+
+## 소리와 설정
+- 효과음: 대포탄·로켓 발사와 폭발, 물에 빠지는 소리는 Battle at sea(CC0), 나머지는 Kenney Impact/Interface Sounds(CC0).
+- 배경음악: Matthew Pablo의 *Enchanted Festival*(CC-BY 3.0, 루프 버전을 OGG로 변환). 브라우저 정책상 **첫 클릭/터치/키 입력 뒤에** 재생이 시작되며, 결과 화면에서는 볼륨이 낮아집니다. 루프 이음매의 클릭 소리를 막으려고 파일 자체에 0.4초 크로스페이드를 적용했습니다.
+- 우하단 **⚙ 설정**(시작 화면·경기 중 모두 사용 가능, 경기 중에는 일시정지): 음악/효과음 볼륨 슬라이더와 음소거. 값은 `localStorage`에 저장됩니다.
+- 시작 화면의 **게임 방법**(조작·무기·상자·모드)과 **크레딧**(에셋 출처·라이선스) 화면에서 안내를 볼 수 있습니다.
 
 ## 난이도 (AI)
 AI는 후보 (각도, 파워) 쌍을 지형·바람과 함께 시뮬레이션해 목표 근처에 떨어지는 값을 고른 뒤, 난이도(스테이지·웨이브에서는 번호에 따라 단계별)에 따른 오차(쉬움 > 보통 > 어려움)를 더해 발사합니다.
@@ -44,14 +51,14 @@ AI는 상황에 따라 무기를 고릅니다 (탄약이 남아 있을 때):
 ## 구조
 ```
 index.html  style.css
-js/main.js     진입점, 입력, UI(모드·스테이지 선택·결과 화면), 루프
+js/main.js     진입점, 입력, UI(모드·스테이지 선택·결과·설정·도움말·크레딧 화면), 루프
 js/game.js     유닛 물리, 턴 흐름, 투사체, AI, 스테이지/웨이브 설정, 렌더링
 js/progress.js 진행 상황 저장 (localStorage)
 js/terrain.js  높이맵 생성, 오프스크린 캔버스 지형, destination-out 크레이터
-js/audio.js    Web Audio 효과음
-assets/        Kenney CC0 Toon Characters 1 캐릭터 포즈(assets/toon)/효과음 (CREDITS.md 참고)
+js/audio.js    Web Audio 효과음·배경음악, 볼륨 설정
+assets/        캐릭터 포즈(assets/toon), 효과음(assets/sfx), 배경음악(assets/music) (CREDITS.md 참고)
 ```
 로컬 실행: 정적 서버로 폴더를 열면 됩니다 (예: `python3 -m http.server`). ES 모듈 때문에 `file://` 로는 열리지 않습니다.
 
 ## 라이선스
-코드: MIT (`LICENSE`). 에셋: Kenney, CC0 (`CREDITS.md`).
+코드: MIT (`LICENSE`). 에셋: Kenney·Thimras CC0, **Enchanted Festival by Matthew Pablo — CC-BY 3.0** (`CREDITS.md`, 게임 내 크레딧 화면).
