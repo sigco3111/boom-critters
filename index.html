@@ -16,21 +16,46 @@
 
       <div id="startScreen" class="overlay hidden">
         <h1>붐 크리터스</h1>
-        <p class="sub">귀여운 캐릭터 3명으로 상대 팀을 포격하세요! (1단계)</p>
-        <div class="row">
-          <button type="button" data-diff="easy">쉬움</button>
-          <button type="button" data-diff="normal">보통</button>
-          <button type="button" data-diff="hard">어려움</button>
+        <p class="sub">귀여운 캐릭터 3명으로 상대 팀을 포격하세요!</p>
+        <div class="modes">
+          <div class="mode">
+            <h2>빠른 대전</h2>
+            <p>3 vs 3 단판 승부</p>
+            <div class="col">
+              <button type="button" data-diff="easy">쉬움</button>
+              <button type="button" data-diff="normal">보통</button>
+              <button type="button" data-diff="hard">어려움</button>
+            </div>
+          </div>
+          <div class="mode">
+            <h2>스테이지 모드</h2>
+            <p>10개 스테이지 · 별 최대 3개</p>
+            <div class="col"><button type="button" id="stageModeBtn" class="big">스테이지 모드</button></div>
+          </div>
+          <div class="mode">
+            <h2>무한 모드</h2>
+            <p id="endlessBest">최고 기록: 0 웨이브</p>
+            <div class="col"><button type="button" id="endlessModeBtn" class="big">무한 모드</button></div>
+          </div>
         </div>
         <p class="help">이동 A/D 또는 ←/→ · 점프 W · 각도 ↑/↓ 또는 드래그 · 파워 Space 꾹 눌렀다 떼기 · 무기 1~5 · 음소거 M</p>
       </div>
 
+      <div id="stageScreen" class="overlay hidden">
+        <h1>스테이지 선택</h1>
+        <div id="stageGrid"></div>
+        <button type="button" id="stageBackBtn">뒤로</button>
+      </div>
+
       <div id="resultScreen" class="overlay hidden">
         <h1 id="resultTitle"></h1>
+        <p id="resultStars" class="stars hidden"></p>
         <p id="resultSub" class="sub"></p>
         <div class="row">
+          <button type="button" id="nextBtn" class="hidden">다음 스테이지</button>
           <button type="button" id="againBtn">다시 하기</button>
-          <button type="button" id="menuBtn">난이도 선택</button>
+          <button type="button" id="stageSelBtn" class="hidden">스테이지 선택</button>
+          <button type="button" id="menuBtn">처음으로</button>
         </div>
       </div>
     </div>
