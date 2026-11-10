@@ -5,6 +5,9 @@ html, body { margin: 0; height: 100%; height: 100dvh; background: #12202e; color
 canvas { width: 100%; height: 100%; display: block; touch-action: none; user-select: none; -webkit-user-select: none; }
 .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(2 * var(--cq)); background: rgba(10, 25, 45, 0.78); text-align: center; font-size: calc(2 * var(--cq)); padding: calc(2 * var(--cq)); }
 .overlay.hidden, .hidden { display: none; }
+#resultScreen { background: rgba(10, 25, 45, 0.5); } /* 뒤의 경기 화면(승리 점프)이 비쳐 보이도록 다른 화면보다 옅게 */
+#resultScreen .sub, #resultScreen .rk { text-shadow: 0 1px 3px #000c, 0 0 6px #0008; }
+#resultScreen .rstats .rs { background: rgba(10, 25, 45, 0.55); }
 .overlay h1 { margin: 0; font-size: calc(6 * var(--cq)); text-shadow: 0 calc(0.4 * var(--cq)) 0 #0006; }
 .overlay .sub { margin: 0; font-size: calc(2.3 * var(--cq)); color: #cfe3f7; }
 .overlay .help { margin: 0; font-size: calc(1.6 * var(--cq)); color: #9fb8d0; max-width: 72%; line-height: 1.5; }
