@@ -316,3 +316,11 @@ body.touch .rstats .rs:nth-child(4) { flex-basis: 180px; }
 body.touch .rstats .rk { font-size: 12px; }
 body.touch .rstats .rv { font-size: 20px; }
 body.touch .rstats small { font-size: 12px; }
+
+/* ---------- 빠른 대전 난이도 선택 · 결과 화면 난이도 ---------- */
+.seg { display: flex; gap: calc(0.5 * var(--cq)); align-self: stretch; }
+.overlay .mode .seg button { flex: 1; font-size: calc(2 * var(--cq)); padding: calc(0.7 * var(--cq)) calc(0.6 * var(--cq)); background: rgba(255, 255, 255, 0.12); border: 2px solid rgba(255, 255, 255, 0.28); border-radius: 10px; }
+.overlay .mode .seg button:hover { background: rgba(255, 255, 255, 0.22); }
+.overlay .mode .seg button.sel { background: #2f6fb5; border-color: #ffe27a; box-shadow: 0 0 0 1px #ffe27a inset; font-weight: 800; }
+.overlay .sub.diff { color: #ffe27a; font-weight: 700; }
+body.touch .overlay .mode .seg button { font-size: 16px; padding: 8px 6px; }
