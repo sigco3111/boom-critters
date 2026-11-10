@@ -9,6 +9,7 @@ const PROJ_G = 500;      // 투사체 중력
 const UNIT_H = 38, HALF_W = 9;
 const BODY_CY = 26;      // 몸통 중심 높이 (발 기준 위쪽, 스프라이트 키 약 52px)
 const BODY_R = 15;       // 투사체 명중 판정 반경(몸통 중심 기준)
+const TAG_TOP = 84, TAG_H = 26; // 이름표+HP 블록: 발 위 84px부터 높이 26px
 const BODY_HALF = 8;     // 몸통 캡슐의 세로 반길이 (중심에서 위/아래)
 const FALL_T = 80;       // 낙하 데미지 임계 높이
 const TURN_TIME = 30;
@@ -532,7 +533,7 @@ export class Game {
     if (showAim) this.drawAim(g);
     if (this.proj) this.drawProj(g, this.proj);
     this.drawParticles(g);
-    for (const u of this.units) if (u.alive) this.drawBar(g, u);
+    this.drawTags(g);
     for (const f of this.floaters) {
       g.globalAlpha = Math.max(0, 1 - f.t / 1.2);
       this.text(g, f.text, f.x, f.y - f.t * 30, 18, f.color);
@@ -582,22 +583,53 @@ export class Game {
     }
   }
 
-  drawBar(g, u) {
-    const bw = 34, bx = u.x - bw / 2, by = u.y - 62;
-    g.fillStyle = 'rgba(0,0,0,0.65)'; g.fillRect(bx - 1, by - 1, bw + 2, 8);
-    g.fillStyle = TEAMS[u.team].color; g.fillRect(bx, by, bw * (u.hp / 100), 6);
-    g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(bx, by, bw * (u.hp / 100), 2);
-    this.text(g, String(u.hp), u.x, by - 8, 11);
-    // 팀 색 이름표 (HP 바 위)
+  // 이름표 + HP 바를 한 블록으로 머리 위에 그린다. 이웃과 겹치면 가로로 밀어낸다.
+  drawTags(g) {
     g.font = '700 10px "Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif';
-    const tw = Math.ceil(g.measureText(u.name).width) + 10;
-    g.fillStyle = TEAMS[u.team].color; g.strokeStyle = '#fff'; g.lineWidth = 1.5;
-    g.beginPath(); g.roundRect(u.x - tw / 2, by - 29, tw, 13, 4); g.fill(); g.stroke();
-    this.text(g, u.name, u.x, by - 22, 10);
+    const tags = this.units.filter((u) => u.alive).map((u) => ({
+      u, w: Math.max(46, Math.ceil(g.measureText(u.name).width) + 10), x: u.x, y: u.y - TAG_TOP,
+    }));
+    // 가로로 겹치는(세로 범위도 겹치는) 블록 쌍을 서로 밀어낸다
+    tags.sort((p, q) => p.u.x - q.u.x);
+    for (let it = 0; it < 10; it++) {
+      let moved = false;
+      for (let i = 0; i < tags.length; i++) {
+        for (let j = i + 1; j < tags.length; j++) {
+          const p = tags[i], q = tags[j];
+          if (Math.abs(p.y - q.y) >= TAG_H + 2) continue;
+          const need = (p.w + q.w) / 2 + 3 - (q.x - p.x);
+          if (need > 0.5) { p.x -= need / 2; q.x += need / 2; moved = true; }
+        }
+      }
+      if (!moved) break;
+    }
+    for (const t of tags) {
+      t.x = clamp(t.x, t.w / 2 + 2, W - t.w / 2 - 2);
+      this.drawTag(g, t);
+    }
+  }
+
+  drawTag(g, { u, w, x, y }) {
+    const col = TEAMS[u.team].color, left = x - w / 2;
+    // 이름표
+    g.fillStyle = col; g.strokeStyle = '#fff'; g.lineWidth = 1.5;
+    g.beginPath(); g.roundRect(left, y, w, 13, 4); g.fill(); g.stroke();
+    this.text(g, u.name, x, y + 7, 10);
+    // HP 바 (이름표 바로 아래, 숫자는 바 안)
+    const by = y + 15;
+    g.fillStyle = 'rgba(0,0,0,0.7)'; g.fillRect(left, by, w, 11);
+    g.fillStyle = col; g.fillRect(left + 1, by + 1, (w - 2) * (u.hp / 100), 9);
+    g.fillStyle = 'rgba(255,255,255,0.3)'; g.fillRect(left + 1, by + 1, (w - 2) * (u.hp / 100), 3);
+    this.text(g, String(u.hp), x, by + 6, 9);
+    // 머리와 어긋났을 때 연결선
+    if (Math.abs(x - u.x) > 6) {
+      g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(x, y + TAG_H); g.lineTo(u.x, u.y - 54); g.stroke();
+    }
     if (u === this.activeUnit && (this.state === 'aim' || this.state === 'flying')) {
-      const ay = by - 42 + Math.sin(this.time * 6) * 3;
-      g.fillStyle = TEAMS[u.team].color; g.strokeStyle = '#fff'; g.lineWidth = 2;
-      g.beginPath(); g.moveTo(u.x - 7, ay - 8); g.lineTo(u.x + 7, ay - 8); g.lineTo(u.x, ay + 2); g.closePath(); g.fill(); g.stroke();
+      const ay = y - 10 + Math.sin(this.time * 6) * 3;
+      g.fillStyle = col; g.strokeStyle = '#fff'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(x - 7, ay - 8); g.lineTo(x + 7, ay - 8); g.lineTo(x, ay + 2); g.closePath(); g.fill(); g.stroke();
     }
   }
 
