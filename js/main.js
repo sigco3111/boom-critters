@@ -1,9 +1,9 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111022';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, stageConfig, waveConfig } from './game.js?v=2026111022';
-import * as audio from './audio.js?v=2026111022';
-import * as progress from './progress.js?v=2026111022';
+const VERSION = '2026111023';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, stageConfig, waveConfig } from './game.js?v=2026111023';
+import * as audio from './audio.js?v=2026111023';
+import * as progress from './progress.js?v=2026111023';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -73,7 +73,16 @@ const stars = (n) => '★'.repeat(n) + '☆'.repeat(3 - n);
 const show = (id, on = true) => $(id).classList.toggle('hidden', !on);
 // 설정·크레딧·도움말 같은 모달이 열려 있으면 경기를 멈추고 게임 키 입력을 막음
 let modalOpen = false;
-const MODALS = ['settingsScreen', 'helpScreen', 'creditsScreen', 'pauseScreen'];
+const MODALS = ['settingsScreen', 'helpScreen', 'creditsScreen', 'pauseScreen', 'tutorialScreen'].filter((id) => document.getElementById(id)); // 없는 화면(구버전 HTML)은 제외
+
+// 첫 실행 튜토리얼 (4단계). 본 적이 있으면 localStorage 플래그로 다시 띄우지 않고, 게임 방법 화면의 '튜토리얼 보기'로 언제든 다시 볼 수 있다
+const TUT_KEY = 'boom-tutorial-done';
+const TUT_STEPS = [
+  { icon: '🏃', title: '이동과 점프', lines: [['키보드', 'A·D (또는 ←·→)로 걷고, W로 점프'], ['터치', '화면의 ◀ ▶ 와 점프 버튼'], ['팁', '턴마다 30초! 같은 팀 유닛이 차례로 움직여요']] },
+  { icon: '🎯', title: '조준하고 힘을 모아 발사', lines: [['키보드', '↑·↓ 로 각도 → Space를 꾹 눌러 파워를 모았다가 떼면 발사'], ['터치', '오른쪽 화면을 끌어 각도·파워를 정하고 손을 떼면 발사 (발사 버튼 꾹도 가능)'], ['팁', '바람 화살표를 보고 보정하세요']] },
+  { icon: '💣', title: '무기 1~6', lines: [['교체', '숫자 1~6 키 또는 무기 버튼'], ['종류', '1 대포탄 · 2 로켓 · 3 수류탄(3초 뒤 폭발) · 4 번개(직선) · 5 화염탄(불길 3턴) · 6 공습(목표 지정 후 폭탄 5발)'], ['탄약', '3~6번은 개수가 제한돼요 (공습은 스테이지 4부터)']] },
+  { icon: '📦', title: '보급 상자와 화염 지대', lines: [['상자', '4턴마다 낙하산 상자가 떨어져요. 닿으면 HP +30'], ['화염', '불길 안에 서 있으면 턴 시작 때 8 피해 — 벗어나세요'], ['주의', '물에 빠지면 즉사! 섬 가장자리와 구덩이를 조심']] },
+];
 
 function showResult(winner) {
   setTimeout(() => {
@@ -238,6 +247,49 @@ function setup(sprites) {
     for (const n in k) k[n] = false; game.releaseCharge(); game.drag = null;
   };
   const closeModal = (id) => { show(id, false); modalOpen = MODALS.some((m) => !$(m).classList.contains('hidden')); $('controls').inert = modalOpen; };
+  // 튜토리얼: 키보드(→/←/Enter/Space/Esc)와 터치(다음·이전·건너뛰기 버튼) 모두 지원. 게임 방법 화면 위에서도 열 수 있음
+  const tutorial = (() => {
+    const scr = $('tutorialScreen');
+    if (!scr) return { open() {}, close() {}, next() {}, prev() {}, isOpen: () => false };
+    let i = 0, back = null;
+    const render = () => {
+      const st = TUT_STEPS[i];
+      $('tutStep').textContent = `${i + 1} / ${TUT_STEPS.length}`;
+      $('tutIcon').textContent = st.icon;
+      $('tutTitle').textContent = st.title;
+      const ul = $('tutBody'); ul.textContent = '';
+      for (const [tag, text] of st.lines) {
+        const li = document.createElement('li'), b = document.createElement('b');
+        b.textContent = tag; li.append(b, ' ' + text); ul.appendChild(li);
+      }
+      $('tutDots').innerHTML = TUT_STEPS.map((_, n) => `<i class="${n === i ? 'on' : ''}"></i>`).join('');
+      $('tutPrev').hidden = i === 0;
+      $('tutNext').textContent = i === TUT_STEPS.length - 1 ? '시작하기' : '다음';
+      $('tutNext').focus({ preventScroll: true });
+    };
+    const api = {
+      isOpen: () => !scr.classList.contains('hidden'),
+      open() {
+        if (api.isOpen()) return;
+        back = document.activeElement; i = 0;
+        try { localStorage.setItem(TUT_KEY, '1'); } catch (e) { /* 저장 불가면 이번 접속에서만 */ }
+        openModal('tutorialScreen'); render();
+      },
+      close() {
+        if (!api.isOpen()) return;
+        closeModal('tutorialScreen');
+        if (back && back.focus && document.contains(back)) back.focus({ preventScroll: true });
+      },
+      next() { if (i >= TUT_STEPS.length - 1) api.close(); else { i++; render(); } },
+      prev() { if (i > 0) { i--; render(); } },
+    };
+    $('tutNext').addEventListener('click', () => { audio.play('select'); api.next(); });
+    $('tutPrev').addEventListener('click', () => { audio.play('select'); api.prev(); });
+    $('tutSkip').addEventListener('click', () => { audio.play('select'); api.close(); });
+    return api;
+  })();
+  $('helpTutorialBtn')?.addEventListener('click', () => { audio.play('select'); tutorial.open(); });
+
   // 게임 방법·크레딧: 시작 화면에서 열고 닫으면 시작 화면으로 복귀
   for (const [open, scr, close] of [['helpBtn', 'helpScreen', 'helpCloseBtn'], ['creditsBtn', 'creditsScreen', 'creditsCloseBtn']]) {
     $(open).addEventListener('click', () => { audio.play('select'); openModal(scr); });
@@ -269,7 +321,8 @@ function setup(sprites) {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (modalOpen) { // 모달이 열려 있으면 게임 키 대신 M(음소거)·Esc(닫기)만 처리
       if (e.code === 'KeyM' && !e.repeat) muteBtn.click();
-      else if (e.code === 'Escape') MODALS.forEach((m) => !$(m).classList.contains('hidden') && closeModal(m));
+      else if (e.code === 'Escape') { if (tutorial.isOpen()) tutorial.close(); else MODALS.forEach((m) => !$(m).classList.contains('hidden') && closeModal(m)); }
+      else if (tutorial.isOpen() && (e.code === 'ArrowRight' || e.code === 'ArrowLeft')) { e.code === 'ArrowRight' ? tutorial.next() : tutorial.prev(); e.preventDefault(); }
       return;
     }
     if (e.code === 'Escape') { if (!e.repeat) pauseGame(); return; }
@@ -338,6 +391,11 @@ function setup(sprites) {
   canvas.addEventListener('pointercancel', endDrag(false));
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   document.addEventListener('gesturestart', (e) => e.preventDefault()); // iOS 핀치 줌 방지
+
+  // 첫 실행이면 튜토리얼을 자동으로 띄움
+  let seen = false;
+  try { seen = localStorage.getItem(TUT_KEY) === '1'; } catch (e) { /* ignore */ }
+  if (!seen) tutorial.open();
 
   // 메인 루프
   const fireBtn = $('bFire'), fireFx = fireBtn.querySelector('.fx'), fireLabel = fireBtn.querySelector('.fl');
