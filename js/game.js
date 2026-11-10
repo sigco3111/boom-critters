@@ -1,8 +1,8 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111039';
-import * as audio from './audio.js?v=2026111039';
-import { t as tr } from './i18n.js?v=2026111039';
-import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111039';
+import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111040';
+import * as audio from './audio.js?v=2026111040';
+import { t as tr } from './i18n.js?v=2026111040';
+import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111040';
 
 export { W, H };
 export const WATER_Y = 496;

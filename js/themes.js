@@ -1,6 +1,6 @@
 // 스테이지 테마: 배경(하늘·구름·별·언덕)과 지형/물 색을 캔버스 코드로 그린다 (외부 이미지 없음)
-import { W, H, mulberry32 } from './terrain.js?v=2026111039';
-import { t as tr } from './i18n.js?v=2026111039';
+import { W, H, mulberry32 } from './terrain.js?v=2026111040';
+import { t as tr } from './i18n.js?v=2026111040';
 
 export const THEMES = [
   {

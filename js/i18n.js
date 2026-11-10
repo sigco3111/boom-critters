@@ -1,7 +1,7 @@
 // 언어(한국어/영어) 사전과 도우미. 기본값은 navigator.language(ko*이면 한국어, 아니면 영어)이고 선택은 localStorage('boom-lang')에 저장한다
 // (저장소가 막힌 환경에서는 storage.js가 메모리에만 보관). index.html의 한국어 문구는 그대로 두고, data-i18n 속성이 붙은 요소만 영어일 때 사전 값으로 바꾼다
 // 사용법: t('키', { 값 }) — JS에서 쓰는 문구. applyDom() — data-i18n(텍스트) · data-i18n-html(서식 포함) · data-i18n-aria · data-i18n-title 속성을 가진 요소를 바꾼다
-import { local } from './storage.js?v=2026111039';
+import { local } from './storage.js?v=2026111040';
 
 const KEY = 'boom-lang';
 export const LANGS = ['ko', 'en'];
@@ -125,7 +125,7 @@ const EN = {
   'hp.weapon.k': 'Change weapon', 'hp.weapon.v': 'Keys 1-6 or the bottom weapon buttons (6 Airstrike from stage 4)',
   'hp.pause.k': 'Pause', 'hp.pause.v': 'Esc or the ⏸ button (resume · restart match · back to menu)',
   'hp.sound.k': 'Sound', 'hp.sound.v': 'M to mute · ⚙ Settings (music/effects volume). Bolt, airstrike whistle, grenade tick and heal chime follow the effects volume and mute. The win/lose jingle follows the music volume and briefly lowers the music. On old devices that cannot play OGG (e.g. old iOS Safari), music falls back to MP3 and effects/jingles to synthesized sounds, with the same volume and mute',
-  'hp.a11y.k': 'Accessibility', 'hp.a11y.v': 'In ⚙ Settings you can turn on <b>Large HUD text</b> (HUD text and weapon buttons +25%) and <b>High-contrast teams</b> (blue ● circle for you, red ◆ diamond for the enemy on name tags, team HP boxes and turn banners). Settings are saved',
+  'hp.a11y.k': 'Accessibility', 'hp.a11y.v': 'In ⚙ Settings you can turn on <b>Large HUD text</b> (HUD text and weapon buttons +25%) and <b>High-contrast teams</b> (blue ● circle for you, red ◆ diamond for the enemy on name tags, team HP boxes and turn banners). Blue and red stay distinguishable in red-green colour blindness simulations, but turn the marks on if you play in greyscale or still mix them up. Settings are saved',
   'hp.bg.k': 'Start screen background', 'hp.bg.v': 'Clouds and stars drift slowly across a night sky. With "reduce motion" on, it stays still, and animation stops while the tab is hidden to save battery',
   'hp.share.k': 'Share result', 'hp.share.v': 'The <b>Share result</b> button shares the stage (or mode), result, stars and the game link. Devices with a share sheet open it; otherwise the text is copied to the clipboard with a small notice',
   'hp.install.k': 'Install app', 'hp.install.v': 'Use "Install app" / "Add to Home screen" in your browser menu to make an icon and run it like a full-screen app. No service worker is used, so updates always load the latest files. Progress is saved in this browser',
