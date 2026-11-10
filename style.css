@@ -383,3 +383,14 @@ body, #stage, #controls, #topBtns, #hud, .overlay, button { -webkit-user-select:
   body.touch #topBtns #menuPop button { width: auto; height: auto; min-width: 44px; min-height: 44px; padding: 0 14px; font-size: 15px; line-height: 1.2; text-align: left; white-space: nowrap; background: #2f6fb5; border-bottom: 2px solid #1d4a7d; }
   body.touch #topBtns #menuPop button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.6); }
 }
+
+/* ---------- 접근성: 키보드 포커스 표시, 게임 화면 래퍼 ---------- */
+#canvasWrap { position: absolute; inset: 0; }
+#canvasWrap:focus { outline: none; }
+/* 흰 실선 + 바깥 검은 띠: 밝은 배경과 어두운 배경 모두에서 보임 */
+button:focus-visible, input:focus-visible, a:focus-visible, #canvasWrap:focus-visible, .doc:focus-visible {
+  outline: 3px solid #fff; outline-offset: 2px; box-shadow: 0 0 0 6px #000, 0 0 0 8px #ffd24a;
+}
+#canvasWrap:focus-visible { outline-offset: -4px; box-shadow: inset 0 0 0 7px #000, inset 0 0 0 9px #ffd24a; }
+.vol input[type=range]:focus-visible { outline-offset: 4px; }
+#controls .weapons button:focus-visible { outline-offset: -3px; box-shadow: inset 0 0 0 5px #000; } /* 가로 스크롤 영역에서 잘리지 않도록 안쪽에 그림 */
