@@ -1,7 +1,7 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111029';
-import * as audio from './audio.js?v=2026111029';
-import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111029';
+import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111030';
+import * as audio from './audio.js?v=2026111030';
+import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111030';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -289,7 +289,8 @@ export class Game {
 
   jump(u, dirHeld) {
     if (!u.grounded) return;
-    u.grounded = false; u.vy = -330 * Math.sqrt(u.trait.jumpK || 1); u.vx = dirHeld * 110; // 점프 높이는 vy²에 비례하므로 +10% 높이 = vy ×√1.1 u.fallStart = u.y; u.y -= 1;
+    u.grounded = false; u.vy = -330 * Math.sqrt(u.trait.jumpK || 1); u.vx = dirHeld * 110; // 점프 높이는 vy²에 비례하므로 +10% 높이 = vy ×√1.1
+    u.fallStart = u.y; u.y -= 1; // 낙하 기준 높이를 점프 시작 높이로 (이전 낙하의 값이 남아 있으면 평범한 점프에도 낙하 피해가 들어갔다)
     if (dirHeld) u.facing = dirHeld;
     u.squash = -0.25;
   }
@@ -328,12 +329,27 @@ export class Game {
 
   land(u) {
     u.grounded = true; u.vx = 0; u.vy = 0; u.squash = 0.3;
-    for (let k = 0; k < 6 && this.blocked(u.x, u.y); k++) u.y--;
+    this.unstick(u);
     const dist = u.y - u.fallStart;
     if (dist > FALL_T) {
       const dmg = Math.floor((dist - FALL_T) * 0.4 + 4);
       audio.play('land', { vol: 0.8 });
       this.damage(u, dmg, '#ffd24a');
+    }
+    u.fallStart = u.y; // 착지한 높이가 다음 낙하·점프의 기준
+  }
+
+  // 몸이 지형에 겹쳐 있으면 빼낸다: 바닥에 파묻혔으면 위로(최대 6px), 벽에 붙어 겹쳤으면 옆으로(최대 11px).
+  // 예전에는 벽 옆에서도 위로만 올려 발이 뜨는 바람에 유닛이 4프레임마다 6px씩 떨었다 떨어지길 반복했다(그동안 grounded=false라 발사·턴 종료도 지연).
+  unstick(u) {
+    if (!this.blocked(u.x, u.y)) return;
+    const y0 = u.y;
+    for (let k = 1; k <= 6; k++) if (!this.blocked(u.x, y0 - k) && this.feetSolid(u.x, y0 - k + 1)) { u.y = y0 - k; return; }
+    for (let d = 1; d <= HALF_W + 2; d++) {
+      for (const s of [1, -1]) {
+        const nx = clamp(u.x + s * d, 12, W - 12);
+        for (let c = 0; c <= 4; c++) if (!this.blocked(nx, y0 - c) && this.feetSolid(nx, y0 - c + 1)) { u.x = nx; u.y = y0 - c; return; }
+      }
     }
   }
 
