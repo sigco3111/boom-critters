@@ -1,6 +1,7 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
 import { Terrain, W, H, mulberry32 } from './terrain.js';
 import * as audio from './audio.js';
+import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -116,7 +117,7 @@ export class Game {
   constructor(sprites) {
     this.sprites = sprites;     // 캐릭터 키 -> { 포즈 이름 -> Image }
     this.time = 0;
-    this.bg = null;
+    this.bg = null; this.theme = THEMES[0];
     this.state = 'idle';
     this.units = []; this.particles = []; this.floaters = [];
     this.proj = null; this.shake = 0;
@@ -143,7 +144,9 @@ export class Game {
     this.windMax = opts.windMax ?? 10;
     this.level = opts.level ?? null;      // null이면 난이도(쉬움/보통/어려움)의 오차를 사용
     this.units = []; this.particles = []; this.floaters = []; this.proj = null;
-    this.buildField(opts.seed ?? ((Math.random() * 1e9) | 0), opts.enemies ?? 3, null);
+    const seed = opts.seed ?? ((Math.random() * 1e9) | 0);
+    // 스테이지 1~3 초원 / 4~6 사막 / 7~8 설원 / 9~10 밤, 빠른 대전·무한은 시드로 결정
+    this.buildField(seed, opts.enemies ?? 3, null, this.mode === 'stage' ? themeForStage(this.stage) : themeForSeed(seed));
     this.nextIdx = [0, 0];
     this.turnTeam = 0;
     this.winner = null;
@@ -156,10 +159,11 @@ export class Game {
   }
 
   // 지형·배경·유닛을 새로 배치. carry가 있으면 그 팀0 유닛의 체력/생존을 이어받는다 (무한 모드 웨이브 전환)
-  buildField(seed, enemies, carry) {
+  buildField(seed, enemies, carry, theme = themeForSeed(seed)) {
     this.seed = seed;
-    this.terrain = new Terrain(seed);
-    this.bg = this.makeBackground(seed);
+    this.theme = theme;
+    this.terrain = new Terrain(seed, theme);
+    this.bg = makeBackground(theme, seed);
     this.units = []; this.particles = []; this.floaters = []; this.proj = null;
     this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.turnNo = 0;
     const rng = mulberry32(seed ^ 0x5bd1e995), jit = () => (rng() * 2 - 1) * 25;
@@ -199,26 +203,6 @@ export class Game {
     this.angle = 45; this.power = 0; this.weapon = 0; this.charging = false; this.ai = null;
     this.startTurn();
     this.banner = { text: `웨이브 ${w}${this.banner ? ' · ' + this.banner.text : ''}`, color: TEAMS[0].color, t: 0 };
-  }
-
-  makeBackground(seed) {
-    const c = document.createElement('canvas'); c.width = W; c.height = H;
-    const g = c.getContext('2d');
-    const sky = g.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, '#6bb9ee'); sky.addColorStop(0.7, '#cdeeff'); sky.addColorStop(1, '#e8f8ff');
-    g.fillStyle = sky; g.fillRect(0, 0, W, H);
-    g.fillStyle = 'rgba(255,255,255,0.8)';
-    for (let i = 0; i < 6; i++) {
-      const x = ((seed >> (i * 3)) % 900) + (i * 157) % 960 * 0.3, y = 40 + (i * 53) % 120;
-      for (const [dx, dy, r] of [[0, 0, 22], [24, 6, 26], [52, 2, 20], [26, -10, 20]]) {
-        g.beginPath(); g.arc((x + dx) % W, y + dy, r, 0, 7); g.fill();
-      }
-    }
-    g.fillStyle = 'rgba(120,170,200,0.55)';
-    g.beginPath(); g.moveTo(0, H);
-    for (let x = 0; x <= W; x += 10) g.lineTo(x, 300 + 40 * Math.sin(x / 130 + seed) + 25 * Math.sin(x / 47 + seed * 2));
-    g.lineTo(W, H); g.fill();
-    return c;
   }
 
   // ---------- 유닛 물리 ----------
@@ -991,6 +975,7 @@ export class Game {
     g.save();
     if (this.shake > 0.3) g.translate(rnd(-this.shake, this.shake), rnd(-this.shake, this.shake));
     g.drawImage(this.bg, 0, 0);
+    drawBackgroundFx(g, this.bg, this.time);
     g.drawImage(this.terrain.canvas, 0, 0);
     for (const c of this.crates) this.drawCrate(g, c);
     for (const u of this.units) if (u.alive || (!u.drowned && u.deadT < FADE_END)) this.drawUnit(g, u);
@@ -1088,7 +1073,7 @@ export class Game {
 
   drawWater(g) {
     const t = this.time;
-    g.fillStyle = 'rgba(40,120,200,0.72)';
+    g.fillStyle = this.theme.water;
     g.beginPath(); g.moveTo(0, H);
     for (let x = 0; x <= W; x += 8) g.lineTo(x, WATER_Y + Math.sin(x / 40 + t * 2) * 3);
     g.lineTo(W, H); g.fill();
@@ -1257,7 +1242,7 @@ export class Game {
         g.fillStyle = `rgba(${p.color},${0.55 * (1 - k)})`;
         g.beginPath(); g.arc(p.x, p.y, p.r, 0, 7); g.fill();
       } else if (p.type === 'debris') {
-        g.fillStyle = `rgba(110,70,35,${1 - k})`; g.fillRect(p.x, p.y, p.r * 1.6, p.r * 1.6);
+        g.fillStyle = `rgba(${this.theme.debris},${1 - k})`; g.fillRect(p.x, p.y, p.r * 1.6, p.r * 1.6);
       } else if (p.type === 'spark') {
         g.fillStyle = `rgba(${p.green ? (k < 0.5 ? '200,255,200' : '90,230,110') : k < 0.5 ? '255,255,255' : '140,200,255'},${1 - k})`;
         g.beginPath(); g.arc(p.x, p.y, p.r * (1 - k * 0.4), 0, 7); g.fill();
@@ -1390,7 +1375,7 @@ export class Game {
     const label = this.modeLabel;
     // 모드·시드 표시: 양 팀 HUD(상단 좌우)와 겹치지 않도록 바람 표시 바로 아래 중앙에 작은 알약 모양으로 그림
     if (dom) return;
-    const info = `${label} · 시드 ${this.seed}`;
+    const info = `${label} · ${this.theme.name} · 시드 ${this.seed}`;
     g.font = '400 11px "Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif';
     const iw = Math.ceil(g.measureText(info).width) + 20;
     g.save(); g.translate(W / 2, 0); g.scale(hs, hs); g.translate(-W / 2, 0);

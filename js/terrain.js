@@ -10,19 +10,25 @@ export function mulberry32(a) {
   };
 }
 
-function makeDirtTile(rnd) {
+// 기본(초원) 지형 색. 스테이지 테마가 있으면 theme.tile 등으로 덮어쓴다
+const DEFAULT_THEME = {
+  tile: { base: '#8a5a30', dark: 'rgba(60,35,15,0.35)', light: 'rgba(190,140,80,0.30)', pebble: 'rgba(150,140,130,0.55)' },
+  shade: 'rgba(20,10,0,0.55)', edge: ['#3f8f2a', '#5fb53b', '#86d85a'], tuft: '#5fb53b', tuftLen: 6,
+};
+
+function makeDirtTile(rnd, tile) {
   const c = document.createElement('canvas');
   c.width = c.height = 64;
   const g = c.getContext('2d');
-  g.fillStyle = '#8a5a30';
+  g.fillStyle = tile.base;
   g.fillRect(0, 0, 64, 64);
   for (let i = 0; i < 160; i++) {
     const v = rnd();
-    g.fillStyle = v < 0.5 ? 'rgba(60,35,15,0.35)' : 'rgba(190,140,80,0.30)';
+    g.fillStyle = v < 0.5 ? tile.dark : tile.light;
     g.fillRect(rnd() * 64, rnd() * 64, 1 + rnd() * 3, 1 + rnd() * 3);
   }
   for (let i = 0; i < 7; i++) {
-    g.fillStyle = 'rgba(150,140,130,0.55)';
+    g.fillStyle = tile.pebble;
     g.beginPath();
     g.ellipse(rnd() * 64, rnd() * 64, 2 + rnd() * 3, 1.5 + rnd() * 2, 0, 0, 7);
     g.fill();
@@ -31,7 +37,8 @@ function makeDirtTile(rnd) {
 }
 
 export class Terrain {
-  constructor(seed) {
+  constructor(seed, theme) {
+    this.theme = theme || DEFAULT_THEME;
     this.canvas = document.createElement('canvas');
     this.canvas.width = W; this.canvas.height = H;
     this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
@@ -61,25 +68,26 @@ export class Terrain {
     g.moveTo(0, H);
     for (let x = 0; x < W; x++) g.lineTo(x, h[x]);
     g.lineTo(W, H); g.closePath();
-    g.fillStyle = g.createPattern(makeDirtTile(rnd), 'repeat');
+    g.fillStyle = g.createPattern(makeDirtTile(rnd, this.theme.tile), 'repeat');
     g.fill();
     g.globalCompositeOperation = 'source-atop';
     const grad = g.createLinearGradient(0, 200, 0, H);
     grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, 'rgba(20,10,0,0.55)');
+    grad.addColorStop(1, this.theme.shade);
     g.fillStyle = grad; g.fillRect(0, 0, W, H);
     const line = (w, dy, col) => {
       g.beginPath();
       for (let x = 0; x < W; x++) (x ? g.lineTo(x, h[x] + dy) : g.moveTo(x, h[x] + dy));
       g.lineWidth = w; g.strokeStyle = col; g.lineJoin = 'round'; g.stroke();
     };
-    line(16, 3, '#3f8f2a');
-    line(10, 1, '#5fb53b');
-    line(4, -2, '#86d85a');
-    // 풀 가장자리 술
-    g.fillStyle = '#5fb53b';
+    const [e1, e2, e3] = this.theme.edge;
+    line(16, 3, e1);
+    line(10, 1, e2);
+    line(4, -2, e3);
+    // 풀(눈·모래) 가장자리 술
+    g.fillStyle = this.theme.tuft;
     for (let x = 0; x < W; x += 5) {
-      const l = 6 + ((x * 7) % 5);
+      const l = this.theme.tuftLen + ((x * 7) % 5);
       g.fillRect(x, h[x] + 2, 2, l);
     }
     g.globalCompositeOperation = 'source-over';
