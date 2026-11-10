@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>붐 크리터스 - 포격 웹게임</title>
+  <meta name="description" content="웜즈·포트리스 스타일 싱글플레이 포격 웹게임">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <div id="stage">
+      <canvas id="game" width="960" height="540"></canvas>
+      <div id="loading" class="overlay">불러오는 중...</div>
+      <button id="muteBtn" type="button" aria-label="소리 켜기/끄기">소리</button>
+
+      <div id="startScreen" class="overlay hidden">
+        <h1>붐 크리터스</h1>
+        <p class="sub">귀여운 동물 3마리로 상대 팀을 포격하세요! (1단계)</p>
+        <div class="row">
+          <button type="button" data-diff="easy">쉬움</button>
+          <button type="button" data-diff="normal">보통</button>
+          <button type="button" data-diff="hard">어려움</button>
+        </div>
+        <p class="help">이동 A/D 또는 ←/→ · 점프 W · 각도 ↑/↓ 또는 드래그 · 파워 Space 꾹 눌렀다 떼기 · 무기 1/2 · 음소거 M</p>
+      </div>
+
+      <div id="resultScreen" class="overlay hidden">
+        <h1 id="resultTitle"></h1>
+        <p id="resultSub" class="sub"></p>
+        <div class="row">
+          <button type="button" id="againBtn">다시 하기</button>
+          <button type="button" id="menuBtn">난이도 선택</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="controls">
+      <div class="grp">
+        <button id="bLeft" type="button" aria-label="왼쪽">◀</button>
+        <button id="bRight" type="button" aria-label="오른쪽">▶</button>
+        <button id="bJump" type="button" aria-label="점프">점프</button>
+      </div>
+      <div class="grp">
+        <button id="bUp" type="button" aria-label="각도 올리기">각도 ▲</button>
+        <button id="bDown" type="button" aria-label="각도 내리기">각도 ▼</button>
+      </div>
+      <div class="grp">
+        <button id="bW1" type="button">1 대포탄</button>
+        <button id="bW2" type="button">2 로켓</button>
+      </div>
+      <div class="grp">
+        <button id="bFire" type="button" class="fire">발사 (꾹)</button>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
