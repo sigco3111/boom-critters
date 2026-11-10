@@ -18,6 +18,10 @@ const CRATE_W = 22, CRATE_H = 20, CRATE_FALL = 85, CRATE_HEAL = 30, CRATE_EVERY 
 const FALL_T = 80;       // 낙하 데미지 임계 높이
 const TURN_TIME = 30;
 const AIR_WARN = 1.0, AIR_W = 120, AIR_N = 5, AIR_IDX = 5; // 공습: 경고 마커 1초 → 폭탄 5발이 폭 120px 구역에 순서 없이 떨어짐 (무기 슬롯 6번)
+const MAX_PARTICLES = 500, MAX_FLOATERS = 24; // 파티클·떠오르는 글자 상한 (넘치면 가장 오래된 것부터 재활용=제거)
+const AI_MAX_TRIES = 3;      // AI가 유효한 사격(물/화면 밖이 아닌 착탄)을 못 찾을 때 다시 계산해 보는 횟수. 넘으면 턴을 넘긴다
+const AI_TURN_MAX = 22;      // AI 한 턴의 최대 시간(초): 이 안에 쏘지 못하면 강제로 넘김 (제한 시간 30초보다 먼저)
+const SETTLE_MAX = 8;        // 발사 후 유닛이 안정되길 기다리는 최대 시간(초)
 const DRAG_MIN = 14; // 터치 드래그 조준: 발사에 필요한 최소 드래그 거리 (캔버스 px)
 
 export const WEAPONS = [
@@ -409,9 +413,17 @@ export class Game {
       if (p.type === 'smoke') { p.r += dt * 8; p.vx *= 0.97; p.vy -= 12 * dt; }
       if (p.type === 'fire') { p.vx *= 0.94; p.vy = p.vy * 0.94 - 20 * dt; }
     }
-    this.particles = this.particles.filter((p) => p.life < p.max);
-    for (const f of this.floaters) f.t += dt;
-    this.floaters = this.floaters.filter((f) => f.t < 1.2);
+    // 수명이 끝난 것을 제자리에서 제거 (매 프레임 새 배열을 만들지 않음) + 상한을 넘으면 가장 오래된 것부터 버림
+    const P = this.particles;
+    let n = 0;
+    for (let i = 0; i < P.length; i++) if (P[i].life < P[i].max) P[n++] = P[i];
+    P.length = n;
+    if (n > MAX_PARTICLES) P.splice(0, n - MAX_PARTICLES);
+    const F = this.floaters;
+    n = 0;
+    for (let i = 0; i < F.length; i++) { F[i].t += dt; if (F[i].t < 1.2) F[n++] = F[i]; }
+    F.length = n;
+    if (n > MAX_FLOATERS) F.splice(0, n - MAX_FLOATERS);
   }
 
   // ---------- 턴 ----------
@@ -437,7 +449,7 @@ export class Game {
     this.angle = 45;
     this.banner = { text: t === 0 ? `내 차례 - ${u.name}` : `상대 차례 - ${u.name}`, color: TEAMS[t].color, t: 0 };
     this.lastTick = 99;
-    this.ai = t === 1 ? { phase: 'think', t: 0, walks: 0, crateWalks: 0, fled: 0, target: null } : null;
+    this.ai = t === 1 ? { phase: 'think', t: 0, walks: 0, crateWalks: 0, fled: 0, tries: 0, total: 0, target: null } : null;
   }
 
   // ---------- 보급 상자 ----------
@@ -682,6 +694,7 @@ export class Game {
         audio.play('sea_splash', { vol: 0.6, rate: 1.2 });
       }
     }
+    if (a.t > 12) for (const b of a.bombs) b.done = true; // 안전장치
     if (a.bombs.every((b) => b.done)) { this.air = null; this.state = 'settle'; this.settleT = 0; this.settleTotal = 0; }
   }
 
@@ -819,6 +832,7 @@ export class Game {
     const u = this.activeUnit, ai = this.ai, am = this.ammo[1];
     const enemies = this.units.filter((o) => o.alive && o.team === 0);
     const pt = (e) => ({ x: e.x, y: e.y - BODY_CY });
+    if (!enemies.length) return null;
     const hidden = enemies.filter((e) => this.aiHidden(u, e));
     const can = (i) => am[i] > 0 && (this.level == null || this.level >= AI_UNLOCK[i]); // 낮은 스테이지/웨이브에서는 특수 무기 제한
     if (can(AIR_IDX) && Math.random() < 0.85) { // 공습: 상대 유닛 2마리 이상이 가로 120px 안에 모여 있고 아군이 구역 근처에 없을 때
@@ -888,9 +902,22 @@ export class Game {
     return best && best.c;
   }
 
+  // AI가 쏠 수 없을 때(유효한 사격 없음, 목표 없음, 오류, 시간 초과) 짧게 '생각 중...'을 보여 준 뒤 턴을 넘긴다
+  aiSkip() {
+    const a = this.ai;
+    if (!a || a.phase === 'skip') return;
+    a.phase = 'skip'; a.t = 0; this.charging = false; this.power = 0;
+    if (this.activeUnit) this.floaters.push({ x: this.activeUnit.x, y: this.activeUnit.y - 70, text: '생각 중...', color: '#fff', t: 0 });
+  }
+
   aiUpdate(dt) {
     const a = this.ai, u = this.activeUnit;
-    a.t += dt;
+    a.t += dt; a.total += dt;
+    if (a.phase === 'skip') {
+      if (a.t >= 1.1) { this.ai = null; this.state = 'settle'; this.settleT = 0; this.settleTotal = 0; }
+      return;
+    }
+    if (a.total > AI_TURN_MAX) { this.aiSkip(); return; }
     if (a.phase === 'think') {
       if (a.t < 0.9) return;
       // 1) 화염 지대 안이면 밖으로 이동 (다음 턴 시작 때 또 화상을 입지 않도록)
@@ -913,8 +940,12 @@ export class Game {
       }
       // 3) 사격 계획 (무기 선택 포함). 대포/로켓 계획이 빗나가면 목표 쪽으로 걸어가 다시 계산
       const plan = this.aiDecide();
+      if (!plan || !plan.target) { this.aiSkip(); return; }
       a.target = plan.target;
-      if (plan.weapon <= 1 && plan.dist > 110 && a.walks < 2 && this.aiSafeAhead(u, a.target.x >= u.x ? 1 : -1)) {
+      // 유효한 착탄이 하나도 없음(모든 후보가 물/화면 밖): 목표 쪽으로 걸어가 다시 계산하되 AI_MAX_TRIES번을 넘기면 포기
+      const canWalk = a.walks < 2 && this.aiSafeAhead(u, a.target.x >= u.x ? 1 : -1);
+      if (plan.min >= 9999 && (++a.tries >= AI_MAX_TRIES || !canWalk)) { this.aiSkip(); return; }
+      if (plan.weapon <= 1 && plan.dist > 110 && canWalk) {
         a.phase = 'walk'; a.t = 0; a.goal = null; a.walks++; a.dur = rnd(0.5, 1.0); a.dir = a.target.x >= u.x ? 1 : -1;
       } else {
         a.plan = plan; a.phase = 'aim'; a.t = 0; a.from = this.angle;
@@ -978,7 +1009,7 @@ export class Game {
         const ad = (this.keys.up ? 1 : 0) - (this.keys.down ? 1 : 0);
         if (ad && !this.charging) this.aimBy(ad * 45 * dt);
       } else if (this.ai) {
-        this.aiUpdate(dt);
+        try { this.aiUpdate(dt); } catch (err) { console.error('AI 오류, 턴을 넘깁니다', err); this.aiSkip(); }
       }
       if (this.timer <= 0 && this.state === 'aim') {
         this.charging = false; this.timer = 0;
@@ -993,6 +1024,7 @@ export class Game {
         p.acc = (p.acc || 0) + dt;
         while (p.acc >= 1 / 60 && !r) { p.acc -= 1 / 60; r = this.stepGrenade(p, 1 / 60); }
       } else r = stepProj(p, dt, this.wind, this.terrain, this.units);
+      if (!r && p.age > 25) r = 'out'; // 안전장치: 25초 넘게 날아간 투사체는 사라진 것으로 처리
       if (grenade) {
         const sec = Math.ceil(p.fuse);
         if (sec < p.tickN && sec > 0) { p.tickN = sec; audio.playSynth('grenadeTick', { stage: Math.min(2, Math.round(p.w.fuse - sec)) }); }
@@ -1035,7 +1067,7 @@ export class Game {
     if (this.state === 'settle') {
       const calm = this.units.every((u) => !u.alive || u.grounded);
       this.settleT = calm ? this.settleT + dt : 0;
-      if (this.settleT > 0.9 && this.settleTotal > 1.3) {
+      if ((this.settleT > 0.9 && this.settleTotal > 1.3) || this.settleTotal > SETTLE_MAX) { // 유닛이 계속 공중이어도 SETTLE_MAX초 뒤에는 다음 턴
         if (!this.checkWinner()) this.endTurn();
       }
     }
