@@ -15,6 +15,7 @@
       <canvas id="game" width="960" height="540"></canvas>
       <div id="loading" class="overlay">불러오는 중...</div>
       <div id="topBtns">
+        <button id="pauseBtn" type="button" aria-label="일시정지" hidden>⏸<span class="tx"> 일시정지</span></button>
         <button id="gearBtn" type="button" aria-label="설정">⚙</button>
         <button id="muteBtn" type="button" aria-label="소리 켜기/끄기">소리</button>
       </div>
@@ -127,6 +128,16 @@
         <button type="button" id="creditsCloseBtn">닫기</button>
       </div>
 
+      <div id="pauseScreen" class="overlay modal hidden" role="dialog" aria-label="일시정지">
+        <h1>일시정지</h1>
+        <div class="col">
+          <button type="button" id="resumeBtn">계속하기</button>
+          <button type="button" id="restartBtn">매치 다시 시작</button>
+          <button type="button" id="quitBtn">메뉴로 나가기</button>
+        </div>
+        <p class="help">Esc로도 계속할 수 있어요</p>
+      </div>
+
       <div id="settingsScreen" class="overlay modal hidden" role="dialog" aria-label="설정">
         <h1>설정</h1>
         <div class="panel">
@@ -164,7 +175,7 @@
         <button id="bW5" type="button">5 화염탄</button>
       </div>
       <div class="grp firegrp">
-        <button id="bFire" type="button" class="fire">발사 (꾹)</button>
+        <button id="bFire" type="button" class="fire"><span class="fl">발사 (꾹)</span><span class="fx"></span></button>
       </div>
     </div>
   </div>
