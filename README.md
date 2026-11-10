@@ -32,7 +32,7 @@ js/main.js     진입점, 입력, UI, 루프
 js/game.js     유닛 물리, 턴 흐름, 투사체, AI, 렌더링
 js/terrain.js  높이맵 생성, 오프스크린 캔버스 지형, destination-out 크레이터
 js/audio.js    Web Audio 효과음
-assets/        Kenney CC0 스프라이트/효과음 (CREDITS.md 참고)
+assets/        Kenney CC0 Toon Characters 1 캐릭터 포즈(assets/toon)/효과음 (CREDITS.md 참고)
 ```
 로컬 실행: 정적 서버로 폴더를 열면 됩니다 (예: `python3 -m http.server`). ES 모듈 때문에 `file://` 로는 열리지 않습니다.
 
