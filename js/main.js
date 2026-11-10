@@ -1,15 +1,15 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111053';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig, warmupSteps, warmFlash } from './game.js?v=2026111053';
-import * as audio from './audio.js?v=2026111053';
-import * as progress from './progress.js?v=2026111053';
-import { MenuBg } from './menubg.js?v=2026111053';
-import { themeById, drawMapPreview } from './themes.js?v=2026111053';
-import * as store from './storage.js?v=2026111053';
-import * as loader from './loader.js?v=2026111053';
-import * as fx from './fx.js?v=2026111053';
-import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111053';
+const VERSION = '2026111054';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig, warmupSteps, warmFlash, BOSS_BONUS_HP } from './game.js?v=2026111054';
+import * as audio from './audio.js?v=2026111054';
+import * as progress from './progress.js?v=2026111054';
+import { MenuBg } from './menubg.js?v=2026111054';
+import { themeById, drawMapPreview } from './themes.js?v=2026111054';
+import * as store from './storage.js?v=2026111054';
+import * as loader from './loader.js?v=2026111054';
+import * as fx from './fx.js?v=2026111054';
+import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111054';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -86,7 +86,7 @@ const stars = (n) => '★'.repeat(n) + '☆'.repeat(3 - n);
 const show = (id, on = true) => $(id).classList.toggle('hidden', !on);
 // 설정·크레딧·도움말 같은 모달이 열려 있으면 경기를 멈추고 게임 키 입력을 막음
 let modalOpen = false;
-const MODALS = ['settingsScreen', 'helpScreen', 'creditsScreen', 'pauseScreen', 'tutorialScreen'].filter((id) => document.getElementById(id)); // 없는 화면(구버전 HTML)은 제외
+const MODALS = ['settingsScreen', 'helpScreen', 'creditsScreen', 'pauseScreen', 'rewardScreen', 'tutorialScreen'].filter((id) => document.getElementById(id)); // 없는 화면(구버전 HTML)은 제외
 
 // 첫 실행 튜토리얼 (4단계). 본 적이 있으면 localStorage 플래그로 다시 띄우지 않고, 게임 방법 화면의 '튜토리얼 보기'로 언제든 다시 볼 수 있다
 const TUT_KEY = 'boom-tutorial-done';
@@ -157,7 +157,7 @@ async function shareResult() {
 let resultView = null; // 결과 화면의 글자를 (다시) 채우는 함수 — 언어를 바꾸면 다시 불러 번역한다
 function showResult(winner) {
   setTimeout(() => {
-    const mode = current.mode, won = winner === 0, stage = current.stage, record = endlessRecord, stats = game.stats, cleared = game.cleared;
+    const mode = current.mode, won = winner === 0, stage = current.stage, record = endlessRecord, stats = game.stats, cleared = game.cleared, bossN = game.run ? game.run.bosses : 0;
     let starN = 0, alive = 0, r = null, rec = null;
     if (mode === 'stage' && won) {
       alive = game.units.filter((u) => u.team === 0 && u.alive).length;
@@ -180,6 +180,11 @@ function showResult(winner) {
       } else {
         title = won ? tr('res.win') : winner === 1 ? tr('res.lose') : tr('res.draw');
         sub = tr(won ? 'res.foeDown' : winner === 1 ? 'res.allDown' : 'res.bothDown');
+      }
+      { // 무한 모드: 클리어한 보스 웨이브 수와 획득한 강화
+        const bs = $('resultBoss'), bo = $('resultBoost'), bl = mode === 'endless' ? game.boosts() : [];
+        if (bs) { bs.textContent = mode === 'endless' ? tr('res.boss', { n: bossN }) : ''; bs.classList.toggle('hidden', mode !== 'endless'); }
+        if (bo) { bo.textContent = mode === 'endless' ? (bl.length ? tr('res.boosts', { list: bl.join(' · ') }) : tr('res.noBoost')) : ''; bo.classList.toggle('hidden', mode !== 'endless'); }
       }
       const dl = $('resultDiff');
       if (dl) { // 빠른 대전: 고른 난이도와 적 수를 결과 화면에 표시
@@ -216,9 +221,10 @@ function showResult(winner) {
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
 window.__audio = audio; // 디버깅/테스트용: __audio.musicInfo()
-window.__sim = (n, opts) => import('./sim.js?v=2026111053').then((m) => m.sim(n, opts));
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111053').then((m) => m.table(n, stages, skills));
-window.__sim.soak = (n, opts) => import('./sim.js?v=2026111053').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
+window.__sim = (n, opts) => import('./sim.js?v=2026111054').then((m) => m.sim(n, opts));
+window.__sim.endless = (n, opts) => import('./sim.js?v=2026111054').then((m) => m.endless(n, opts)); // 무한 모드 밸런스: await __sim.endless(30, { skill: 'average' }) -> { avg, median, dist, ... }
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111054').then((m) => m.table(n, stages, skills));
+window.__sim.soak = (n, opts) => import('./sim.js?v=2026111054').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
 
 // 이 경기에 뒤에서 받는 캐릭터가 필요한가: 적이 3마리 이상(보통 이상·스테이지 4~)이거나 무한 모드(웨이브가 오르면 적이 4마리)
 function needsLazy(cfg) {
@@ -533,9 +539,51 @@ function setup(sprites) {
   const pauseGame = () => {
     if (!canPause()) return;
     game.charging = false; game.power = 0; // 충전 중이면 발사하지 않고 취소
-    audio.play('select'); openModal('pauseScreen');
+    audio.play('select'); renderBoosts(); openModal('pauseScreen');
   };
   pauseBtn.addEventListener('click', pauseGame);
+  // 웨이브 보상 화면: 3개 중 하나를 누르거나 1~3 키로 고르면 다음 웨이브 (화면이 없는 구버전 HTML이면 game.onReward를 연결하지 않아 자동 선택)
+  const rwScr = $('rewardScreen'), rwBox = $('rewardChoices');
+  let rwState = null; // { choices, info } — 언어를 바꾸면 이걸로 다시 그림
+  const renderReward = () => {
+    if (!rwState) return;
+    const { choices, info } = rwState;
+    $('rewardTitle').textContent = tr('rw.h', { n: info.wave });
+    $('rewardSub').textContent = tr('rw.sub');
+    const bb = $('rewardBoss'); bb.textContent = info.boss ? tr('rw.boss', { h: BOSS_BONUS_HP }) : ''; bb.classList.toggle('hidden', !info.boss);
+    rwBox.textContent = '';
+    choices.forEach((id, i) => {
+      const b = document.createElement('button'), n = document.createElement('b'), d = document.createElement('span'), key = document.createElement('i');
+      b.type = 'button'; b.dataset.reward = id; b.className = 'rw-' + id;
+      key.textContent = String(i + 1); n.textContent = tr('rw.' + id); d.textContent = tr('rw.' + id + '.d');
+      b.append(key, n, d);
+      b.addEventListener('click', () => chooseReward(id));
+      rwBox.appendChild(b);
+    });
+  };
+  const chooseReward = (id) => {
+    if (!rwState || game.state !== 'reward') return;
+    rwState = null; closeModal('rewardScreen');
+    game.pickReward(id);
+  };
+  if (rwScr) game.onReward = (choices, info) => {
+    rwState = { choices, info };
+    renderReward(); openModal('rewardScreen');
+  };
+  // 일시정지 화면: 무한 모드면 현재 웨이브와 가진 강화 표시
+  const renderBoosts = () => {
+    const box = $('pauseBoosts');
+    if (!box) return;
+    const on = current.mode === 'endless' && !!game.run;
+    box.classList.toggle('hidden', !on);
+    if (!on) return;
+    const list = game.boosts();
+    box.textContent = '';
+    const h = document.createElement('p'), l = document.createElement('p');
+    h.className = 'sub'; h.textContent = tr('bo.wave', { n: game.wave, b: progress.load().endlessBest });
+    l.textContent = tr('bo.h') + ': ' + (list.length ? list.join(' · ') : tr('bo.none'));
+    box.append(h, l);
+  };
   $('resumeBtn').addEventListener('click', () => { audio.play('select'); closeModal('pauseScreen'); });
   $('restartBtn').addEventListener('click', () => { closeModal('pauseScreen'); launch({ ...current }); });
   $('quitBtn').addEventListener('click', () => {
@@ -590,6 +638,13 @@ function setup(sprites) {
   const map = { KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
   window.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (modalOpen && topModal() === 'rewardScreen') { // 보상 화면: 1~3 선택, M 음소거, Esc는 무시(반드시 하나 고름), Tab은 화면 안에서만
+      const m = /^(Digit|Numpad)([1-3])$/.exec(e.code);
+      if (m && !e.repeat && rwState) { const id = rwState.choices[+m[2] - 1]; if (id) chooseReward(id); }
+      else if (e.code === 'KeyM' && !e.repeat) muteBtn.click();
+      else if (e.code === 'Tab') trapTab(e);
+      return;
+    }
     if (modalOpen) { // 모달이 열려 있으면 게임 키 대신 M(음소거)·Esc(닫기)만 처리
       if (e.code === 'KeyM' && !e.repeat) muteBtn.click();
       else if (e.code === 'Escape') { const t = topModal(); if (t === 'tutorialScreen') tutorial.close(); else if (t) closeModal(t); } // 맨 위 모달 하나만 닫음 (일시정지면 계속하기)
@@ -695,7 +750,7 @@ function setup(sprites) {
     syncLang(); selectDiff(difficulty, false); selectMap(false); refreshEndless(); refreshMute(); applyA11y(); syncPrefUI(); updateVer(); popSoundLabel = '';
     if (!$('stageScreen').classList.contains('hidden')) renderStages();
     if (resultView && !$('resultScreen').classList.contains('hidden')) resultView();
-    tutorial.rerender();
+    tutorial.rerender(); renderReward();
   });
 
   // 첫 실행이면 튜토리얼을 자동으로 띄움

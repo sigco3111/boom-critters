@@ -1,7 +1,7 @@
 // 언어(한국어/영어) 사전과 도우미. 기본값은 navigator.language(ko*이면 한국어, 아니면 영어)이고 선택은 localStorage('boom-lang')에 저장한다
 // (저장소가 막힌 환경에서는 storage.js가 메모리에만 보관). index.html의 한국어 문구는 그대로 두고, data-i18n 속성이 붙은 요소만 영어일 때 사전 값으로 바꾼다
 // 사용법: t('키', { 값 }) — JS에서 쓰는 문구. applyDom() — data-i18n(텍스트) · data-i18n-html(서식 포함) · data-i18n-aria · data-i18n-title 속성을 가진 요소를 바꾼다
-import { local } from './storage.js?v=2026111053';
+import { local } from './storage.js?v=2026111054';
 
 const KEY = 'boom-lang';
 export const LANGS = ['ko', 'en'];
@@ -60,6 +60,18 @@ const KO = {
   'tut.2.t': '조준하고 힘을 모아 발사', 'tut.2.a.k': '키보드', 'tut.2.a.v': '↑·↓ 로 각도 → Space를 꾹 눌러 파워를 모았다가 떼면 발사', 'tut.2.b.k': '터치', 'tut.2.b.v': '오른쪽 화면을 끌어 각도·파워를 정하고 손을 떼면 발사 (발사 버튼 꾹도 가능). 끄는 동안 점선 궤적 힌트가 보여요', 'tut.2.c.k': '팁', 'tut.2.c.v': '바람 화살표를 보고 보정하세요',
   'tut.3.t': '무기 1~9', 'tut.3.a.k': '교체', 'tut.3.a.v': '숫자 1~9 키 또는 무기 버튼 (무기 바를 빠르게 두 번 누르면 다음 무기로)', 'tut.3.b.k': '종류', 'tut.3.b.v': '1 대포탄 · 2 로켓 · 3 수류탄(3초 뒤 폭발) · 4 번개(직선) · 5 화염탄(불길 3턴) · 6 공습(목표 지정 후 폭탄 5발) · 7 연막탄(AI의 시야를 가림) · 8 순간이동(눌러서 이동) · 9 바람 바꾸기', 'tut.3.c.k': '탄약', 'tut.3.c.v': '3~9번은 개수가 제한돼요 (공습은 스테이지 4부터)',
   'tut.4.t': '보급 상자·장애물·화염', 'tut.4.a.k': '상자', 'tut.4.a.v': '4턴마다 낙하산 상자가 떨어져요. 닿으면 HP +30', 'tut.4.b.k': '화염', 'tut.4.b.v': '불길 안에 서 있으면 턴 시작 때 8 피해 — 벗어나세요', 'tut.4.c.k': '주의', 'tut.4.c.v': '물에 빠지면 즉사! 섬 가장자리와 구덩이를 조심', 'tut.4.d.k': '장애물', 'tut.4.d.v': '나무 상자는 부수면 치유 상자가 나오고, 폭발 통은 연쇄로 터져요. 땅속 지뢰(깜빡이는 점)는 밟으면 턴이 끝나요',
+  // 무한 모드: 특수 적 · 보스 웨이브 · 웨이브 보상
+  'sp.rusher.n': '돌격병', 'sp.rusher.l': '돌', 'tr.rusher.d': 'HP 60% · 이동 2배 · 가까이 돌격', 'sp.rusher.b': '돌격병 등장! 약하지만 두 배 빠르게 달려와요',
+  'sp.shield.n': '방패병', 'sp.shield.l': '방', 'tr.shield.d': '직격·폭발 피해 -40% · 느림', 'sp.shield.b': '방패병 등장! 피해를 40% 덜 받지만 느려요',
+  'sp.bomber.n': '공습병', 'sp.bomber.l': '공', 'tr.bomber.d': '두 턴에 한 번 공습', 'sp.bomber.b': '공습병 등장! 두 턴에 한 번 공습을 불러요',
+  'sp.medic.n': '의무병', 'sp.medic.l': '의', 'tr.medic.d': '매 턴 약한 아군 +15 치료 · 우선 처치', 'sp.medic.b': '의무병 등장! 매 턴 아군을 치료해요 - 먼저 쓰러뜨리세요',
+  'banner.bossClear': '보스 격파! 웨이브 {n} 클리어!', 'res.boss': '보스 웨이브 클리어: {n}회', 'res.boosts': '획득한 강화: {list}', 'res.noBoost': '획득한 강화: 없음',
+  'rw.aria': '웨이브 보상', 'rw.h': '웨이브 {n} 클리어! 보상을 고르세요', 'rw.sub': '누르거나 1~3 키로 선택 · 이번 도전이 끝날 때까지 유지돼요', 'rw.boss': '보스 격파 보너스: 팀 HP +{h} · 수류탄 +1 · 번개 +1',
+  'rw.grenade': '수류탄 +1', 'rw.grenade.d': '수류탄 1발 추가', 'rw.bolt': '번개 +1', 'rw.bolt.d': '번개 1발 추가', 'rw.air': '공습 +1', 'rw.air.d': '공습 1발 추가',
+  'rw.smoke': '연막탄 +1', 'rw.smoke.d': '연막탄 1발 추가', 'rw.tele': '순간이동 +1', 'rw.tele.d': '순간이동 1회 추가',
+  'rw.heal': '팀 HP +25', 'rw.heal.d': '살아 있는 모든 유닛 HP +25', 'rw.dmg': '피해 +10%', 'rw.dmg.d': '3웨이브 동안 우리 무기 피해 +10%', 'rw.revive': '부활', 'rw.revive.d': '쓰러진 유닛 1명이 HP 50%로 부활',
+  'bo.h': '현재 강화', 'bo.none': '아직 없음', 'bo.ammo': '{w} +1 ×{n}', 'bo.dmg': '피해 +10% ({n}웨이브 남음)', 'bo.heal': '팀 HP +25 ×{n}', 'bo.revive': '부활 ×{n}', 'bo.wave': '웨이브 {n} · 최고 기록 {b}',
+  'tut.4.d.k': '무한 모드', 'tut.4.d.v': '2웨이브부터 특수 적, 5웨이브마다 보스! 웨이브를 깰 때마다 보상 3개 중 하나를 고르세요',
   'lang.name': '한국어', 'lang.btn': 'English로 전환',
 };
 
@@ -118,6 +130,18 @@ const EN = {
   'tut.2.t': 'Aim, charge and fire', 'tut.2.a.k': 'Keyboard', 'tut.2.a.v': '↑·↓ sets the angle. Hold Space to charge, release to fire', 'tut.2.b.k': 'Touch', 'tut.2.b.v': 'Drag on the right side to set angle and power, release to fire (or hold the Fire button). A dotted trajectory hint shows while you drag', 'tut.2.c.k': 'Tip', 'tut.2.c.v': 'Watch the wind arrow and adjust',
   'tut.3.t': 'Weapons 1-9', 'tut.3.a.k': 'Switch', 'tut.3.a.v': 'Keys 1-9 or the weapon buttons (double-tap the weapon bar to cycle to the next weapon)', 'tut.3.b.k': 'Types', 'tut.3.b.v': '1 Cannon · 2 Rocket · 3 Grenade (explodes in 3s) · 4 Bolt (straight line) · 5 Fire (burns 3 turns) · 6 Airstrike (pick a target, 5 bombs) · 7 Smoke (hides you from the AI) · 8 Teleport (tap to jump) · 9 Wind Shift', 'tut.3.c.k': 'Ammo', 'tut.3.c.v': 'Weapons 3-9 are limited (Airstrike from stage 4)',
   'tut.4.t': 'Crates, obstacles and fire', 'tut.4.a.k': 'Crate', 'tut.4.a.v': 'A parachute crate drops every 4 turns. Touch it for HP +30', 'tut.4.b.k': 'Fire', 'tut.4.b.v': 'Standing in flames costs 8 HP at turn start - move away', 'tut.4.c.k': 'Careful', 'tut.4.c.v': 'Falling in water is instant defeat! Watch island edges and craters', 'tut.4.d.k': 'Obstacles', 'tut.4.d.v': 'Wooden crates may drop a health pack, barrels explode in chains, and a buried mine (blinking dot) ends your turn when stepped on',
+  // Endless: special enemies, boss waves, wave rewards
+  'sp.rusher.n': 'Rusher', 'sp.rusher.l': 'R', 'tr.rusher.d': 'HP 60% · 2x speed · charges in', 'sp.rusher.b': 'Rusher! Frail, but it charges at double speed',
+  'sp.shield.n': 'Shield', 'sp.shield.l': 'S', 'tr.shield.d': 'Direct/blast dmg -40% · slow', 'sp.shield.b': 'Shield! Takes 40% less damage, but moves slowly',
+  'sp.bomber.n': 'Bomber', 'sp.bomber.l': 'B', 'tr.bomber.d': 'Airstrike every other turn', 'sp.bomber.b': 'Bomber! Calls an airstrike every other turn',
+  'sp.medic.n': 'Medic', 'sp.medic.l': 'M', 'tr.medic.d': 'Heals the weakest ally +15 each turn · priority', 'sp.medic.b': 'Medic! Heals allies every turn - take it out first',
+  'banner.bossClear': 'Boss down! Wave {n} clear!', 'res.boss': 'Boss waves cleared: {n}', 'res.boosts': 'Boosts: {list}', 'res.noBoost': 'Boosts: none',
+  'rw.aria': 'Wave reward', 'rw.h': 'Wave {n} clear! Pick a reward', 'rw.sub': 'Tap or press 1-3 · lasts until this run ends', 'rw.boss': 'Boss bonus: team HP +{h} · Grenade +1 · Bolt +1',
+  'rw.grenade': 'Grenade +1', 'rw.grenade.d': 'One more grenade', 'rw.bolt': 'Bolt +1', 'rw.bolt.d': 'One more bolt', 'rw.air': 'Airstrike +1', 'rw.air.d': 'One more airstrike',
+  'rw.smoke': 'Smoke +1', 'rw.smoke.d': 'One more smoke bomb', 'rw.tele': 'Teleport +1', 'rw.tele.d': 'One more teleport',
+  'rw.heal': 'Team HP +25', 'rw.heal.d': 'Every living unit heals 25 HP', 'rw.dmg': 'Damage +10%', 'rw.dmg.d': 'Your weapons deal +10% for 3 waves', 'rw.revive': 'Revive', 'rw.revive.d': 'One fallen unit returns at 50% HP',
+  'bo.h': 'Current boosts', 'bo.none': 'None yet', 'bo.ammo': '{w} +1 ×{n}', 'bo.dmg': 'Damage +10% ({n} waves left)', 'bo.heal': 'Team HP +25 ×{n}', 'bo.revive': 'Revive ×{n}', 'bo.wave': 'Wave {n} · Best {b}',
+  'tut.4.d.k': 'Endless', 'tut.4.d.v': 'Special enemies from wave 2, a boss every 5th wave! After each wave pick 1 of 3 rewards',
   'lang.name': 'English', 'lang.btn': '한국어로 전환',
 
   // ---------- index.html 정적 문구 ----------
@@ -174,7 +198,10 @@ const EN = {
   'hp.m1.k': 'Quick Match', 'hp.m1.v': 'Pick a difficulty on the start screen and press "Start Quick Match". Easy (2 enemies, big AI error) · Normal (3 enemies) · Hard (4 enemies, small AI error). You can also pick the map: Theme (Random · Meadow · Desert · Snow · Night) and Terrain (Random · Gentle · Hills · Canyon · Island · Bridge). Your choices are saved and shown on the result screen',
   'hp.m2.k': 'Stages', 'hp.m2.v': '14 stages; winning unlocks the next (stage 11 islands, 12 bridge at night, 13 canyon bridge, 14 boss fight: the Zombie King). Stage 14 pits you against one 400-HP boss and two guards, and your team gets +1 of every special weapon. 1-3 stars by survivors. From stage 7 there are 4 enemies, so your team gets +1 grenade (4) and +1 bolt (3)',
   'hp.m3.k': 'Result screen', 'hp.m3.v': 'Shows shots, damage dealt, damage taken, weapons used and your turns. Stages save the best of each item and show "New record!" when beaten',
-  'hp.m4.k': 'Endless', 'hp.m4.v': 'Waves keep coming with more enemies. The run ends when your team is wiped out; the best wave is saved',
+  'hp.m4.k': 'Endless', 'hp.m4.v': 'Waves keep coming with more enemies (up to 4). A boss every 5th wave, and after each wave you pick 1 of 3 rewards. Fallen allies stay down, but your team heals a little each wave and one unit is revived every 2 waves. The run ends when your team is wiped out; the best wave is saved',
+  'hp.sp.k': 'Special enemies', 'hp.sp.v': 'From wave 2 of Endless. <b>Rusher</b> (orange triangle · 60% HP · runs in at 2x speed) · <b>Shield</b> (grey shield · -40% damage · slow) · <b>Bomber</b> (purple hexagon · airstrike every other turn) · <b>Medic</b> (green circle · red dashed ring · heals the weakest ally +15 each turn - take it out first!)',
+  'hp.boss.k': 'Boss wave', 'hp.boss.v': 'Every 5th wave the Zombie King arrives with guards (more HP in later waves). Defeating it gives a bonus: team HP +40, Grenade +1, Bolt +1',
+  'hp.rw.k': 'Wave rewards', 'hp.rw.v': 'After each wave pick 1 of 3 random rewards (tap or keys 1-3): Grenade / Bolt / Airstrike / Smoke / Teleport +1 · Team HP +25 · Damage +10% for 3 waves · Revive a fallen unit. They last until the run ends and show on the pause screen',
   'hp.lang.k': 'Language', 'hp.lang.v': 'Switch Korean/English in ⚙ Settings. The default follows your browser language and your choice is saved',
   'hp.load.k': 'Loading', 'hp.load.v': 'A loading screen with a progress bar appears while the first-screen sounds and sprites load. If something fails, the game continues after about 8 seconds. Other sounds and extra characters load in the background',
   'hp.tutBtn': 'Show tutorial',

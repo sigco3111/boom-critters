@@ -1,6 +1,6 @@
 // 헤드리스 AI 대 AI 시뮬레이션 (밸런스 측정용). 브라우저 콘솔에서: await __sim(20, { stage: 5, skill: 'average' })
 // 우리 팀(팀 0)을 숙련도 프로필의 AI가 조작하고, 렌더링 없이(지형은 높이맵 충돌 배열만) 고정 시간 스텝으로 경기를 끝까지 돌린다.
-import { Game, STAGE_COUNT, WEAPONS, W, H, WATER_Y, stageConfig, quickConfig, waveConfig } from './game.js?v=2026111053';
+import { Game, STAGE_COUNT, WEAPONS, W, H, WATER_Y, stageConfig, quickConfig, waveConfig } from './game.js?v=2026111054';
 
 // 플레이어 숙련도 프로필: 각도 오차(°, 표준편차) · 파워 오차 · pick(상위 후보 중 무작위) · basic(대포탄·로켓만 사용)
 export const SKILLS = {
@@ -53,6 +53,40 @@ export async function sim(n = 20, opts = {}) {
   r.avgHpOnWin = r.wins ? Math.round(hp / r.wins) : 0;
   r.ms = Date.now() - t0;
   return r;
+}
+
+// ---------- 무한 모드 ----------
+// 한 번의 도전: 웨이브를 이어서 돌린다 (웨이브 보상은 자동 선택). 반환 { waves(클리어한 웨이브), bosses, timeout, specials(만난 특수 적 수), boosts }
+export function playEndless(skill, maxWave = 30) {
+  const g = new Game({});
+  g.headless = true;
+  g.sim = { skill: [skill, null], err: null };
+  g.onOver = () => {}; g.onWave = () => {};
+  g.newMatch('normal', waveConfig(1));
+  let steps = 0, lastTurn = g.turnNo, stall = 0, specials = 0, lastWave = 1;
+  while (g.state !== 'over' && g.cleared < maxWave && steps < 400000) {
+    g.update(DT); steps++;
+    if (g.wave !== lastWave) { lastWave = g.wave; specials += g.units.filter((u) => u.kind).length; stall = 0; }
+    if (g.turnNo !== lastTurn) { lastTurn = g.turnNo; if (++stall > 200) break; } // 한 웨이브가 200턴을 넘으면 멈춘 것으로 본다
+  }
+  return { waves: g.cleared, bosses: g.run.bosses, timeout: g.state !== 'over' && g.cleared < maxWave, specials, boosts: g.boosts() };
+}
+// n번 도전해 웨이브 도달 분포를 돌려준다: await __sim.endless(50, { skill: 'average' }) -> { avg, median, dist, bosses, ... }
+export async function endless(n = 20, opts = {}) {
+  const skill = typeof opts.skill === 'object' ? opts.skill : SKILLS[opts.skill || 'average'];
+  const res = [], t0 = Date.now();
+  let timeouts = 0, bosses = 0;
+  for (let i = 0; i < n; i++) {
+    const r = playEndless(skill, opts.maxWave || 30);
+    res.push(r.waves); bosses += r.bosses; if (r.timeout) timeouts++;
+    if (i % 2 === 1) await tick();
+  }
+  const sorted = [...res].sort((a, b) => a - b), dist = {};
+  for (const w of res) dist[w] = (dist[w] || 0) + 1;
+  return {
+    mode: 'endless', skill: typeof opts.skill === 'string' ? opts.skill : 'average', runs: n, avg: +(res.reduce((a, b) => a + b, 0) / n).toFixed(2), median: sorted[n >> 1],
+    min: sorted[0], max: sorted[n - 1], reachedBoss: res.filter((w) => w >= 5).length / n, bossesPerRun: +(bosses / n).toFixed(2), timeouts, dist, ms: Date.now() - t0,
+  };
 }
 
 // 스테이지별 승률 표 (기본: 1·3·5·7·10 스테이지 × casual/average/skilled)

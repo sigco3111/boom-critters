@@ -1,10 +1,10 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111053';
-import * as audio from './audio.js?v=2026111053';
-import { t as tr, getLang } from './i18n.js?v=2026111053';
-import * as fx from './fx.js?v=2026111053';
-import { makeProps, drawProp, PW, PH, BARREL_R, BARREL_DMG, MINE_R, MINE_DMG, MINE_TRIGGER, MINE_SEE, PACK_CHANCE } from './props.js?v=2026111053';
-import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111053';
+import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111054';
+import * as audio from './audio.js?v=2026111054';
+import { t as tr, getLang } from './i18n.js?v=2026111054';
+import * as fx from './fx.js?v=2026111054';
+import { makeProps, drawProp, PW, PH, BARREL_R, BARREL_DMG, MINE_R, MINE_DMG, MINE_TRIGGER, MINE_SEE, PACK_CHANCE } from './props.js?v=2026111054';
+import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111054';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -115,7 +115,19 @@ const EXTRA_ENEMY = ['malePerson', 'malePerson2', 'balanced', '#f59e0b'];
 // 보스 스테이지의 적 팀 (왼쪽부터): 로봇 호위 · 좀비 보스(스프라이트 1.8배, 빨간 왕관) · 여자 호위
 const BOSS_FIRE_AMMO = 4, BOSS_INTRO_T = 2.8; // 보스 등장 배너 시간(초): 이 동안 첫 턴 타이머는 멈춘다
 const BOSS_HP = 400, BOSS_REGEN = 5, BOSS_DMG = 1.6; // 보스 밸런스 값 (README '밸런스' 표)
-const BOSS_TEAM = [['robot', 'robot', 'armor'], ['zombie', 'boss', 'boss', '#dc2626'], ['femalePerson', 'femalePerson', 'steady']];
+const BOSS_TEAM = [['robot', 'robot', 'armor'], ['zombie', 'boss', 'boss', '#dc2626'], ['femalePerson', 'femalePerson', 'steady'], EXTRA_ENEMY];
+// ---------- 무한 모드: 특수 적 · 보스 웨이브 · 웨이브 보상 (밸런스 수치는 README '밸런스' 표) ----------
+export const SPECIALS = ['rusher', 'shield', 'bomber', 'medic'];   // 돌격병 · 방패병 · 공습병 · 의무병 (기존 스프라이트에 이름표 색·표식만 달리 한다)
+const SPECIAL_INTRO = { rusher: 2, shield: 3, bomber: 4, medic: 6 }; // 처음 만나는 웨이브 (그 웨이브에는 반드시 등장)
+const SPECIAL_TAG = { rusher: '#f97316', shield: '#94a3b8', bomber: '#a855f7', medic: '#22c55e' };
+const MEDIC_HEAL = 15, NOTE_T = 3.2;      // 의무병 치료량 / 특수 적 안내 띠 표시 시간(초)
+export const BOSS_EVERY = 5;             // 5의 배수 웨이브는 보스 웨이브
+export const isBossWave = (w) => w >= BOSS_EVERY && w % BOSS_EVERY === 0;
+export const BOSS_BONUS_HP = 40;                // 보스 격파 보너스: 팀 HP +40 · 수류탄 +1 · 번개 +1
+const WAVE_TEAM_HEAL = 25, DMG_WAVES = 3, DMG_BONUS = 0.1; // 웨이브 보상: 팀 HP +25 / 피해 +10%를 3웨이브 동안
+// 보상 목록: id -> 무기 슬롯 번호(탄약 보상) — 나머지(heal·dmg·revive)는 효과 보상
+export const REWARD_AMMO = { grenade: 2, bolt: 3, air: 5, smoke: 6, tele: 7 };
+export const REWARD_IDS = [...Object.keys(REWARD_AMMO), 'heal', 'dmg', 'revive'];
 // 캐릭터 특성 (작은 보정만): jumpK 점프 높이 배율, maxHp 최대 HP, blastK 폭발 피해 배율, speedK 이동 속도 배율, regen 팀 턴 시작 시 HP 회복, steady 조준 안정(AI 오차 감소 비율 = 파워 충전 시간 증가 비율)
 export const TRAITS = {
   balanced: { get name() { return tr('tr.balanced.n'); }, get desc() { return tr('tr.balanced.d'); } },
@@ -126,6 +138,11 @@ export const TRAITS = {
   steady: { get name() { return tr('tr.steady.n'); }, get desc() { return tr('tr.steady.d'); }, steady: 0.15 },
   // 보스(스테이지 14): HP 300, 폭발 피해 -15%, 턴 시작 HP +5, 자기 폭발 피해 +30%, 몸집 1.8배, 느림
   boss: { get name() { return tr('tr.boss.n'); }, get desc() { return tr('tr.boss.d'); }, maxHp: BOSS_HP, blastK: 0.85, regen: BOSS_REGEN, dmgK: BOSS_DMG, speedK: 0.7, scale: 1.8, boss: true },
+  // 무한 모드 특수 적: 돌격병 HP 60%·이동 2배 / 방패병 폭발·직격 피해 -40%·이동 -40% / 공습병 두 턴에 한 번 공습 / 의무병 턴마다 가장 약한 아군 +15
+  rusher: { get name() { return tr('sp.rusher.n'); }, get desc() { return tr('tr.rusher.d'); }, maxHp: 60, speedK: 2 },
+  shield: { get name() { return tr('sp.shield.n'); }, get desc() { return tr('tr.shield.d'); }, hitK: 0.6, speedK: 0.6 },
+  bomber: { get name() { return tr('sp.bomber.n'); }, get desc() { return tr('tr.bomber.d'); } },
+  medic: { get name() { return tr('sp.medic.n'); }, get desc() { return tr('tr.medic.d'); }, heal: MEDIC_HEAL },
 };
 const BASE_HP = 100;
 export const WALK_FRAMES = 8;
@@ -162,8 +179,35 @@ export function stageConfig(s) {
   return { mode: 'stage', stage: s, seed: 20240 + s * 7919, enemies: s <= 3 ? 2 : s <= 6 ? 3 : 4, windMax: Math.min(14, 3 + s), level: s, terrain: STAGE_TERRAIN[s] };
 }
 // 무한 모드 웨이브 w(1~): 적 수 2→4(1~2: 2마리, 3~4: 3마리, 5~: 4마리), 바람 ±(4+w, 최대 14), AI level = 1 + 1.5×(w-1) (최대 10, 웨이브 5 ≈ 스테이지 7)
+// 웨이브 2부터 특수 적이 섞이고(2~4: 1마리, 5~: 2마리), 5의 배수 웨이브는 보스(좀비 대왕) + 호위. 일반 적 HP는 웨이브마다 HP_STEP씩 늘어난다
+// 밸런스 수치 (window.__sim.endless 로 측정해 정함, README '밸런스' 표): errA0 웨이브 1의 AI 각도 오차(°), errDecay 웨이브마다 곱하는 값, errMin 최소 오차(파워 오차는 각도의 2배), pick 이 웨이브까지는 상위 후보 중 무작위, hpStep 웨이브마다 일반 적 HP 증가율, hpCap 상한, carryHeal 웨이브 사이 생존자 회복, reviveEvery 몇 웨이브마다 쓰러진 유닛 1명이 reviveHp로 복귀
+export const ENDLESS = { errA0: 38, errDecay: 0.91, errMin: 5, pickTo: 5, hpStep: 0.02, hpCap: 1.6, carryHeal: 48, reviveEvery: 2, reviveHp: 50, bossBase: 0.42, bossStep: 0.05, specials: true };
+export const endlessErr = (w) => { const a = Math.max(ENDLESS.errMin, ENDLESS.errA0 * Math.pow(ENDLESS.errDecay, Math.max(0, w - 1))); return { a, p: a * 2, pick: w <= ENDLESS.pickTo }; };
+export function wavePlan(w) {
+  const boss = isBossWave(w);
+  const enemies = boss ? Math.min(4, 3 + Math.floor(w / 10)) : Math.min(4, 2 + Math.floor((w - 1) / 2));
+  const want = !ENDLESS.specials ? 0 : boss ? (w >= 10 ? 1 : 0) : w >= 5 ? 2 : w >= 2 ? 1 : 0, kinds = [];
+  const fresh = SPECIALS.find((k) => SPECIAL_INTRO[k] === w);
+  if (fresh && !boss && want) kinds.push(fresh);
+  while (kinds.length < want && Math.random() < (kinds.length ? 0.6 : 0.85)) {
+    const pool = SPECIALS.filter((k) => SPECIAL_INTRO[k] <= w), fresh2 = pool.filter((k) => !kinds.includes(k));
+    const src = fresh2.length ? fresh2 : pool;
+    kinds.push(src[Math.floor(Math.random() * src.length)]);
+  }
+  // 슬롯 배정: 보스 웨이브는 보스 자리(1번)를 비워 둔다. 의무병은 뒤쪽(오른쪽)에 둔다
+  const free = Array.from({ length: enemies }, (_, i) => i).filter((i) => !(boss && i === 1)), out = Array(enemies).fill(null);
+  for (let i = free.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [free[i], free[j]] = [free[j], free[i]]; }
+  kinds.sort((x, y) => (x === 'medic') - (y === 'medic'));
+  for (const k of kinds) {
+    if (!free.length) break;
+    const idx = k === 'medic' ? Math.max(...free) : free[0];
+    free.splice(free.indexOf(idx), 1); out[idx] = k;
+  }
+  return { boss, enemies, kinds: out };
+}
 export function waveConfig(w) {
-  return { mode: 'endless', wave: w, enemies: Math.min(4, 2 + Math.floor((w - 1) / 2)), windMax: Math.min(14, 4 + w), level: Math.min(10, 1 + Math.round(1.5 * (w - 1))) };
+  const p = wavePlan(w);
+  return { mode: 'endless', wave: w, enemies: p.enemies, windMax: Math.min(14, 4 + w), level: Math.min(10, 1 + Math.round(1.5 * (w - 1))), boss: p.boss, kinds: p.kinds, hpK: Math.min(ENDLESS.hpCap, 1 + ENDLESS.hpStep * (w - 1)), bossHp: Math.round(BOSS_HP * (ENDLESS.bossBase + ENDLESS.bossStep * w)) };
 }
 // AI 오차 단계(1~10) -> 각도·파워 오차 계수 (1: 매우 쉬움 → 10: 어려움보다 정확)
 export function levelErr(level) {
@@ -211,6 +255,9 @@ export function stepProj(p, dt, wind, terrain, units, props) {
   return null;
 }
 
+// 무한 모드 도전 상태: picks 고른 보상 횟수, stock 무기 슬롯별 보상 탄약(웨이브마다 더해지고 남으면 이어짐), dmgWaves 피해 +10% 남은 웨이브 수, bosses 격파한 보스 수, seen 만난 특수 적
+const freshRun = () => ({ picks: {}, stock: Array(WEAPONS.length).fill(0), dmgWaves: 0, bosses: 0, seen: {} });
+
 class Unit {
   get name() { return tr('ch.' + this.nameKey); }   // 언어를 바꾸면 이름표도 바로 바뀐다
   constructor(team, idx, sprite, name, x, y, traitKey = 'balanced') {
@@ -225,6 +272,7 @@ class Unit {
     this.squash = 0; this.hurt = 0;
     this.walkDist = 0; this.shootT = 0; this.deadT = 0; this.drowned = false; this.cvy = 0;
     this.tagColor = TEAMS[team].color; // 이름표·HP 바 색 (기본은 팀 색)
+    this.kind = null; this.turns = 0;  // kind: 무한 모드 특수 적 종류(rusher·shield·bomber·medic), turns: 이 유닛이 맞은 AI 턴 수
   }
 }
 
@@ -259,6 +307,10 @@ export class Game {
     this.windLock = null;       // 바람 바꾸기 뒤 이어지는 바람: { sign, left }
     this.boss = false;          // 보스 스테이지 여부 (스테이지 14)
     this.bossIntro = null;      // 보스 등장 배너: { t }
+    this.run = null;            // 무한 모드 도전 상태(웨이브 보상·강화·보스 격파 수): newMatch(endless)에서 만든다
+    this.note = null;           // 특수 적을 처음 만났을 때 한 줄 안내 띠: { kind, text, t }
+    this.wavePlan = null;       // 이번 웨이브의 적 구성: { kinds, hpK, bossHp }
+    this.onReward = null;       // main.js가 연결: 웨이브 보상 화면을 연다 (없으면 시뮬레이션처럼 자동 선택)
     this.ammo = freshAmmo();    // 매치 시작 전에도 버튼 표시가 올바르도록
     this.stepTimer = 0;
     this.stats = blankStats();  // 우리 팀(팀 0) 경기 기록: 결과 화면에 표시
@@ -286,7 +338,10 @@ export class Game {
     this.level = opts.level ?? null;      // null이면 난이도(쉬움/보통/어려움)의 오차를 사용
     this.units = []; this.particles = []; this.floaters = []; this.proj = null; this.sfx.length = 0; this.splashes.length = 0;
     this.stats = blankStats();
-    this.boss = !!opts.boss; this.bossIntro = this.boss ? { t: 0 } : null;
+    this.boss = !!opts.boss; this.bossIntro = this.boss ? { t: 0 } : null; this.note = null;
+    this.run = this.mode === 'endless' ? freshRun() : null;
+    this.wavePlan = this.mode === 'endless' ? { kinds: opts.kinds || [], hpK: opts.hpK || 1, bossHp: opts.bossHp } : null;
+    if (this.run) this.noteSpecials(opts.kinds);
     const seed = opts.seed ?? ((Math.random() * 1e9) | 0);
     // 스테이지 1~3 초원 / 4~6 사막 / 7~8 설원 / 9~10 밤, 빠른 대전·무한은 시드로 결정
     // 빠른 대전만 맵을 고를 수 있다 (테마·지형 모두 '랜덤'이면 시드로 정함). 스테이지·무한은 예전 그대로(지형 hills)
@@ -314,6 +369,7 @@ export class Game {
       for (let i = 2; i < WEAPONS.length; i++) if (a[0][i] !== Infinity) a[0][i]++;
       a[1][4] = BOSS_FIRE_AMMO;
     }
+    if (this.run) for (const i of Object.values(REWARD_AMMO)) if (a[0][i] !== Infinity && (i !== AIR_IDX || this.airOk)) a[0][i] += this.run.stock[i]; // 웨이브 보상으로 얻은 탄약 (남아 있으면 다음 웨이브로 이어진다)
     return a;
   }
 
@@ -340,6 +396,7 @@ export class Game {
         const [sp, nm, trait, tagColor] = t === 1 && this.boss ? BOSS_TEAM[i] : t === 1 && i >= 3 ? EXTRA_ENEMY : CHARACTERS[t][i];
         const u = new Unit(t, i, sp, nm, x, sy - 1, trait);
         u.tagColor = tagColor || TEAMS[t].color;
+        if (t === 1 && this.wavePlan) this.applyWaveUnit(u, i);
         for (let k = 0; k < 20 && this.blocked(u.x, u.y); k++) u.y--;
         u.fallStart = u.y;
         if (t === 0 && carry) {
@@ -374,16 +431,34 @@ export class Game {
     return clamp(x0, 20, W - 20);
   }
 
+  // 무한 모드 적 유닛 보정: 특수 적(돌격병·방패병·공습병·의무병)은 특성·이름표 색을 바꾸고, 일반 적 HP는 웨이브에 따라 늘리며, 보스는 웨이브별 HP를 받는다
+  applyWaveUnit(u, i) {
+    const wp = this.wavePlan, k = wp.kinds[i];
+    if (k && TRAITS[k]) { u.kind = k; u.traitKey = k; u.trait = TRAITS[k]; u.maxHp = u.trait.maxHp || BASE_HP; u.tagColor = SPECIAL_TAG[k]; }
+    if (u.trait.boss) u.maxHp = wp.bossHp || u.maxHp; else u.maxHp = Math.round(u.maxHp * (wp.hpK || 1));
+    u.hp = u.maxHp;
+  }
+
+  // 특수 적 처음 만남: 이번 도전에서 아직 못 본 종류가 있으면 한 줄 안내 띠를 띄운다 (한 번에 하나)
+  noteSpecials(kinds) {
+    if (!this.run || !kinds) return;
+    let first = null;
+    for (const k of kinds) if (k && !this.run.seen[k]) { this.run.seen[k] = true; first = first || k; }
+    if (first) this.note = { kind: first, text: tr('sp.' + first + '.b'), t: 0 };
+  }
+
   // 무한 모드: 다음 웨이브 시작. 생존 유닛은 체력 +35, 3의 배수 웨이브 직전엔 쓰러진 유닛 1명이 HP 50으로 복귀
   startWave(w) {
     const carry = this.units.filter((u) => u.team === 0);
-    for (const u of carry) if (u.alive) u.hp = Math.min(u.maxHp, u.hp + 35);
-    if ((w - 1) % 3 === 0 && w > 1) {
+    for (const u of carry) if (u.alive) u.hp = Math.min(u.maxHp, u.hp + ENDLESS.carryHeal);
+    if ((w - 1) % ENDLESS.reviveEvery === 0 && w > 1) {
       const dead = carry.find((u) => !u.alive);
-      if (dead) { dead.alive = true; dead.hp = 50; dead.drowned = false; dead.deadT = 0; }
+      if (dead) { dead.alive = true; dead.hp = ENDLESS.reviveHp; dead.drowned = false; dead.deadT = 0; }
     }
     const cfg = waveConfig(w);
     this.wave = w; this.windMax = cfg.windMax; this.level = cfg.level;
+    this.boss = cfg.boss; this.bossIntro = cfg.boss ? { t: 0 } : null; this.note = null;
+    this.wavePlan = { kinds: cfg.kinds, hpK: cfg.hpK, bossHp: cfg.bossHp };
     this.buildField((Math.random() * 1e9) | 0, cfg.enemies, carry);
     this.airOk = this.level == null || this.level >= AI_UNLOCK[AIR_IDX];
     this.ammo = this.initAmmo();
@@ -391,6 +466,67 @@ export class Game {
     this.angle = 45; this.power = 0; this.weapon = 0; this.charging = false; this.ai = null;
     this.startTurn();
     this.banner = { text: tr('banner.wave', { n: w }) + (this.banner ? ' · ' + this.banner.text : ''), color: TEAMS[0].color, t: 0 };
+    this.noteSpecials(cfg.kinds);
+  }
+
+  // ---------- 웨이브 보상 ----------
+  // 웨이브 클리어 뒤 고를 수 있는 보상 3개 (지금 쓸 수 없는 것은 제외: 공습은 다음 웨이브가 공습 해금(웨이브 3) 이후일 때만, 부활은 쓰러진 유닛이 있을 때만, 팀 치유는 다친 유닛이 있을 때만)
+  rollRewards() {
+    const mine = this.units.filter((u) => u.team === 0);
+    const pool = REWARD_IDS.filter((id) => {
+      if (id === 'air') return waveConfig(this.wave + 1).level >= AI_UNLOCK[AIR_IDX];
+      if (id === 'revive') return mine.some((u) => !u.alive);
+      if (id === 'heal') return mine.some((u) => u.alive && u.maxHp - u.hp >= WAVE_TEAM_HEAL / 2);
+      return true;
+    });
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    return pool.slice(0, 3);
+  }
+
+  // 웨이브 클리어 후 2.4초가 지나면: 보상 화면을 열고(main.js) 고르면 다음 웨이브. 화면이 없으면(시뮬레이션) 알아서 고른다
+  openReward() {
+    const choices = this.rollRewards();
+    if (this.onReward) { this.state = 'reward'; this.onReward(choices, { wave: this.wave, boss: isBossWave(this.wave) }); }
+    else this.pickReward(this.autoPick(choices));
+  }
+  autoPick(choices) {
+    const mine = this.units.filter((u) => u.team === 0), hp = mine.reduce((a, u) => a + (u.alive ? u.hp : 0), 0) / mine.reduce((a, u) => a + u.maxHp, 0);
+    if (choices.includes('revive')) return 'revive';
+    if (choices.includes('heal') && hp < 0.65) return 'heal';
+    return choices[Math.floor(Math.random() * choices.length)];
+  }
+  // 보상 하나를 적용하고 다음 웨이브를 시작한다
+  pickReward(id) {
+    const r = this.run, mine = this.units.filter((u) => u.team === 0);
+    if (!r || !REWARD_IDS.includes(id)) return;
+    if (REWARD_AMMO[id] !== undefined) r.stock[REWARD_AMMO[id]]++;
+    else if (id === 'heal') this.healTeam(WAVE_TEAM_HEAL);
+    else if (id === 'dmg') r.dmgWaves += DMG_WAVES;
+    else if (id === 'revive') {
+      const dead = mine.find((u) => !u.alive);
+      if (dead) { dead.alive = true; dead.hp = Math.max(1, Math.round(dead.maxHp / 2)); dead.drowned = false; dead.deadT = 0; }
+    }
+    r.picks[id] = (r.picks[id] || 0) + 1;
+    audio.play('select');
+    this.startWave(this.wave + 1);
+  }
+  healTeam(n) { for (const u of this.units) if (u.team === 0 && u.alive) u.hp = Math.min(u.maxHp, u.hp + n); }
+  // 우리 팀 무기 피해 배율: 보상 '피해 +10%'가 남아 있는 동안 (공습·번개·폭발 모두)
+  dmgMul() { return this.run && this.run.dmgWaves > 0 && this.turnTeam === 0 ? 1 + DMG_BONUS : 1; }
+  // 지금 가진 강화 목록 (일시정지·결과 화면에 표시): ['수류탄 +1 ×2', '피해 +10% (2웨이브)', ...]
+  boosts() {
+    const r = this.run, out = [];
+    if (!r) return out;
+    const nm = { grenade: 'w.grenade', bolt: 'w.lightning', air: 'w.airstrike', smoke: 'w.smoke', tele: 'w.teleport' };
+    for (const id of REWARD_IDS) {
+      const n = r.picks[id] || 0;
+      if (!n) continue;
+      if (id === 'dmg') out.push(tr('bo.dmg', { n: r.dmgWaves, t: n }));
+      else if (id === 'heal') out.push(tr('bo.heal', { n }));
+      else if (id === 'revive') out.push(tr('bo.revive', { n }));
+      else out.push(tr('bo.ammo', { w: tr(nm[id]), n }));
+    }
+    return out;
   }
 
   // ---------- 유닛 물리 ----------
@@ -564,7 +700,7 @@ export class Game {
 
   // ---------- 폭발 ----------
   explode(x, y, w, owner = null) {
-    const r = w.radius, dk = (owner && owner.trait.dmgK) || 1; // dmgK: 보스의 센 포격
+    const r = w.radius, dk = ((owner && owner.trait.dmgK) || 1) * this.dmgMul(); // dmgK: 보스의 센 포격, dmgMul: 웨이브 보상 '피해 +10%'
     this.terrain.crater(x, y, r);
     this.emitExplosion(x, y, r, w.id);
     this.blastCrates(x, y, r);
@@ -581,7 +717,7 @@ export class Game {
       const reach = r + 12;
       if (d >= reach) continue;
       const f = 1 - d / reach;
-      const dmg = Math.max(2, Math.round(w.damage * f * (u.trait.blastK || 1) * dk));
+      const dmg = Math.max(2, Math.round(w.damage * f * (u.trait.blastK || 1) * (u.trait.hitK || 1) * dk)); // hitK: 방패병 -40%
       let nx = (cx - x) / (d || 1), ny = (cy - y) / (d || 1);
       this.damage(u, dmg, '#ff6b5a', cx - nx * BODY_R * 0.6, cy - ny * BODY_R * 0.6); hit = true; // 타격 번쩍임은 폭발 쪽 몸 가장자리에
       if (u.alive) {
@@ -775,6 +911,7 @@ export class Game {
     }
     this.activeUnit = u;
     if (t === 0 && u) this.stats.turns++;
+    if (u) u.turns++;
     this.wind = this.rollWind();
     this.timer = TURN_TIME;
     this.state = 'aim';
@@ -826,12 +963,29 @@ export class Game {
 
   // 재생 특성: 팀 턴이 시작될 때 그 팀의 살아 있는 재생형 유닛이 HP를 회복한다 (최대 HP까지)
   regenTeam(t) {
+    this.medicHeal(t);
     for (const u of this.units) {
       const r = u.trait.regen;
       if (!r || !u.alive || u.team !== t || u.hp >= u.maxHp) continue;
       const h = Math.min(r, u.maxHp - u.hp);
       u.hp += h;
       this.ft(u.x, Math.max(26, u.y - 92), '+' + h, '#5dff6e');
+    }
+  }
+
+  // 의무병: 팀 턴이 시작될 때 살아 있는 의무병마다 가장 HP가 낮은 (다친) 아군을 15 치료한다. 다친 다른 아군이 없으면 자기 자신
+  medicHeal(t) {
+    for (const m of this.units) {
+      if (m.kind !== 'medic' || !m.alive || m.team !== t) continue;
+      let best = null;
+      for (const o of this.units) if (o.alive && o.team === t && o !== m && o.hp < o.maxHp && (!best || o.hp < best.hp)) best = o;
+      if (!best && m.hp < m.maxHp) best = m;
+      if (!best) continue;
+      const h = Math.min(MEDIC_HEAL, best.maxHp - best.hp);
+      best.hp += h;
+      this.ft(best.x, Math.max(26, best.y - 92), '+' + h, '#5dff6e');
+      this.sfxAdd('heal', best.x, best.y - 34, 96, 0);
+      audio.playSynth('heal');
     }
   }
 
@@ -977,7 +1131,7 @@ export class Game {
       const cx = u.x, cy = u.y - BODY_CY * u.sc, d = Math.hypot(cx - x, cy - y);
       if (d >= r) continue;
       const f = 1 - 0.25 * (d / r), nx = (cx - x) / (d || 1), ny = (cy - y) / (d || 1);
-      this.damage(u, Math.max(2, Math.round(dmg * f * (u.trait.blastK || 1))), '#ff6b5a', cx - nx * BODY_R * 0.6, cy - ny * BODY_R * 0.6);
+      this.damage(u, Math.max(2, Math.round(dmg * f * (u.trait.blastK || 1) * (u.trait.hitK || 1))), '#ff6b5a', cx - nx * BODY_R * 0.6, cy - ny * BODY_R * 0.6);
       if (u.alive) { u.grounded = false; u.y -= 2; u.fallStart = u.y; u.vx = nx * knock * f; u.vy = ny * knock * f - 150 * f; }
     }
     for (const p of this.props) {
@@ -1056,7 +1210,15 @@ export class Game {
     if (a[0] && a[1]) return false;
     if (this.mode === 'endless' && a[0] && !a[1]) { // 웨이브 클리어: 잠시 후 다음 웨이브
       this.cleared = this.wave; this.state = 'wave'; this.waveT = 0;
-      this.banner = { text: tr('banner.waveClear', { n: this.wave }), color: TEAMS[0].color, t: 0 };
+      const bossWave = isBossWave(this.wave), r = this.run;
+      if (r) {
+        if (r.dmgWaves > 0) r.dmgWaves--;  // '피해 +10%'는 클리어한 웨이브마다 하나씩 줄어든다
+        for (const i of Object.values(REWARD_AMMO)) if (this.ammo[0][i] !== Infinity && (i !== AIR_IDX || this.airOk)) r.stock[i] = Math.min(r.stock[i], Math.max(0, this.ammo[0][i])); // 쓰고 남은 보상 탄약만 이어진다
+        if (bossWave) { // 보스 격파 보너스: 팀 HP +40 · 수류탄 +1 · 번개 +1 (보상 3택 1과 별개)
+          r.bosses++; r.stock[REWARD_AMMO.grenade]++; r.stock[REWARD_AMMO.bolt]++; this.healTeam(BOSS_BONUS_HP);
+        }
+      }
+      this.banner = { text: tr(bossWave ? 'banner.bossClear' : 'banner.waveClear', { n: this.wave }), color: TEAMS[0].color, t: 0 };
       audio.play('win');
       this.onWave(this.cleared);
       return true;
@@ -1255,7 +1417,7 @@ export class Game {
   // ---------- 공습 ----------
   // 호출 즉시 목표 구역(폭 120px)에 경고 마커를 AIR_WARN초 동안 띄우고, 이어서 폭탄 AIR_N발이 짧은 간격으로 떨어진다.
   fireAirstrike(u, w) {
-    if (this.ammo[this.turnTeam][this.weapon] !== Infinity) this.ammo[this.turnTeam][this.weapon]--;
+    if (u.kind !== 'bomber' && this.ammo[this.turnTeam][this.weapon] !== Infinity) this.ammo[this.turnTeam][this.weapon]--; // 공습병은 탄약을 쓰지 않는다
     const cx = clamp(this.airX, 20, W - 20), slot = AIR_W / AIR_N, order = [...Array(AIR_N).keys()].sort(() => Math.random() - 0.5);
     this.air = {
       cx, t: 0, w,
@@ -1333,7 +1495,7 @@ export class Game {
     this.sfxAdd('muzI', ox, oy, 70, Math.atan2(dy, dx)); // 번개 시작점에 파란 이온 플래시
     for (let i = 0; i < 8; i++) this.pt('spark', ox, oy, rnd(-90, 90), rnd(-90, 90), rnd(1.5, 3), rnd(0.2, 0.4));
     if (target) {
-      this.damage(target, w.damage, '#9fd0ff', ex, ey);
+      this.damage(target, Math.max(1, Math.round(w.damage * (target.trait.hitK || 1) * this.dmgMul())), '#9fd0ff', ex, ey);
       if (!this.sfxAdd('zap', ex, ey, 120, rnd(0, 6.283))) this.pt('flash', ex, ey, 0, 0, 34, 0.25); // 전기 스프라이트, 못 받았으면 예전 번쩍임
       else this.pt('flash', ex, ey, 0, 0, 22, 0.18);
       for (let i = 0; i < 16; i++) this.pt('spark', ex, ey, rnd(-220, 220), rnd(-220, 160), rnd(1.5, 3.5), rnd(0.25, 0.55));
@@ -1384,6 +1546,7 @@ export class Game {
     if (sk) return { a: sk.a, p: sk.p, pick: !!sk.pick };
     if (this.sim && this.sim.err) return { ...this.sim.err }; // 시뮬레이션: 적 AI 오차를 직접 지정해 보는 실험용
     if (this.mode === 'stage' && STAGE_AI[this.stage]) { const [a, p] = STAGE_AI[this.stage]; return { a, p, pick: this.stage <= 3 }; }
+    if (this.mode === 'endless') return endlessErr(this.wave);
     if (this.level != null) return levelErr(this.level);
     const d = DIFF[this.difficulty] || DIFF.normal;
     return { a: d.a, p: d.p, pick: this.difficulty === 'easy' };
@@ -1460,6 +1623,12 @@ export class Game {
     // 낮은 스테이지/웨이브에서는 AI의 특수 무기 제한. 시뮬레이션 속 우리 팀은 level과 무관하게 탄약이 있으면 사용(basic이면 대포탄·로켓만)
     const can = (i) => am[i] > 0 && !(sk && i === WIND_IDX) && (sk ? !sk.basic : this.level == null || this.level >= AI_UNLOCK[i]);
     const instant = (weapon, extra) => ({ weapon, facing: u.facing, dist: 0, min: 0, target: enemies[0], angle: this.angle, power: 0, ...extra });
+    if (u.kind === 'bomber' && u.turns % 2 === 1 && this.airOk) { // 공습병: 두 턴에 한 번(1·3·5번째 턴) 가장 많이 모인 상대 쪽에 공습. 아군이 구역 근처면 일반 사격
+      let tgt = null, cnt = 0;
+      for (const a of enemies) { const n = enemies.filter((o) => Math.abs(o.x - a.x) < AIR_W / 2).length; if (n > cnt || (n === cnt && tgt && Math.abs(a.x - u.x) < Math.abs(tgt.x - u.x))) { tgt = a; cnt = n; } }
+      const e = this.aiErr(), cx = clamp(tgt.x + gauss() * e.a * 2 * (this.inSmoke(tgt.x, tgt.y - BODY_CY) ? 2 : 1), 20, W - 20);
+      if (!this.units.some((o) => o.alive && o.team === me && Math.abs(o.x - cx) < AIR_W / 2 + 10)) return { weapon: AIR_IDX, facing: cx >= u.x ? 1 : -1, dist: 0, min: 0, target: tgt, angle: this.angle, power: 0, x: cx };
+    }
     if (can(TELE_IDX) && this.aiWantsTele(u)) { // 순간이동: HP 35 미만이거나 화염 지대 안
       const sp = this.aiTeleSpot(u, enemies);
       if (sp) return instant(TELE_IDX, { tele: sp });
@@ -1511,6 +1680,8 @@ export class Game {
     }
     const vis = enemies.filter((e) => !this.inSmoke(e.x, e.y - BODY_CY * e.sc)); // 연막 속 유닛은 AI 눈에 안 띈다: 보이는 적을 먼저 노린다
     if (!ai.target || !ai.target.alive || (vis.length && !vis.includes(ai.target))) ai.target = (vis.length ? vis : enemies)[Math.floor(Math.random() * (vis.length || enemies.length))];
+    const medic = vis.find((e) => e.kind === 'medic');
+    if (medic && sk && ai.target !== medic && Math.random() < 0.7) ai.target = medic; // 시뮬레이션 속 우리 팀: 의무병을 우선 노린다 (사람 플레이어가 하는 것처럼)
     if (u.trait.boss && can(4) && Math.random() < 0.55) { // 보스는 화염탄을 즐겨 쓴다 (착탄이 멀면 일반 사격)
       const fp = yield* this.aiPlan(4, pt(ai.target));
       if (fp.min <= 60) return { ...fp, target: ai.target };
@@ -1634,6 +1805,16 @@ export class Game {
           return;
         }
       }
+      // 2.5) 돌격병: 사격 전에 가장 가까운 상대 유닛 쪽으로 먼저 달려간다 (이동 속도 2배라 한 턴에 2배 멀리 간다). 110px 안까지 다가가면 멈춘다
+      if (!a.job && u.kind === 'rusher' && !a.rushed) {
+        a.rushed = true;
+        let near = null;
+        for (const o of this.units) if (o.alive && o.team !== u.team && (!near || Math.abs(o.x - u.x) < Math.abs(near.x - u.x))) near = o;
+        if (near && Math.abs(near.x - u.x) > 130) {
+          const dir = near.x >= u.x ? 1 : -1;
+          if (this.aiSafeAhead(u, dir)) { a.phase = 'walk'; a.t = 0; a.goal = 'rush'; a.rushT = near; a.dir = dir; a.dur = 2.2; return; }
+        }
+      }
       // 3) 사격 계획 (무기 선택 포함). 대포/로켓 계획이 빗나가면 목표 쪽으로 걸어가 다시 계산. 계산은 여러 프레임에 나눠서 한다
       if (!a.job) a.job = this.aiDecide();
       const jr = this.aiRun(a.job);
@@ -1655,7 +1836,7 @@ export class Game {
       }
     } else if (a.phase === 'walk') {
       const arrived = a.goal === 'crate' && (a.crate.dead || Math.abs(a.crate.x - u.x) < 8);
-      const clear = a.goal === 'fire' && !this.aiFireAt(u.x, u.y, 6);
+      const clear = a.goal === 'fire' && !this.aiFireAt(u.x, u.y, 6) || (a.goal === 'rush' && Math.abs(a.rushT.x - u.x) < 110);
       if (a.t < a.dur && !arrived && !clear && this.aiSafeAhead(u, a.dir)) this.walk(u, a.dir, dt);
       else { u.moving = false; a.phase = 'think'; a.t = 0.5; }
     } else if (a.phase === 'aim') {
@@ -1692,12 +1873,13 @@ export class Game {
     this.shake = Math.max(0, this.shake - dt * 24);
     if (this.banner) { this.banner.t += dt; if (this.banner.t > BANNER_T) this.banner = null; }
     if (this.bossIntro) { this.bossIntro.t += dt; if (this.bossIntro.t > BOSS_INTRO_T) this.bossIntro = null; }
+    if (this.note) { this.note.t += dt; if (this.note.t > NOTE_T) this.note = null; }
     for (const m of this.smokes) m.t += dt;
 
     for (const u of this.units) if (u.alive) { u.moving = false; }
     const hu = this.activeUnit;
     if (this.state === 'aim') {
-      if (!this.bossIntro) this.timer -= dt;
+      if (!this.bossIntro && !this.note) this.timer -= dt;
       const sec = Math.ceil(this.timer);
       if (sec <= 5 && sec > 0 && sec !== this.lastTick) { this.lastTick = sec; audio.play('tick', { vol: 0.6 }); }
       const human = !this.isAI(this.turnTeam);
@@ -1771,7 +1953,7 @@ export class Game {
       else if (!u.drowned) this.updateCorpse(u, dt);
     }
 
-    if (this.state === 'wave' && this.waveT > 2.4) this.startWave(this.wave + 1);
+    if (this.state === 'wave' && this.waveT > 2.4) this.openReward();
 
     if (this.state === 'settle') {
       const calm = this.units.every((u) => !u.alive || u.grounded) && !this.props.some((o) => o.fuse >= 0 && !o.dead); // 연쇄 폭발이 끝날 때까지 기다린다
@@ -2114,6 +2296,32 @@ export class Game {
     }
     if (u.trait.boss && u.alive) this.drawCrown(g, -h * 0.93);
     g.restore();
+    if (u.kind === 'medic' && u.alive) { // 의무병: 우선 처치 표시 (몸통을 도는 빨간 점선 고리)
+      g.save();
+      g.strokeStyle = 'rgba(255,70,70,0.9)'; g.lineWidth = 2; g.setLineDash([5, 4]); g.lineDashOffset = -this.time * 14;
+      g.beginPath(); g.arc(u.x, u.y - BODY_CY, 25 + Math.sin(this.time * 5) * 1.5, 0, 6.2832); g.stroke();
+      g.restore();
+    }
+  }
+
+  // 특수 적 표식: 모양과 색으로 구분 (돌격병 ▶ 주황 삼각형 · 방패병 ■ 회청 방패 · 공습병 ⬢ 보라 육각형 · 의무병 ● 초록 원) + 한 글자
+  badgePath(g, kind, x, y, r) {
+    g.beginPath();
+    if (kind === 'rusher') { g.moveTo(x - r, y - r); g.lineTo(x + r * 1.25, y); g.lineTo(x - r, y + r); }
+    else if (kind === 'shield') { g.moveTo(x - r, y - r); g.lineTo(x + r, y - r); g.lineTo(x + r, y + r * 0.2); g.lineTo(x, y + r * 1.15); g.lineTo(x - r, y + r * 0.2); }
+    else if (kind === 'bomber') { for (let i = 0; i < 6; i++) { const a = (i / 6) * 6.2832 + 0.5236; g[i ? 'lineTo' : 'moveTo'](x + Math.cos(a) * r * 1.1, y + Math.sin(a) * r * 1.1); } }
+    else g.arc(x, y, r, 0, 7);
+    g.closePath();
+  }
+  drawBadge(g, kind, x, y, r) {
+    g.save();
+    g.lineJoin = 'round';
+    this.badgePath(g, kind, x, y, r);
+    g.lineWidth = 3.4; g.strokeStyle = '#000'; g.stroke();
+    g.lineWidth = 1.6; g.strokeStyle = '#fff'; g.stroke();
+    g.fillStyle = SPECIAL_TAG[kind]; g.fill();
+    g.restore();
+    this.text(g, tr('sp.' + kind + '.l'), x, y + 0.5, r * 1.5, '#fff', 'center', '800');
   }
 
   // 보스의 빨간 왕관 (머리 위, 금 테두리와 보석)
@@ -2139,7 +2347,7 @@ export class Game {
       const u = this.units[i];
       if (!u.alive) continue;
       const t = u.tag || (u.tag = { u, w: 0, x: 0, y: 0, nm: '', tm: false }), nm = u.name;
-      if (t.nm !== nm || t.tm !== this.teamMarks) { t.nm = nm; t.tm = this.teamMarks; t.w = Math.max(46, Math.ceil(this.textW(nm, 700, 10)) + 10 + (this.teamMarks ? 14 : 0)); }
+      if (t.nm !== nm || t.tm !== this.teamMarks || t.k !== u.kind) { t.nm = nm; t.tm = this.teamMarks; t.k = u.kind; t.w = Math.max(46, Math.ceil(this.textW(nm, 700, 10)) + 10 + (this.teamMarks ? 14 : 0) + (u.kind ? 14 : 0)); }
       t.x = u.x; t.y = u.y - TAG_TOP - (u.sc - 1) * 64 - (u.sc > 1 ? 16 : 0); // 큰 보스는 이름표가 머리·왕관 위로
       tags[nt++] = t;
     }
@@ -2190,8 +2398,10 @@ export class Game {
     // 이름표
     g.fillStyle = col; g.strokeStyle = '#fff'; g.lineWidth = 1.5;
     g.beginPath(); g.roundRect(left, y, w, 13, 4); g.fill(); g.stroke();
-    if (this.teamMarks) { this.mark(g, u.team, left + 9, y + 6.5, 4.5); this.text(g, u.name, x + 7, y + 7, 10); }
-    else this.text(g, u.name, x, y + 7, 10);
+    let off = 0; // 이름 앞에 붙는 표식 폭: 고대비 팀 표시(14) · 특수 적 표식(14)
+    if (this.teamMarks) { this.mark(g, u.team, left + 9, y + 6.5, 4.5); off += 14; }
+    if (u.kind) { this.drawBadge(g, u.kind, left + 9 + off, y + 6.5, 5.6); off += 14; }
+    this.text(g, u.name, x + off / 2, y + 7, 10);
     // HP 바 (이름표 바로 아래, 숫자는 바 안)
     const by = y + 15;
     g.fillStyle = 'rgba(0,0,0,0.7)'; g.fillRect(left, by, w, 11);
@@ -2555,6 +2765,22 @@ export class Game {
       g.restore();
     }
     if (this.bossIntro) this.drawBossIntro(g, big);
+    if (this.note) this.drawNote(g, big, hs, dom);
+  }
+
+  // 특수 적 안내 띠: 표식 + 한 줄 설명 (턴 배너 바로 아래, 0.25초 페이드 인 · 마지막 0.5초 페이드 아웃)
+  drawNote(g, big, hs, dom) {
+    const n = this.note, a = Math.max(0, Math.min(1, n.t / 0.25, (NOTE_T - n.t) / 0.5));
+    const fz = Math.min(30, Math.max(15, 13 / this.viewScale)) * big;
+    g.font = `800 ${fz}px ${FONT}`;
+    const tw = Math.ceil(g.measureText(n.text).width), bh = fz * 1.9, bw = Math.min(W - 24, tw + fz * 3.4);
+    const by = (dom ? 6 : Math.ceil(107 * hs) + 8) + fz * 1.8 + 12;
+    g.save(); g.globalAlpha = a * 0.95;
+    g.fillStyle = 'rgba(0,0,0,0.78)'; g.beginPath(); g.roundRect(W / 2 - bw / 2, by, bw, bh, bh / 2); g.fill();
+    g.strokeStyle = SPECIAL_TAG[n.kind]; g.lineWidth = 2.5; g.stroke();
+    this.drawBadge(g, n.kind, W / 2 - bw / 2 + bh * 0.62, by + bh / 2, fz * 0.5);
+    this.text(g, n.text, W / 2 + fz * 0.7, by + bh / 2 + 1, Math.min(fz, (fz * (bw - fz * 3.2)) / Math.max(1, tw)), '#fff', 'center', '800');
+    g.restore();
   }
 
   // 보스 등장 배너: 화면 가운데에 붉은 띠가 가로로 열리고 '보스 등장!' + 보스 이름 (0.25초 페이드 인, 마지막 0.5초 페이드 아웃)
