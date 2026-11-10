@@ -20,3 +20,4 @@ button.down, button:active { transform: translateY(2px); filter: brightness(1.15
 #controls button.sel { background: #d9a31b; border-color: #8f6a0d; }
 #controls .fire { background: #d33b2f; border-color: #8b1f17; min-width: 120px; font-weight: 700; }
 @media (max-height: 460px) { #controls button { min-height: 36px; padding: 4px 10px; font-size: 13px; } #stage { width: min(100vw, calc((100vh - 52px) * 16 / 9)); } }
+#controls button:disabled { opacity: 0.4; cursor: not-allowed; filter: grayscale(0.6); }
