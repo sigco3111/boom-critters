@@ -31,6 +31,13 @@ function unlockAudio() { // 재생이 막혀 있으면 다음 입력에서도 �
 ['pointerdown', 'touchend', 'keydown'].forEach((t) => window.addEventListener(t, unlockAudio, true));
 
 // 터치 화면 판별: 주 입력이 손가락(coarse)이거나 좁은 화면이거나, 실제 터치 입력이 한 번이라도 들어오면 켠다
+// 세로 화면 안내(가로로 돌리면 더 크게 보임): 닫으면 이번 접속 동안 다시 안 보임
+try { if (sessionStorage.getItem('boom-hint-off') === '1') document.body.classList.add('hint-off'); } catch (e) { /* ignore */ }
+$('rotateHintClose').addEventListener('click', () => {
+  document.body.classList.add('hint-off');
+  try { sessionStorage.setItem('boom-hint-off', '1'); } catch (e) { /* ignore */ }
+});
+
 let game = null, difficulty = 'normal', touchSticky = false;
 const coarseMQ = window.matchMedia('(pointer: coarse)');
 const looksTouch = () => touchSticky || coarseMQ.matches || innerWidth <= 820 || (innerHeight <= 500 && innerWidth <= 1000)
@@ -259,6 +266,8 @@ function setup(sprites) {
       if (!modalOpen) game.update(dt);
       game.draw(g);
     } catch (err) { console.error(err); }
+    // 메뉴/모달이 떠 있으면 가로 화면의 겹침 컨트롤을 숨김
+    document.body.classList.toggle('menu', ['startScreen', 'stageScreen', 'resultScreen', ...MODALS].some((id) => !$(id).classList.contains('hidden')));
     // 무기 버튼 상태 표시
     weaponBtns.forEach((b, i) => {
       b.classList.toggle('sel', game.weapon === i);
