@@ -438,6 +438,7 @@ export class Game {
     u.hp -= dmg; u.hurt = HURT_T;
     if (u.team === 0) { this.hitMine = true; this.buzz('hit'); }
     this.ft(u.x + rnd(-8, 8), Math.max(26, u.y - 92), '-' + dmg, '#ff3b30', true);
+    this.sfxAdd('hit', ix, iy, 40 + Math.min(34, dmg * 0.7), rnd(0, 6.283)); // 맞은 자리에 작은 타격 번쩍임
     if (u.hp <= 0) {
       u.hp = 0; u.alive = false;
       this.pt('poof', u.x, u.y - 24, 0, -14, 17, 0.55);
@@ -877,6 +878,7 @@ export class Game {
       vx: f * Math.cos(a) * v, vy: -Math.sin(a) * v, w, owner: u, age: 0,
     };
     if (w.fuse) { this.proj.fuse = w.fuse; this.proj.tickN = Math.ceil(w.fuse); }
+    this.sfxAdd('muzF', this.proj.x, this.proj.y, w.id === 'rocket' ? 78 : w.id === 'cannon' ? 64 : w.id === 'fire' ? 56 : 42, Math.atan2(this.proj.vy, this.proj.vx)); // 포구(발사 위치)에서 총구 화염
     this.lastPower = power; this.power = power;
     if (this.ammo[this.turnTeam][this.weapon] !== Infinity) this.ammo[this.turnTeam][this.weapon]--;
     this.state = 'flying';
@@ -956,6 +958,7 @@ export class Game {
     audio.playSynth('lightning'); // 합성: 하이패스 스윕 노이즈 지지직
     audio.play('explosion', { rate: 1.9, vol: 0.3 });
     u.squash = -0.2; u.shootT = 0.4;
+    this.sfxAdd('muzI', ox, oy, 70, Math.atan2(dy, dx)); // 번개 시작점에 파란 이온 플래시
     for (let i = 0; i < 8; i++) this.pt('spark', ox, oy, rnd(-90, 90), rnd(-90, 90), rnd(1.5, 3), rnd(0.2, 0.4));
     if (target) {
       this.damage(target, w.damage, '#9fd0ff', ex, ey);
@@ -1295,6 +1298,8 @@ export class Game {
       } else if (p.w.id === 'rocket') {
         this.pt('fire', p.x, p.y, rnd(-20, 20), rnd(-20, 20), rnd(3, 5), 0.3);
         this.pt('smoke', p.x, p.y, rnd(-10, 10), rnd(-10, 10), rnd(3, 5), 0.8, '120,120,120');
+      } else if (fx.ready('orb')) {
+        this.pt('spark', p.x, p.y, 0, 0, rnd(1.6, 2.6), 0.22); // 대포탄(파란 구슬) 꼬리
       } else {
         this.pt('smoke', p.x, p.y, 0, 0, 2, 0.35, '230,230,230');
       }
@@ -1755,6 +1760,9 @@ export class Game {
     g.translate(p.x, p.y);
     if (p.w.id === 'rocket') {
       g.rotate(Math.atan2(p.vy, p.vx));
+      const fl = 8 + 3 * Math.sin(p.age * 70) + 2 * Math.sin(p.age * 113); // 코드로 그린 작은 불꽃 꼬리 (깜빡임)
+      g.fillStyle = '#ff7a1c'; g.beginPath(); g.moveTo(-10, -3.5); g.lineTo(-11 - fl, 0); g.lineTo(-10, 3.5); g.closePath(); g.fill();
+      g.fillStyle = '#ffe27a'; g.beginPath(); g.moveTo(-10, -2); g.lineTo(-11 - fl * 0.6, 0); g.lineTo(-10, 2); g.closePath(); g.fill();
       g.fillStyle = '#e6e6e6'; g.fillRect(-9, -3, 14, 6);
       g.fillStyle = '#d33'; g.beginPath(); g.moveTo(5, -3); g.lineTo(11, 0); g.lineTo(5, 3); g.fill();
       g.fillStyle = '#555'; g.fillRect(-11, -4, 3, 8);
@@ -1771,6 +1779,9 @@ export class Game {
       const cy = Math.max(16, p.y - 16);
       this.text(g, String(Math.max(1, Math.ceil(p.fuse))), p.x, cy, 18, p.fuse < 1 ? '#ff6b5a' : '#fff');
       return;
+    } else if (p.w.id === 'cannon' && fx.ready('orb')) { // 대포탄: 파란 구슬 스프라이트(Blue projectile), 속도 방향으로 돌림
+      const a = fx.ANIMS.orb;
+      fx.drawFrame(g, a, ((p.age * a.fps) | 0) % a.n, 0, 0, 24, Math.atan2(p.vy, p.vx), 1, false);
     } else {
       g.fillStyle = '#2b2b2b'; g.beginPath(); g.arc(0, 0, 5, 0, 7); g.fill();
       g.fillStyle = 'rgba(255,255,255,0.6)'; g.beginPath(); g.arc(-1.5, -1.5, 1.6, 0, 7); g.fill();
