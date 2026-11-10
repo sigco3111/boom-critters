@@ -66,7 +66,9 @@ const BASE_HP = 100;
 export const WALK_FRAMES = 8;
 const STEP_LEN = 6;      // 걷기 프레임 하나당 이동 거리 (px)
 const SPRITE_H = 64;     // 포즈 이미지(96x128) 표시 높이 -> 캐릭터 키 약 52px
-const FADE_START = 0.6, FADE_END = 1.6; // 사망 후 페이드 (초)
+const FADE_START = 0.25, FADE_END = 1.0; // 사망 후 스프라이트 페이드 (초): 뽕! 연기가 가린 뒤 금방 사라진다
+const HURT_T = 0.3;      // 피격 하얀 번쩍임 시간(초)
+const HOP_H = 18, HOP_W = 4.6; // 승리 점프: 높이(px)와 각속도(rad/s)
 // 빠른 대전 난이도: AI 각도·파워 오차(a°, p)와 적 수(enemies). 시작 화면에서 고른 값이 localStorage에 저장된다
 export const DIFF = {
   easy: { a: 8, p: 16, enemies: 2, label: '쉬움' },
@@ -327,7 +329,7 @@ export class Game {
   }
 
   updateCorpse(u, dt) {
-    u.deadT += dt;
+    u.deadT += dt; u.hurt = Math.max(0, u.hurt - dt);
     if (!this.feetSolid(u.x, u.y + 1) && u.y < WATER_Y + 40) { u.cvy += UNIT_G * dt; u.y += u.cvy * dt; } else u.cvy = 0;
   }
 
@@ -374,11 +376,12 @@ export class Game {
   damage(u, dmg, color = '#fff') {
     if (!u.alive || dmg <= 0) return;
     this.countLoss(u, Math.min(u.hp, dmg));
-    u.hp -= dmg; u.hurt = 0.3;
+    u.hp -= dmg; u.hurt = HURT_T;
     this.floaters.push({ x: u.x + rnd(-8, 8), y: Math.max(26, u.y - 92), text: '-' + dmg, color: '#ff3b30', t: 0, dmg: true });
     if (u.hp <= 0) {
       u.hp = 0; u.alive = false;
-      for (let i = 0; i < 14; i++) this.particles.push({ type: 'smoke', x: u.x + rnd(-8, 8), y: u.y - rnd(5, 30), vx: rnd(-40, 40), vy: rnd(-70, -10), r: rnd(6, 12), life: 0, max: rnd(0.7, 1.3), color: '255,255,255' });
+      this.particles.push({ type: 'poof', x: u.x, y: u.y - 24, vx: 0, vy: -14, r: 17, life: 0, max: 0.55 });
+      for (let i = 0; i < 6; i++) this.particles.push({ type: 'smoke', x: u.x + rnd(-8, 8), y: u.y - rnd(5, 30), vx: rnd(-40, 40), vy: rnd(-70, -10), r: rnd(5, 9), life: 0, max: rnd(0.6, 1.0), color: '255,255,255' });
     }
   }
 
@@ -1314,11 +1317,31 @@ export class Game {
   poseOf(u) {
     if (!u.alive) return 'down';
     if (u.hurt > 0) return 'hit';
+    if (this.hopOf(u) > 1) return 'jump';
     if (!u.grounded) return u.vy < 0 ? 'jump' : 'fall';
     if (u.moving) return 'walk' + (Math.floor(u.walkDist / STEP_LEN) % WALK_FRAMES);
     if (u.shootT > 0) return 'attack0';
     if (u === this.activeUnit && this.charging) return 'hold';
     return 'idle';
+  }
+
+  // 승리 점프: 경기가 끝나면(결과 화면 뒤에서도) 이긴 팀의 생존 유닛이 차례로 폴짝폴짝. 움직임 줄이기 설정이면 없음
+  hopOf(u) {
+    if (this.state !== 'over' || !u.alive || u.team !== this.winner || !u.grounded || this.reduceMotion) return 0;
+    return Math.max(0, Math.sin(this.time * HOP_W + u.idx * 1.3)) * HOP_H;
+  }
+
+  // 피격 번쩍임용 흰 실루엣 (이미지마다 한 번만 만들어 재사용)
+  flashSprite(img) {
+    this._flash = this._flash || new WeakMap();
+    let c = this._flash.get(img);
+    if (!c) {
+      c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const k = c.getContext('2d');
+      k.drawImage(img, 0, 0); k.globalCompositeOperation = 'source-atop'; k.fillStyle = '#fff'; k.fillRect(0, 0, c.width, c.height);
+      this._flash.set(img, c);
+    }
+    return c;
   }
 
   drawUnit(g, u) {
@@ -1329,14 +1352,15 @@ export class Game {
     if (u.alive && u.grounded && !u.moving) { sx = 1 + u.squash * 0.5; sy = 1 - u.squash * 0.5; }
     g.save();
     if (!u.alive) g.globalAlpha = clamp(1 - (u.deadT - FADE_START) / (FADE_END - FADE_START), 0, 1);
-    g.translate(u.x, u.y + 1); // 발(이미지 하단)이 지형 위 u.y
+    g.translate(u.x, u.y + 1 - this.hopOf(u)); // 발(이미지 하단)이 지형 위 u.y
     g.scale(sx * (u.facing < 0 ? -1 : 1), sy);
     g.drawImage(img, -w / 2, -h, w, h);
-    g.restore();
-    if (u.hurt > 0 && u.alive) {
-      g.save(); g.globalAlpha = u.hurt / 0.3 * 0.5; g.fillStyle = '#fff';
-      g.beginPath(); g.arc(u.x, u.y - 24, 20, 0, 7); g.fill(); g.restore();
+    if (u.hurt > 0) { // 피격 번쩍임: 스프라이트 모양 그대로 하얗게, 0.3초 동안 줄어든다
+      const base = g.globalAlpha;
+      g.globalAlpha = base * Math.min(1, u.hurt / HURT_T * 1.4) * 0.85;
+      g.drawImage(this.flashSprite(img), -w / 2, -h, w, h);
     }
+    g.restore();
   }
 
   // 이름표 + HP 바를 한 블록으로 머리 위에 그린다. 이웃과 겹치면 가로로 밀어낸다.
@@ -1507,6 +1531,20 @@ export class Game {
       } else if (p.type === 'smoke') {
         g.fillStyle = `rgba(${p.color},${0.55 * (1 - k)})`;
         g.beginPath(); g.arc(p.x, p.y, p.r, 0, 7); g.fill();
+      } else if (p.type === 'poof') { // 뽕! 연기 구름 7덩이가 퍼지고 반짝이 4개가 튄다
+        const e = 1 - (1 - k) * (1 - k);
+        g.fillStyle = `rgba(255,255,255,${0.9 * (1 - k)})`;
+        for (let i = 0; i < 7; i++) {
+          const a = i * 0.8976 + 0.3;
+          g.beginPath(); g.arc(p.x + Math.cos(a) * p.r * 1.25 * e, p.y + Math.sin(a) * p.r * 0.95 * e, p.r * (0.62 - 0.28 * k), 0, 7); g.fill();
+        }
+        g.beginPath(); g.arc(p.x, p.y, p.r * (0.9 - 0.5 * k), 0, 7); g.fill();
+        g.strokeStyle = `rgba(255,236,150,${1 - k})`; g.lineWidth = 2; g.beginPath();
+        for (let i = 0; i < 4; i++) {
+          const a = i * 1.5708 + 0.785, d0 = p.r * (1.5 + 1.3 * e), d1 = d0 + 5 * (1 - k);
+          g.moveTo(p.x + Math.cos(a) * d0, p.y + Math.sin(a) * d0); g.lineTo(p.x + Math.cos(a) * d1, p.y + Math.sin(a) * d1);
+        }
+        g.stroke();
       } else if (p.type === 'debris') {
         g.fillStyle = `rgba(${this.theme.debris},${1 - k})`; g.fillRect(p.x, p.y, p.r * 1.6, p.r * 1.6);
       } else if (p.type === 'spark') {
