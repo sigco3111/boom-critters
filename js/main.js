@@ -23,6 +23,13 @@ function loadImages() {
   })).then(Object.fromEntries);
 }
 
+// 브라우저 정책상 소리는 사용자 동작 뒤에만 가능 — 첫 클릭/터치/키 입력에서 오디오와 배경음악 시작
+function unlockAudio() { // 재생이 막혀 있으면 다음 입력에서도 재시도 (initAudio가 suspended 상태면 resume)
+  audio.initAudio();
+  audio.startMusic();
+}
+['pointerdown', 'touchend', 'keydown'].forEach((t) => window.addEventListener(t, unlockAudio, true));
+
 let game = null, difficulty = 'normal';
 let endlessRecord = false;
 let current = { mode: 'quick' };   // 현재/마지막 매치: { mode: 'quick'|'stage'|'endless', stage? }
@@ -59,6 +66,7 @@ function showResult(winner) {
     $('againBtn').textContent = mode === 'quick' ? '다시 하기' : '다시 도전';
     $('menuBtn').textContent = mode === 'quick' ? '난이도 선택' : '처음으로';
     show('resultScreen');
+    audio.setMusicMode('result');
   }, 900);
 }
 
@@ -66,6 +74,7 @@ function launch(cfg) {
   current = cfg; endlessRecord = false;
   audio.initAudio();
   audio.play('select');
+  audio.setMusicMode('match');
   ['startScreen', 'stageScreen', 'resultScreen'].forEach((id) => show(id, false));
   if (cfg.mode === 'stage') game.newMatch('normal', stageConfig(cfg.stage));
   else if (cfg.mode === 'endless') game.newMatch('normal', waveConfig(1));
@@ -74,6 +83,7 @@ function launch(cfg) {
 const startMatch = (diff) => launch({ mode: 'quick', diff });
 
 function goStart() {
+  audio.setMusicMode('menu');
   show('resultScreen', false); show('stageScreen', false); show('startScreen');
   $('endlessBest').textContent = `최고 기록: ${progress.load().endlessBest} 웨이브`;
 }
