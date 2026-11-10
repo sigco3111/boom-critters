@@ -73,7 +73,7 @@ const HOP_H = 18, HOP_W = 4.6; // 승리 점프: 높이(px)와 각속도(rad/s)
 export const DIFF = {
   easy: { a: 8, p: 16, enemies: 2, label: '쉬움' },
   normal: { a: 5.5, p: 11, enemies: 3, label: '보통' },
-  hard: { a: 3.5, p: 7, enemies: 4, label: '어려움' },
+  hard: { a: 2.8, p: 5.6, enemies: 4, label: '어려움' },
 };
 export function quickConfig(diff) { return { mode: 'quick', enemies: (DIFF[diff] || DIFF.normal).enemies }; }
 const ENEMY_X = { 1: [760], 2: [650, 820], 3: [600, 730, 865], 4: [560, 670, 780, 885] };
