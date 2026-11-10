@@ -3,6 +3,7 @@
 // 음악: Enchanted Festival by Matthew Pablo (CC-BY 3.0) — CREDITS.md 참고
 // 결과 화면 징글: Kenney Music Jingles (CC0) — 음악 볼륨·음소거를 따르고, 재생하는 동안 배경음악을 낮춘다
 // 번개·공습·수류탄 카운트다운·치유 효과음은 파일 없이 Web Audio(노이즈·오실레이터)로 합성 — 모두 sfxGain을 거치므로 효과음 볼륨·음소거를 따른다
+import { local } from './storage.js?v=2026111035';
 const NAMES = ['explosion', 'fire', 'land', 'step', 'hit', 'select', 'win', 'lose', 'tick', 'switch',
   'sea_cannon', 'sea_boom', 'sea_boom_big', 'sea_boom_small', 'sea_splash'];
 const MUSIC_URL = 'assets/music/enchanted-festival-loop.ogg';
@@ -19,8 +20,8 @@ let music = { buf: null, src: null, want: false, mode: 'menu' };
 let muted = false;
 const vols = { music: 0.5, sfx: 0.7 }; // 0~1, localStorage('boom-volumes')에 저장
 try {
-  muted = localStorage.getItem('boom-muted') === '1';
-  const v = JSON.parse(localStorage.getItem('boom-volumes') || '{}');
+  muted = local.get('boom-muted') === '1';
+  const v = JSON.parse(local.get('boom-volumes') || '{}');
   for (const k of ['music', 'sfx']) if (Number.isFinite(v[k])) vols[k] = Math.min(1, Math.max(0, v[k]));
 } catch (e) { /* ignore */ }
 
@@ -33,13 +34,45 @@ const applyGains = () => {
   musicGain.gain.value = muted ? 0 : vols.music;
 };
 
+// 파일을 못 받거나 디코드에 실패하면 reject — 호출하는 쪽에서 조용히 무시한다 (Safari 구버전은 Promise 형태가 없어 콜백 형태로 대체)
 async function loadBuffer(url) {
   const res = await fetch(url);
-  return ctx.decodeAudioData(await res.arrayBuffer());
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.arrayBuffer();
+  const c = ctx;
+  return new Promise((resolve, reject) => {
+    try {
+      const p = c.decodeAudioData(data, resolve, reject);
+      if (p && p.then) p.then(resolve, reject);
+    } catch (e) { reject(e); }
+  });
+}
+
+// 컨텍스트가 'suspended'(자동재생 차단·탭 숨김) 또는 'interrupted'(iOS 전화·알람 등)면 다시 깨운다. 실패해도 예외 없이 다음 입력 때 재시도
+function wake() {
+  if (!ctx || ctx.state === 'running' || ctx.state === 'closed') return;
+  try { const p = ctx.resume(); if (p && p.catch) p.catch(() => { /* 사용자 동작이 더 필요함 */ }); } catch (e) { /* 무시 */ }
+}
+// iOS Safari: 사용자 입력 안에서 무음 버퍼를 한 번 재생해야 이후 소리가 난다
+let primed = false;
+function prime() {
+  if (primed || !ctx) return;
+  try {
+    const src = ctx.createBufferSource();
+    src.buffer = ctx.createBuffer(1, 1, 22050);
+    src.connect(ctx.destination); src.start(0);
+    primed = true;
+  } catch (e) { /* 무시 */ }
+}
+// 첫 touchend/click/keydown(및 이후 입력)마다 호출: 컨텍스트를 만들고/깨우고, 배경음악이 시작되도록 한다
+export function unlock() {
+  initAudio();
+  wake(); prime();
+  if (ctx && ctx.state === 'running') startMusic(); else music.want = true;
 }
 
 export function initAudio() {
-  if (loading) { if (ctx && ctx.state === 'suspended') ctx.resume(); return loading; }
+  if (loading) { wake(); return loading; }
   loading = (async () => {
     try {
       ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -48,10 +81,13 @@ export function initAudio() {
       duck.connect(musicGain); musicGain.connect(ctx.destination);
       duck.gain.value = MUSIC_LEVEL[music.mode];
       applyGains();
-      if (ctx.state === 'suspended') ctx.resume();
+      wake();
+      ctx.onstatechange = () => { if (ctx && ctx.state === 'running' && music.want) startMusic(); }; // 깨어나면 대기 중이던 음악 시작
       document.addEventListener('visibilitychange', () => {
         if (!ctx) return;
-        if (document.hidden) ctx.suspend(); else ctx.resume();
+        try {
+          if (document.hidden) { const p = ctx.suspend(); if (p && p.catch) p.catch(() => {}); } else wake();
+        } catch (e) { /* 무시 */ }
       });
       loadBuffer(MUSIC_URL).then((b) => { music.buf = b; if (music.want) startMusic(); }).catch(() => { /* 음악 없이 진행 */ });
       for (const k of Object.keys(JINGLES)) loadBuffer(JINGLES[k].url).then((b) => { jingleBufs[k] = b; }).catch(() => { /* 징글 없이 진행 */ });
@@ -64,7 +100,8 @@ export function initAudio() {
 }
 
 export function play(name, { rate = 1, vol = 1 } = {}) {
-  if (!ctx || muted || !buffers[name]) return;
+  if (!ctx || muted || !buffers[name] || ctx.state !== 'running') return; // 잠긴 동안 쌓인 소리가 한꺼번에 터지지 않도록 건너뜀
+  try {
   const src = ctx.createBufferSource();
   src.buffer = buffers[name];
   src.playbackRate.value = rate;
@@ -72,6 +109,7 @@ export function play(name, { rate = 1, vol = 1 } = {}) {
   g.gain.value = vol;
   src.connect(g); g.connect(sfxGain);
   src.start();
+  } catch (e) { /* 소리 없이 진행 */ }
 }
 
 // ---------- 합성 효과음 ----------
@@ -144,7 +182,7 @@ const SYNTH = {
   },
 };
 export function playSynth(name, opts = {}) {
-  if (!ctx || muted || !sfxGain || !SYNTH[name]) return;
+  if (!ctx || muted || !sfxGain || !SYNTH[name] || ctx.state !== 'running') return;
   try {
     SYNTH[name](ctx.currentTime + (opts.delay || 0), opts);
     synthStats.calls[name] = (synthStats.calls[name] || 0) + 1;
@@ -155,19 +193,21 @@ export function playSynth(name, opts = {}) {
 export function startMusic() {
   music.want = true;
   if (!ctx || !music.buf || music.src) return;
-  const src = ctx.createBufferSource();
-  src.buffer = music.buf; src.loop = true;
-  const fade = ctx.createGain();
-  fade.gain.setValueAtTime(0, ctx.currentTime);
-  fade.gain.linearRampToValueAtTime(1, ctx.currentTime + 1.5);
-  src.connect(fade); fade.connect(duck);
-  src.start();
-  music.src = src;
+  try {
+    const src = ctx.createBufferSource();
+    src.buffer = music.buf; src.loop = true;
+    const fade = ctx.createGain();
+    fade.gain.setValueAtTime(0, ctx.currentTime);
+    fade.gain.linearRampToValueAtTime(1, ctx.currentTime + 1.5);
+    src.connect(fade); fade.connect(duck);
+    src.start();
+    music.src = src;
+  } catch (e) { /* 음악 없이 진행 */ }
 }
 // 'menu' | 'match' | 'result' — 결과 화면에서는 음악을 낮춤
 export function setMusicMode(mode) {
   music.mode = mode;
-  if (duck && !jingle.src) duck.gain.setTargetAtTime(MUSIC_LEVEL[mode], ctx.currentTime, 0.4); // 징글이 끝나면 stopJingle이 현재 모드 값으로 되돌린다
+  try { if (duck && ctx && !jingle.src) duck.gain.setTargetAtTime(MUSIC_LEVEL[mode], ctx.currentTime, 0.4); } catch (e) { /* 무시 */ } // 징글이 끝나면 stopJingle이 현재 모드 값으로 되돌린다
 }
 
 // 결과 화면 징글: kind 'win' | 'lose'. musicGain(음악 볼륨·음소거)을 거치고, 재생하는 동안 배경음악을 낮췄다가 끝나면 되돌린다.
@@ -175,7 +215,7 @@ export function setMusicMode(mode) {
 export function playJingle(kind) {
   stopJingle();
   const j = JINGLES[kind], buf = jingleBufs[kind];
-  if (!ctx || !musicGain || muted || !j || !buf) return false;
+  if (!ctx || !musicGain || muted || !j || !buf || ctx.state !== 'running') return false;
   try {
     const src = ctx.createBufferSource();
     src.buffer = buf;
@@ -199,7 +239,7 @@ export function stopJingle() {
   clearTimeout(timer);
   jingle = { src: null, gain: null, timer: 0 };
   try { src.onended = null; gain.gain.setTargetAtTime(0, ctx.currentTime, 0.03); src.stop(ctx.currentTime + 0.15); } catch (e) { /* 이미 끝남 */ }
-  if (duck) duck.gain.setTargetAtTime(MUSIC_LEVEL[music.mode], ctx.currentTime, 0.4);
+  try { if (duck) duck.gain.setTargetAtTime(MUSIC_LEVEL[music.mode], ctx.currentTime, 0.4); } catch (e) { /* 무시 */ }
 }
 export function musicInfo() {
   return { ctx: ctx && ctx.state, sfxLoaded: Object.keys(buffers).length, loaded: !!music.buf, playing: !!music.src, mode: music.mode, duck: duck && duck.gain.value, music: musicGain && musicGain.gain.value, sfx: sfxGain && sfxGain.gain.value, muted, synth: synthStats, jingles: { loaded: Object.keys(jingleBufs), playing: !!jingle.src, ...jingleStats } };
@@ -209,13 +249,13 @@ export function getVolumes() { return { ...vols }; }
 // kind: 'music' | 'sfx', v: 0~1
 export function setVolume(kind, v) {
   vols[kind] = Math.min(1, Math.max(0, v));
-  try { localStorage.setItem('boom-volumes', JSON.stringify(vols)); } catch (e) { /* ignore */ }
+  local.set('boom-volumes', JSON.stringify(vols));
   applyGains();
 }
 
 export function setMuted(m) {
   muted = m;
-  try { localStorage.setItem('boom-muted', m ? '1' : '0'); } catch (e) { /* ignore */ }
+  local.set('boom-muted', m ? '1' : '0');
   applyGains();
 }
 export function isMuted() { return muted; }

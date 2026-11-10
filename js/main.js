@@ -1,10 +1,11 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111034';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig } from './game.js?v=2026111034';
-import * as audio from './audio.js?v=2026111034';
-import * as progress from './progress.js?v=2026111034';
-import { MenuBg } from './menubg.js?v=2026111034';
+const VERSION = '2026111035';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig } from './game.js?v=2026111035';
+import * as audio from './audio.js?v=2026111035';
+import * as progress from './progress.js?v=2026111035';
+import { MenuBg } from './menubg.js?v=2026111035';
+import * as store from './storage.js?v=2026111035';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -33,19 +34,18 @@ function loadImages() {
   })).then(Object.fromEntries);
 }
 
-// 브라우저 정책상 소리는 사용자 동작 뒤에만 가능 — 첫 클릭/터치/키 입력에서 오디오와 배경음악 시작
-function unlockAudio() { // 재생이 막혀 있으면 다음 입력에서도 재시도 (initAudio가 suspended 상태면 resume)
-  audio.initAudio();
-  audio.startMusic();
-}
-['pointerdown', 'touchend', 'keydown'].forEach((t) => window.addEventListener(t, unlockAudio, true));
+// 브라우저 정책상 소리는 사용자 동작 뒤에만 가능 — iOS Safari는 touchstart/pointerdown이 아니라 touchend·click·keydown(제스처 완료)부터 인정한다.
+// 이 입력들에서 오디오 컨텍스트를 만들고/깨우고(suspended·interrupted) 배경음악을 시작한다. 이미 running이면 가벼운 확인만 하므로 계속 걸어 둔다
+// (전화·알람으로 interrupted 되거나 탭을 다녀온 뒤에도 다음 탭에서 다시 켜짐)
+function unlockAudio() { try { audio.unlock(); } catch (e) { /* 소리 없이 진행 */ } }
+['touchend', 'click', 'keydown', 'pointerup'].forEach((t) => window.addEventListener(t, unlockAudio, true));
 
 // 터치 화면 판별: 주 입력이 손가락(coarse)이거나 좁은 화면이거나, 실제 터치 입력이 한 번이라도 들어오면 켠다
 // 세로 화면 안내(가로로 돌리면 더 크게 보임): 닫으면 이번 접속 동안 다시 안 보임
-try { if (sessionStorage.getItem('boom-hint-off') === '1') document.body.classList.add('hint-off'); } catch (e) { /* ignore */ }
+if (store.session.get('boom-hint-off') === '1') document.body.classList.add('hint-off');
 $('rotateHintClose').addEventListener('click', () => {
   document.body.classList.add('hint-off');
-  try { sessionStorage.setItem('boom-hint-off', '1'); } catch (e) { /* ignore */ }
+  store.session.set('boom-hint-off', '1');
 });
 
 const prefs = progress.loadPrefs();   // 저장된 설정: 난이도·큰 HUD 글씨·고대비 팀 표시
@@ -65,7 +65,16 @@ function setTouchUI(forceOn) {
   if (game) { game.touchUI = on; game.domHud = dom; }
 }
 setTouchUI();
-window.addEventListener('resize', () => setTouchUI());
+// 크기·방향 변경: 회전 중에는 resize가 연달아 오고 iOS는 orientationchange 직후 innerWidth가 아직 옛 값이므로 잠깐 모아서(디바운스) 처리한다.
+// 캔버스는 CSS로 늘어나므로 경기 상태는 그대로 두고 터치 UI 판별과 글자 배율만 다시 계산한다
+let viewTimer = 0, viewSync = null;
+function onViewportChange() {
+  clearTimeout(viewTimer);
+  viewTimer = setTimeout(() => { setTouchUI(); if (viewSync) viewSync(); }, 150);
+}
+window.addEventListener('resize', onViewportChange);
+window.addEventListener('orientationchange', () => { onViewportChange(); setTimeout(onViewportChange, 500); });
+window.visualViewport?.addEventListener('resize', onViewportChange);
 coarseMQ.addEventListener?.('change', () => setTouchUI());
 portraitMQ.addEventListener?.('change', () => setTouchUI());
 let endlessRecord = false;
@@ -202,9 +211,9 @@ function showResult(winner) {
 
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
-window.__sim = (n, opts) => import('./sim.js?v=2026111034').then((m) => m.sim(n, opts));
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111034').then((m) => m.table(n, stages, skills));
-window.__sim.soak = (n, opts) => import('./sim.js?v=2026111034').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
+window.__sim = (n, opts) => import('./sim.js?v=2026111035').then((m) => m.sim(n, opts));
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111035').then((m) => m.table(n, stages, skills));
+window.__sim.soak = (n, opts) => import('./sim.js?v=2026111035').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
 
 function launch(cfg) {
   current = cfg; endlessRecord = false;
@@ -315,7 +324,8 @@ function setup(sprites) {
   const syncMotion = () => { game.reduceMotion = motionMQ.matches; };
   syncMotion(); motionMQ.addEventListener?.('change', syncMotion);
   const syncScale = () => { game.viewScale = Math.max(0.2, canvas.clientWidth / W); };
-  syncScale(); new ResizeObserver(syncScale).observe(canvas);
+  syncScale(); viewSync = syncScale;
+  try { new ResizeObserver(syncScale).observe(canvas); } catch (e) { /* 구형 브라우저: resize 이벤트로 대체 */ }
   const hud = makeHud();
   const k = game.keys;
 
@@ -392,7 +402,7 @@ function setup(sprites) {
       open() {
         if (api.isOpen()) return;
         back = document.activeElement; i = 0;
-        try { localStorage.setItem(TUT_KEY, '1'); } catch (e) { /* 저장 불가면 이번 접속에서만 */ }
+        store.local.set(TUT_KEY, '1'); // 저장이 막혀 있으면 이번 접속 동안만 기억
         openModal('tutorialScreen'); render();
       },
       close() {
@@ -511,12 +521,18 @@ function setup(sprites) {
   canvas.addEventListener('pointerup', endDrag(true));
   canvas.addEventListener('pointercancel', endDrag(false));
   canvas.addEventListener('pointerleave', () => { game.hover = null; });
-  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  // 길게 눌러 나오는 메뉴·글자 선택·더블탭 확대 방지 (캔버스, 화면 버튼, HUD). 설정 슬라이더·링크 등은 그대로 둔다
+  const elOf = (e) => (e.target && e.target.nodeType === 1 ? e.target : e.target && e.target.parentElement);
+  const noMenu = (e) => { const el = elOf(e); if (el && el.closest('#game, #controls, #topBtns, #menuPop, #hud, .overlay')) e.preventDefault(); };
+  document.addEventListener('contextmenu', noMenu);
+  document.addEventListener('selectstart', (e) => { const el = elOf(e); if (!(el && el.closest('input, textarea, .doc'))) noMenu(e); });
   document.addEventListener('gesturestart', (e) => e.preventDefault()); // iOS 핀치 줌 방지
+  let lastTap = 0; // iOS 더블탭 확대: 캔버스는 포인터 이벤트만 쓰므로 빠른 두 번째 touchend의 기본 동작(확대)만 막는다
+  canvas.addEventListener('touchend', (e) => { const n = Date.now(); if (n - lastTap < 350 && e.cancelable) e.preventDefault(); lastTap = n; }, { passive: false });
 
   // 첫 실행이면 튜토리얼을 자동으로 띄움
   let seen = false;
-  try { seen = localStorage.getItem(TUT_KEY) === '1'; } catch (e) { /* ignore */ }
+  seen = store.local.get(TUT_KEY) === '1';
   if (!seen) tutorial.open();
 
   // 메인 루프
@@ -567,11 +583,13 @@ function setup(sprites) {
     raf = requestAnimationFrame(frame);
   }
   raf = requestAnimationFrame(frame);
-  // 탭이 숨겨지면 루프를 완전히 멈추고(배터리), 돌아오면 시간 간격을 리셋해 다시 시작
+  // 탭이 숨겨지면 경기를 일시정지하고(돌아와도 자동으로 이어지지 않고 '계속하기'를 눌러야 함) 루프를 완전히 멈춘다(배터리). 돌아오면 시간 간격을 리셋해 다시 시작
+  const autoPause = () => { for (const n in k) k[n] = false; pauseGame(); };
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { cancelAnimationFrame(raf); raf = 0; }
+    if (document.hidden) { autoPause(); cancelAnimationFrame(raf); raf = 0; }
     else if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); }
   });
+  window.addEventListener('pagehide', autoPause); // iOS Safari: 앱 전환·홈 이동
   $('loading').classList.add('hidden');
 }
 

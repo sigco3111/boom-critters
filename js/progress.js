@@ -1,4 +1,6 @@
 // 진행 상황 저장 (localStorage): 해금된 스테이지, 스테이지별 최고 별, 무한 모드 최고 기록
+// 저장소는 storage.js를 거치므로 localStorage가 막힌 환경에서도 이번 접속 동안은 메모리에 유지된다
+import { local } from './storage.js?v=2026111035';
 const KEY = 'boom-critters-progress-v1';
 export const STAGES = 10;
 
@@ -9,7 +11,7 @@ export const BEST_KEYS = { turns: -1, shots: -1, taken: -1, dealt: 1 };
 
 export function load() {
   try {
-    const d = JSON.parse(localStorage.getItem(KEY));
+    const d = JSON.parse(local.get(KEY));
     if (!d || typeof d !== 'object') return blank();
     const stars = {};
     for (let i = 1; i <= STAGES; i++) { const v = Number(d.stars && d.stars[i]); if (v >= 1 && v <= 3) stars[i] = v | 0; }
@@ -30,7 +32,7 @@ export function load() {
   } catch (e) { return blank(); }
 }
 
-function save(d) { try { localStorage.setItem(KEY, JSON.stringify(d)); } catch (e) { /* 저장 불가 환경은 무시 */ } }
+function save(d) { try { local.set(KEY, JSON.stringify(d)); } catch (e) { /* 저장 불가 환경은 무시 */ } }
 
 // 스테이지 승리 기록: 별은 최고값만 유지하고 다음 스테이지를 해금. 반환: { stars, best, unlockedNext }
 export function completeStage(stage, stars) {
@@ -73,7 +75,7 @@ export const DIFFS = ['easy', 'normal', 'hard'];
 export function loadPrefs() {
   const p = { difficulty: 'normal', bigHud: false, contrast: false };
   try {
-    const d = JSON.parse(localStorage.getItem(PREF_KEY));
+    const d = JSON.parse(local.get(PREF_KEY));
     if (d && typeof d === 'object') {
       if (DIFFS.includes(d.difficulty)) p.difficulty = d.difficulty;
       p.bigHud = d.bigHud === true; p.contrast = d.contrast === true;
@@ -83,6 +85,6 @@ export function loadPrefs() {
 }
 export function savePrefs(patch) {
   const p = { ...loadPrefs(), ...patch };
-  try { localStorage.setItem(PREF_KEY, JSON.stringify(p)); } catch (e) { /* 저장 불가 환경은 무시 */ }
+  try { local.set(PREF_KEY, JSON.stringify(p)); } catch (e) { /* 저장 불가 환경은 무시 */ }
   return p;
 }
