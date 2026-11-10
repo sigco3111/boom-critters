@@ -1,9 +1,10 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111049';
-import * as audio from './audio.js?v=2026111049';
-import { t as tr, getLang } from './i18n.js?v=2026111049';
-import * as fx from './fx.js?v=2026111049';
-import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111049';
+import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111050';
+import * as audio from './audio.js?v=2026111050';
+import { t as tr, getLang } from './i18n.js?v=2026111050';
+import * as fx from './fx.js?v=2026111050';
+import { makeProps, drawProp, PW, PH, BARREL_R, BARREL_DMG, MINE_R, MINE_DMG, MINE_TRIGGER, MINE_SEE, PACK_CHANCE } from './props.js?v=2026111050';
+import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111050';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -159,8 +160,8 @@ const gauss = () => Math.random() + Math.random() + Math.random() - 1.5;
 
 export function launchSpeed(w, power) { return (40 + power * 6.5) * w.speedK; }
 
-// 투사체 한 스텝. 'terrain' | 'water' | 'unit' | 'out' | null 반환
-export function stepProj(p, dt, wind, terrain, units) {
+// 투사체 한 스텝. 'terrain' | 'water' | 'unit' | 'prop' | 'out' | null 반환
+export function stepProj(p, dt, wind, terrain, units, props) {
   p.vx += wind * p.w.windK * dt;
   p.vy += PROJ_G * dt;
   p.age += dt;
@@ -171,6 +172,13 @@ export function stepProj(p, dt, wind, terrain, units) {
     if (p.x < -80 || p.x > W + 80 || p.y > H + 80) return 'out';
     if (terrain.solid(p.x, p.y)) return 'terrain';
     if (p.y > WATER_Y) return 'water';
+    if (props) { // 상자·폭발 통에 부딪힘 (지뢰는 땅속이라 제외)
+      for (let k = 0; k < props.length; k++) {
+        const o = props[k];
+        if (o.type === 'mine' || o.dead || (p.age < 0.15 && p.owner && Math.abs(p.owner.x - o.x) < PW[o.type] / 2 + 12)) continue; // 쏘는 유닛이 상자·통에 겹쳐 서 있으면 처음 0.15초는 통과 (제자리 폭발 방지)
+        if (Math.abs(p.x - o.x) < PW[o.type] / 2 && p.y > o.y + 1 - PH[o.type] && p.y < o.y + 1) return 'prop';
+      }
+    }
     if (units) {
       for (const u of units) {
         if (!u.alive || (u === p.owner && p.age < 0.35)) continue;
@@ -216,7 +224,7 @@ export class Game {
     this.teamMarks = false;     // 접근성: 파랑 원 / 빨강 마름모 팀 표시 (설정)
     this.domHud = false;        // true면 팀 HP·타이머·바람·상태를 DOM HUD(#hud)가 그림 (세로 폰)
     this.reduceMotion = false;  // prefers-reduced-motion이면 화면 흔들림 끔
-    this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.turnNo = 0;
+    this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.props = []; this.turnNo = 0;
     this.keys = { left: false, right: false, up: false, down: false };
     this.touchUI = false;       // 터치 화면이면 캔버스 하단 무기바를 숨기고 DOM 버튼을 쓴다
     this.drag = null;           // 터치 드래그 조준 중: { sx, sy, x, y } (캔버스 좌표)
@@ -287,7 +295,7 @@ export class Game {
     this.bg = this.headless ? null : makeBackground(theme, seed);
     this.weather = this.headless ? null : makeWeather(theme);
     this.units = []; this.particles = []; this.floaters = []; this.proj = null; this.sfx.length = 0; this.splashes.length = 0;
-    this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.turnNo = 0; this.air = null;
+    this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.props = []; this.turnNo = 0; this.air = null;
     const rng = mulberry32(seed ^ 0x5bd1e995), jit = () => (rng() * 2 - 1) * 25;
     const baseX = [[95, 230, 360], ENEMY_X[enemies] || ENEMY_X[3]];
     const snap = kind === 'island' || kind === 'bridge' || kind === 'canyonbridge'; // 물·다리가 있는 지형: 유닛은 단단한 땅 위에서만 시작
@@ -310,6 +318,8 @@ export class Game {
         this.units.push(u);
       }
     }
+    // 장애물(상자·통·지뢰): 유닛 위치가 정해진 뒤 시드로 배치. 쉬운 스테이지(1~2)에는 지뢰 없음
+    this.props = makeProps(this.terrain, seed, this.units.map((q) => q.x), { mines: !(this.level != null && this.level <= 2) });
   }
 
   // 섬·다리 지형의 시작 위치: 원하는 x에서 가장 가까운, 가장자리에서 18px 이상 떨어진 평평한 땅 (자기 편 쪽을 먼저, 다리 위·다른 유닛 40px 안은 제외)
@@ -500,8 +510,9 @@ export class Game {
         p.vx = -p.vx * 0.6; p.x = clamp(p.x, 4, W - 4);
         break;
       }
-      if (this.terrain.solid(nx, ny)) {
-        const [tx, ty] = this.terrainNormal(nx, ny);
+      const pr = p.age < 0.25 || this.terrain.solid(nx, ny) ? null : this.propAt(nx, ny);
+      if (pr || this.terrain.solid(nx, ny)) {
+        const [tx, ty] = pr ? this.propNormal(pr, nx, ny) : this.terrainNormal(nx, ny);
         const vn = p.vx * tx + p.vy * ty;
         if (vn < 0) {
           const speed = Math.hypot(p.vx, p.vy);
@@ -525,6 +536,7 @@ export class Game {
     this.terrain.crater(x, y, r);
     this.emitExplosion(x, y, r, w.id);
     this.blastCrates(x, y, r);
+    this.blastProps(x, y, r, w.damage);
     if (r >= 50) this.kick(r >= 58 ? 3.5 : 3); // 로켓·수류탄 같은 큰 폭발만 아주 짧게 흔든다
     audio.play(w.id === 'rocket' ? 'sea_boom_big' : w.id === 'cannon' ? 'sea_boom' : 'sea_boom_small', { rate: w.id === 'rocket' ? 0.95 : 1, vol: 1 });
     let hit = false, near = false;
@@ -686,7 +698,7 @@ export class Game {
       const p = P[i];
       p.life += dt;
       p.x += p.vx * dt; p.y += p.vy * dt;
-      if (p.type === 'debris' || p.type === 'splash') p.vy += 700 * dt;
+      if (p.type === 'debris' || p.type === 'splash' || p.type === 'chip') p.vy += 700 * dt;
       else if (p.type === 'smoke') { p.r += dt * 8; p.vx *= 0.97; p.vy -= 12 * dt; }
       else if (p.type === 'fire') { p.vx *= 0.94; p.vy = p.vy * 0.94 - 20 * dt; }
     }
@@ -807,6 +819,130 @@ export class Game {
       this.ft(c.x, c.y - 24, tr('f.crateBreak'), '#ddd');
     }
     this.crates = this.crates.filter((c) => !c.dead);
+  }
+
+  // ---------- 장애물: 나무 상자 · 폭발 통 · 지뢰 (props.js) ----------
+  propSupported(p) {
+    const t = this.terrain, y = Math.floor(p.y) + 1;
+    return t.solid(p.x - 5, y) || t.solid(p.x, y) || t.solid(p.x + 5, y);
+  }
+
+  // (x, y)를 덮는 상자·통 (없으면 null)
+  propAt(x, y) {
+    for (const o of this.props) {
+      if (o.type === 'mine' || o.dead) continue;
+      if (Math.abs(x - o.x) < PW[o.type] / 2 && y > o.y + 1 - PH[o.type] && y < o.y + 1) return o;
+    }
+    return null;
+  }
+  propNormal(o, x, y) {
+    const dx = (x - o.x) / (PW[o.type] / 2), dy = (y - (o.y + 1 - PH[o.type] / 2)) / (PH[o.type] / 2);
+    return Math.abs(dx) > Math.abs(dy) ? [Math.sign(dx) || 1, 0] : [0, Math.sign(dy) || -1];
+  }
+
+  updateProps(dt) {
+    const P = this.props;
+    if (!P.length) return;
+    for (const p of P) {
+      if (p.dead) continue;
+      p.flash = Math.max(0, p.flash - dt);
+      if (!this.propSupported(p)) { // 아래 땅이 부서졌다: 지뢰는 해체, 상자·통은 떨어진다
+        if (p.type === 'mine') { p.dead = true; continue; }
+        p.vy = (p.vy || 0) + 900 * dt;
+        for (let dy = p.vy * dt; dy > 0 && !this.propSupported(p);) { const st = Math.min(3, dy); p.y += st; dy -= st; }
+        if (p.y > WATER_Y + 10) { p.dead = true; this.splash(p.x, 0.8); continue; }
+      } else p.vy = 0;
+      if (p.type === 'mine') {
+        let near = false, trig = null;
+        for (const u of this.units) {
+          if (!u.alive) continue;
+          const d = Math.hypot(u.x - p.x, (u.y - 4) - p.y);
+          if (d < MINE_SEE) { near = true; p.known[u.team] = true; }
+          if (d < MINE_TRIGGER && !trig) trig = u;
+        }
+        p.seen = near;
+        if (trig && this.state !== 'over') this.detonateMine(p, trig);
+      } else if (p.fuse >= 0) {
+        p.fuse -= dt;
+        if (p.fuse <= 0) this.explodeBarrel(p);
+      }
+    }
+    if (P.some((p) => p.dead)) this.props = P.filter((p) => !p.dead);
+  }
+
+  // 상자·통에 피해. 부서지면 상자는 조각이 튀고(25% 치유 상자), 통은 delay초 뒤 폭발
+  hurtProp(p, dmg, delay = 0) {
+    if (p.dead || p.hp <= 0 || p.type === 'mine') return;
+    p.hp -= dmg; p.flash = 0.25;
+    if (p.hp > 0) return;
+    p.hp = 0;
+    if (p.type === 'barrel') { p.fuse = Math.max(0.05, delay); return; }
+    p.dead = true;
+    const cx = p.x, cy = p.y - PH.crate / 2;
+    for (let i = 0; i < 12; i++) this.pt('chip', cx + rnd(-8, 8), cy + rnd(-6, 6), rnd(-170, 170), rnd(-240, -60), rnd(1.6, 3), rnd(0.6, 1.1), i % 3 ? '#c28a46' : '#7a5020');
+    for (let i = 0; i < 3; i++) this.pt('smoke', cx + rnd(-8, 8), cy + rnd(-4, 4), rnd(-20, 20), rnd(-40, -10), rnd(4, 7), rnd(0.4, 0.7), '190,170,140');
+    audio.play('hit', { vol: 0.6, rate: 0.8 });
+    this.ft(cx, cy - 20, tr('f.crateBreak'), '#ddd');
+    if (Math.random() < PACK_CHANCE) { // 가끔 치유 상자(체력 +30)를 남긴다
+      this.crates.push({ x: p.x, y: p.y, landed: true, seed: Math.random() * 10 });
+      this.ft(cx, cy - 40, tr('f.pack'), '#7dff8a');
+    }
+  }
+
+  // 무기 폭발이 상자·통을 때린다. 지뢰는 근처(반경+60px)에서 터지면 드러난다
+  blastProps(x, y, r, dmg) {
+    for (const p of this.props) {
+      if (p.dead) continue;
+      if (p.type === 'mine') { if (Math.hypot(p.x - x, p.y - y) < r + 60) p.rev = true; continue; }
+      const d = Math.hypot(p.x - x, (p.y - PH[p.type] / 2) - y);
+      if (d < r + 14) this.hurtProp(p, Math.max(8, Math.round(dmg * (1 - d / (r + 14)))), 0.08 + d * 0.0012);
+    }
+  }
+
+  // 통·지뢰 폭발의 범위 피해: 유닛(피해 dmg~0.75×dmg, 밀려남), 상자·통(30 피해: 연쇄), 지뢰는 드러남, 보급 상자 파괴
+  blastArea(x, y, r, dmg, knock) {
+    for (const u of this.units) {
+      if (!u.alive) continue;
+      const cx = u.x, cy = u.y - BODY_CY, d = Math.hypot(cx - x, cy - y);
+      if (d >= r) continue;
+      const f = 1 - 0.25 * (d / r), nx = (cx - x) / (d || 1), ny = (cy - y) / (d || 1);
+      this.damage(u, Math.max(2, Math.round(dmg * f * (u.trait.blastK || 1))), '#ff6b5a', cx - nx * BODY_R * 0.6, cy - ny * BODY_R * 0.6);
+      if (u.alive) { u.grounded = false; u.y -= 2; u.fallStart = u.y; u.vx = nx * knock * f; u.vy = ny * knock * f - 150 * f; }
+    }
+    for (const p of this.props) {
+      if (p.dead) continue;
+      if (p.type === 'mine') { if (Math.hypot(p.x - x, p.y - y) < r + 60) p.rev = true; continue; }
+      const d = Math.hypot(p.x - x, (p.y - PH[p.type] / 2) - y);
+      if (d < r) this.hurtProp(p, BARREL_DMG, 0.1 + 0.12 * (d / r));
+    }
+    this.blastCrates(x, y, r - 14);
+  }
+
+  explodeBarrel(p) {
+    if (p.dead) return;
+    p.dead = true;
+    this.terrain.crater(p.x, p.y - 8, 28);
+    this.emitExplosion(p.x, p.y - 12, BARREL_R * 0.85, 'barrel');
+    this.kick(3);
+    audio.play('sea_boom', { vol: 0.9, rate: 1.05 });
+    this.ft(p.x, p.y - 56, tr('f.barrel'), '#ffb347');
+    this.blastArea(p.x, p.y - 12, BARREL_R, BARREL_DMG, 380);
+  }
+
+  // 지뢰 폭발. 걷던 유닛이 밟으면 그 턴은 끝난다
+  detonateMine(m, u) {
+    if (m.dead) return;
+    m.dead = true;
+    this.terrain.crater(m.x, m.y - 2, 20);
+    this.emitExplosion(m.x, m.y - 6, MINE_R * 0.85, 'mine');
+    this.kick(3);
+    audio.play('sea_boom_small', { vol: 1, rate: 0.95 });
+    this.ft(m.x, m.y - 50, tr('f.mine'), '#ff9a3a');
+    this.blastArea(m.x, m.y - 6, MINE_R, MINE_DMG, 330);
+    if (this.state === 'aim' && u === this.activeUnit) {
+      this.charging = false; this.power = 0; this.drag = null; this.ai = null;
+      this.state = 'settle'; this.settleT = 0; this.settleTotal = 0;
+    }
   }
 
   // ---------- 화염 지대 ----------
@@ -997,11 +1133,11 @@ export class Game {
     for (const b of a.bombs) {
       if (b.done || a.t < AIR_WARN + b.delay) continue;
       if (!b.p) { b.p = { x: b.x, y: -24, vx: 0, vy: 240, w: a.w, owner: null, age: 0 }; audio.playSynth('whistle', { vol: 0.5, dur: rnd(0.65, 0.85), pitch: rnd(0.9, 1.12) }); } // 폭탄마다 하강 휘파람
-      const r = stepProj(b.p, dt, 0, this.terrain, this.units);
+      const r = stepProj(b.p, dt, 0, this.terrain, this.units, this.props);
       this.pt('smoke', b.p.x, b.p.y - 8, 0, 0, 2, 0.3, '230,230,230');
       if (!r) continue;
       b.done = true;
-      if (r === 'terrain' || r === 'unit') this.explode(b.p.x, b.p.y, a.w);
+      if (r === 'terrain' || r === 'unit' || r === 'prop') this.explode(b.p.x, b.p.y, a.w);
       else if (r === 'water') {
         for (let i = 0; i < 10; i++) this.pt('splash', b.p.x, WATER_Y, rnd(-60, 60), rnd(-220, -80), rnd(2, 4), rnd(0.5, 0.9));
         audio.play('sea_splash', { vol: 0.6, rate: 1.2 });
@@ -1067,7 +1203,7 @@ export class Game {
     p.x = u.x + facing * Math.cos(a) * 18; p.y = u.y - 20 - Math.sin(a) * 18; p.vx = facing * Math.cos(a) * v; p.vy = -Math.sin(a) * v; p.w = w; p.owner = u; p.age = 0;
     out.kind = 'out';
     for (let i = 0; i < 1500; i++) {
-      const r = stepProj(p, 1 / 60, this.wind, this.terrain, null);
+      const r = stepProj(p, 1 / 60, this.wind, this.terrain, null, this.props);
       if (r) { out.kind = r; break; }
     }
     out.x = p.x; out.y = p.y;
@@ -1112,12 +1248,14 @@ export class Game {
     const rad2 = WEAPONS[weapon].radius * 1.1;
     let best = null;
     const cands = [];
+    const hazards = this.props.filter((p) => p.type === 'barrel' && !p.dead && friends.some((o) => Math.hypot(o.x - p.x, (o.y - BODY_CY) - (p.y - 14)) < BARREL_R + 14)); // 아군 곁의 통: 근처에 떨어지면 아군이 휘말린다
     for (let angle = 12; angle <= 85; angle += step) {
       if (performance.now() > this._aiDeadline) yield; // 이번 프레임의 계산 시간을 다 썼으면 다음 프레임에 이어서
       for (let power = 15; power <= 100; power += step) {
         const r = grenade ? this.simulateGrenade(u, angle, power, facing) : this.simulate(u, weapon, angle, power, facing);
         let score = r.kind === 'water' || r.kind === 'out' ? 9999 : Math.hypot(r.x - pt.x, r.y - pt.y);
         for (const o of friends) if (Math.hypot(r.x - o.x, r.y - (o.y - BODY_CY)) < rad2) score += 150;
+        for (const o of hazards) if (Math.hypot(r.x - o.x, r.y - (o.y - 14)) < rad2 + 20) score += 150;
         cands.push({ angle, power, score });
         if (!best || score < best.score) best = { angle, power, score };
       }
@@ -1200,6 +1338,13 @@ export class Game {
         if (plan.min <= 40) return { ...plan, target: pair.a };
       }
     }
+    if (Math.random() < 0.85) { // 폭발 통: 적이 통 반경 안이고 아군은 멀면 통을 맞혀 연쇄 폭발
+      const bt = this.aiBarrelTarget(u, enemies);
+      if (bt) {
+        const plan = yield* this.aiPlan(0, { x: bt.p.x, y: bt.p.y - 14 });
+        if (plan.min <= 24) return { ...plan, target: bt.enemy };
+      }
+    }
     if (can(2) && hidden.length) {
       for (const e of hidden.sort((p, q) => Math.abs(p.x - u.x) - Math.abs(q.x - u.x))) {
         const plan = yield* this.aiPlan(2, pt(e));
@@ -1209,6 +1354,19 @@ export class Game {
     if (!ai.target || !ai.target.alive) ai.target = enemies[Math.floor(Math.random() * enemies.length)];
     if (ai.weapon === undefined) ai.weapon = Math.random() < 0.35 ? 1 : 0;
     return { ...(yield* this.aiPlan(ai.weapon, pt(ai.target))), target: ai.target };
+  }
+
+  // 적이 폭발 반경 안에 있고 아군(자신 포함)이 안전거리 밖인 통 중 적을 가장 많이 휩쓰는 것
+  aiBarrelTarget(u, enemies) {
+    let best = null;
+    for (const p of this.props) {
+      if (p.type !== 'barrel' || p.dead || p.fuse >= 0) continue;
+      const by = p.y - 14, near = enemies.filter((e) => Math.hypot(e.x - p.x, (e.y - BODY_CY) - by) < BARREL_R - 6);
+      if (!near.length) continue;
+      if (this.units.some((o) => o.alive && o.team === u.team && Math.hypot(o.x - p.x, (o.y - BODY_CY) - by) < BARREL_R + 22)) continue;
+      if (!best || near.length > best.n) best = { p, n: near.length, enemy: near[0] };
+    }
+    return best;
   }
 
   // 제너레이터 job을 이번 프레임 예산(AI_SLICE_MS) 안에서만 진행. 끝났으면 { done: true, value }. 헤드리스(시뮬레이션)는 제한 없이 한 번에 끝까지
@@ -1223,6 +1381,8 @@ export class Game {
   // 한 걸음 앞(10px)에 디딜 땅이 있는지 / 새 화염 지대로 걸어 들어가지 않는지
   aiSafeAhead(u, dir) {
     const x = clamp(u.x + dir * 10, 12, W - 12);
+    // 우리 팀이 아는 지뢰(70px 안에서 본 것 · 폭발로 드러난 것) 쪽으로는 다가가지 않는다
+    for (const m of this.props) if (m.type === 'mine' && !m.dead && (m.rev || m.known[u.team]) && Math.abs(m.x - x) < 24 && Math.abs(m.x - x) <= Math.abs(m.x - u.x) && Math.abs(m.y - u.y) < 40) return false;
     for (let y = u.y - 12; y < u.y + 34; y++) {
       if (this.terrain.solid(x, y) && y < WATER_Y - 14) return !this.aiFireAt(x, u.y, 0) || this.aiFireAt(u.x, u.y, 0);
     }
@@ -1328,6 +1488,7 @@ export class Game {
     if (this.bolt) { this.bolt.t += dt; if (this.bolt.t > 0.3) this.bolt = null; }
     this.flashT = Math.max(0, this.flashT - dt);
     this.updateCrates(dt);
+    this.updateProps(dt);
     for (const f of this.fires) {
       if (Math.random() < dt * 24) {
         const x = f.x + rnd(-f.r, f.r), gy = this.fireGround(f, x);
@@ -1374,7 +1535,7 @@ export class Game {
       if (grenade) { // 고정 1/60초 스텝: 프레임 속도와 무관하게 AI 시뮬레이션과 같은 궤적
         p.acc = (p.acc || 0) + dt;
         while (p.acc >= 1 / 60 && !r) { p.acc -= 1 / 60; r = this.stepGrenade(p, 1 / 60); }
-      } else r = stepProj(p, dt, this.wind, this.terrain, this.units);
+      } else r = stepProj(p, dt, this.wind, this.terrain, this.units, this.props);
       if (!r && p.age > 25) r = 'out'; // 안전장치: 25초 넘게 날아간 투사체는 사라진 것으로 처리
       if (grenade) {
         const sec = Math.ceil(p.fuse);
@@ -1392,7 +1553,7 @@ export class Game {
       }
       if (r) {
         this.proj = null;
-        if (r === 'terrain' || r === 'unit' || r === 'explode') {
+        if (r === 'terrain' || r === 'unit' || r === 'explode' || r === 'prop') {
           this.explode(p.x, p.y, p.w);
           if (p.w.fireR) this.igniteAt(p.x, p.y, p.w);
         }
@@ -1419,7 +1580,7 @@ export class Game {
     if (this.state === 'wave' && this.waveT > 2.4) this.startWave(this.wave + 1);
 
     if (this.state === 'settle') {
-      const calm = this.units.every((u) => !u.alive || u.grounded);
+      const calm = this.units.every((u) => !u.alive || u.grounded) && !this.props.some((o) => o.fuse >= 0 && !o.dead); // 연쇄 폭발이 끝날 때까지 기다린다
       this.settleT = calm ? this.settleT + dt : 0;
       if ((this.settleT > 0.9 && this.settleTotal > 1.3) || this.settleTotal > SETTLE_MAX) { // 유닛이 계속 공중이어도 SETTLE_MAX초 뒤에는 다음 턴
         if (!this.checkWinner()) this.endTurn();
@@ -1490,6 +1651,7 @@ export class Game {
     drawBackgroundFx(g, this.bg, this.time);
     g.drawImage(this.terrain.canvas, 0, 0);
     if (this.weather && !this.reduceMotion) drawWeather(g, this.weather);
+    for (const o of this.props) if (!o.dead) drawProp(g, o, this.time);
     for (const c of this.crates) this.drawCrate(g, c);
     for (const u of this.units) if (u.alive || (!u.drowned && u.deadT < FADE_END)) this.drawUnit(g, u);
     this.drawFires(g);
@@ -1971,6 +2133,9 @@ export class Game {
           g.stroke();
           break;
         }
+        case 'chip':
+          g.globalAlpha = 1 - k * k; g.fillStyle = p.color; g.fillRect(p.x, p.y, p.r * 1.8, p.r * 0.9);
+          break;
         case 'debris':
           g.globalAlpha = 1 - k; g.fillStyle = dstyle; g.fillRect(p.x, p.y, p.r * 1.6, p.r * 1.6);
           break;

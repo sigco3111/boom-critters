@@ -1,6 +1,6 @@
 // 헤드리스 AI 대 AI 시뮬레이션 (밸런스 측정용). 브라우저 콘솔에서: await __sim(20, { stage: 5, skill: 'average' })
 // 우리 팀(팀 0)을 숙련도 프로필의 AI가 조작하고, 렌더링 없이(지형은 높이맵 충돌 배열만) 고정 시간 스텝으로 경기를 끝까지 돌린다.
-import { Game, STAGE_COUNT, WEAPONS, W, H, WATER_Y, stageConfig, quickConfig, waveConfig } from './game.js?v=2026111049';
+import { Game, STAGE_COUNT, WEAPONS, W, H, WATER_Y, stageConfig, quickConfig, waveConfig } from './game.js?v=2026111050';
 
 // 플레이어 숙련도 프로필: 각도 오차(°, 표준편차) · 파워 오차 · pick(상위 후보 중 무작위) · basic(대포탄·로켓만 사용)
 export const SKILLS = {
@@ -103,6 +103,13 @@ function checkWorld(g, add, dt) {
     c.still = c.y === c.ly ? (c.still || 0) + dt : 0; c.ly = c.y;
     if (!c.landed && c.still > 1.5) add('상자가 공중에 멈춤', `x=${c.x.toFixed(0)} y=${c.y.toFixed(0)}`);
   }
+  const cap = { barrel: 0, crate: 0, mine: 0 };
+  for (const o of g.props) {
+    cap[o.type]++;
+    if (![o.x, o.y, o.hp].every(fin)) add('장애물 좌표·HP가 NaN', o.type);
+    if (o.y > WATER_Y + 12 || o.y < -50) add('장애물이 월드 밖', `${o.type} y=${o.y}`);
+  }
+  if (cap.barrel > 4 || cap.crate > 4 || cap.mine > 3) add('장애물 상한 초과', JSON.stringify(cap));
   if (g.proj && ![g.proj.x, g.proj.y].every(fin)) add('투사체 좌표가 NaN', '');
   if (![g.wind, g.timer, g.angle, g.power].every(fin)) add('바람·타이머·각도·파워가 NaN', '');
 }
