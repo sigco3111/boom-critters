@@ -194,7 +194,7 @@ body.touch .overlay.modal > .doc { flex: 0 1 auto; min-height: 0; }
 
 /* ---------- 세로 폰 DOM HUD: 캔버스 아래 줄에 팀 HP·타이머·바람·상태를 14px 이상 굵은 윤곽 글자로 표시 ---------- */
 #hud { display: none; }
-body.domhud #hud { display: grid; grid-template-columns: 1fr 58px 1fr; grid-template-areas: "me tm foe" "row row row" "st st st"; align-items: center; gap: 6px 8px; width: 100%; padding: 8px 8px 2px; font-weight: 800; font-size: 14px; line-height: 1.2; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 3px #0008; }
+body.domhud #hud { display: grid; grid-template-columns: 1fr 58px 1fr; grid-template-areas: "me tm foe" "row row row" "st st st" "un un un"; align-items: center; gap: 6px 8px; width: 100%; padding: 8px 8px 2px; font-weight: 800; font-size: 14px; line-height: 1.2; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 3px #0008; }
 body.domhud.menu #hud { visibility: hidden; }
 .hud-team { padding: 5px 7px 6px; background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 10px; min-width: 0; }
 .hud-team.me { grid-area: me; } .hud-team.foe { grid-area: foe; }
@@ -301,3 +301,6 @@ body.touch.menu #controls { visibility: hidden; }
 @media (max-width: 359px) {
   body.touch #tutorialScreen button { font-size: 16px; padding: 8px 14px; }
 }
+
+/* ---------- 캐릭터 특성 정보 줄(세로 폰 HUD) ---------- */
+#hudUnit { grid-area: un; text-align: center; color: #ffe27a; min-height: 18px; font-size: 13px; }

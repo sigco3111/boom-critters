@@ -6,7 +6,7 @@
   <title>붐 크리터스 - 포격 웹게임</title>
   <meta name="description" content="웜즈·포트리스 스타일 싱글플레이 포격 웹게임">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=2026111023">
+  <link rel="stylesheet" href="style.css?v=2026111025">
 </head>
 <body>
   <div id="app">
@@ -101,6 +101,19 @@
             </table>
           </section>
           <section>
+            <h2>캐릭터 특성</h2>
+            <p>유닛마다 작은 특성이 있습니다. 자기 차례인 유닛(또는 마우스를 올린 유닛)의 이름·HP·특성이 화면 위 HP 박스 아래 정보 줄에 표시됩니다.</p>
+            <table>
+              <tr><th>남자 모험가</th><td>균형형 — 특별한 능력 없음 (우리 팀)</td></tr>
+              <tr><th>여자 모험가</th><td>높이뛰기 — 점프 높이 +10% (우리 팀)</td></tr>
+              <tr><th>남자</th><td>튼튼함 — 최대 HP +10 (110) (우리 팀)</td></tr>
+              <tr><th>로봇</th><td>철갑 — 폭발 피해 -15%, 대신 이동 속도 -20% (상대 팀)</td></tr>
+              <tr><th>좀비</th><td>재생 — 자기 팀 턴이 시작될 때 HP +5 (상대 팀)</td></tr>
+              <tr><th>여자</th><td>안정 조준 +15% — AI가 조작하면 조준 오차 -15%, 직접 조작하면 파워 충전이 15% 느려져 원하는 힘에서 떼기 쉬움 (상대 팀)</td></tr>
+              <tr><th>남자 2</th><td>균형형 — 주황색 이름표의 4번째 상대 유닛</td></tr>
+            </table>
+          </section>
+          <section>
             <h2>보급 상자</h2>
             <p>4번째 턴마다 낙하산 상자가 떨어집니다. 유닛이 닿으면 HP +30(최대 100)과 함께 맑은 차임이 울립니다. 폭발에 맞으면 파괴됩니다. 화염 지대 안에서는 턴 시작 때 피해를 받으니 벗어나세요.</p>
           </section>
@@ -108,7 +121,7 @@
             <h2>모드</h2>
             <table>
               <tr><th>빠른 대전</th><td>난이도(쉬움·보통·어려움)를 골라 3 vs 3 단판 승부</td></tr>
-              <tr><th>스테이지</th><td>10개 스테이지, 승리하면 다음이 열림. 생존 수에 따라 별 1~3개</td></tr>
+              <tr><th>스테이지</th><td>10개 스테이지, 승리하면 다음이 열림. 생존 수에 따라 별 1~3개. 스테이지 7부터는 적이 4마리라서 우리 팀에게 수류탄 +1(4발)·번개 +1(3발)이 주어짐</td></tr>
               <tr><th>무한</th><td>웨이브가 이어지며 적이 늘어남. 전멸하면 종료, 최고 웨이브 기록 저장</td></tr>
             </table>
           </section>
@@ -146,7 +159,7 @@
           </ul>
           <p class="note">CC0 에셋은 표기 의무가 없지만 감사의 뜻으로 적습니다. 게임 코드는 MIT 라이선스입니다. 지형·스테이지 테마 배경(초원·사막·설원·밤)·이펙트·무기 아이콘은 외부 이미지 없이 캔버스 코드로 직접 그렸습니다.</p>
         </div>
-        <p class="ver">버전 <span id="verHtml">2026111023</span> · 스크립트 <span id="verJs">-</span></p>
+        <p class="ver">버전 <span id="verHtml">2026111025</span> · 스크립트 <span id="verJs">-</span></p>
         <button type="button" id="creditsCloseBtn">닫기</button>
       </div>
 
@@ -177,6 +190,7 @@
       <div class="hud-team foe" id="hudFoe"><div class="hud-head"><span class="hud-name"></span><b class="hud-tot"></b></div><div class="hud-bar"><i></i></div><div class="hud-units"></div></div>
       <div class="hud-row"><div id="hudWind"><span>바람</span><span id="hudWindArrow"></span><b id="hudWindNum">0</b></div><div id="hudMode"></div></div>
       <div id="hudStatus"></div>
+      <div id="hudUnit"></div>
     </div>
 
     <div id="controls">
@@ -202,6 +216,6 @@
       </div>
     </div>
   </div>
-  <script type="module" src="js/main.js?v=2026111023"></script>
+  <script type="module" src="js/main.js?v=2026111025"></script>
 </body>
 </html>
