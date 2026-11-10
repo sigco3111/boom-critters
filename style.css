@@ -336,3 +336,10 @@ body.bighud #hudWindNum { font-size: 22.5px; }
 body.bighud #hudUnit { font-size: 16.25px; }
 body.bighud #hudTimer { width: 66px; height: 66px; font-size: 35px; }
 body.bighud.domhud #hud { grid-template-columns: 1fr 70px 1fr; }
+
+/* ---------- 시작·스테이지 선택 화면 움직이는 배경 (js/menubg.js가 그림) ---------- */
+#startScreen, #stageScreen { isolation: isolate; background: linear-gradient(#0b1a35, #1d2a5a); } /* 캔버스를 못 그릴 때의 대체 배경 */
+.menuBg { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+body.touch .overlay > .menuBg { margin: 0; }
+body.touch .overlay > .menuBg + * { margin-top: auto; } /* 터치 화면의 세로 가운데 정렬 규칙(:first-child)을 캔버스 다음 요소로 옮김 */
+@media (orientation: portrait) { body.touch .menuBg { position: fixed; } }
