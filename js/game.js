@@ -1,7 +1,7 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111026';
-import * as audio from './audio.js?v=2026111026';
-import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111026';
+import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111027';
+import * as audio from './audio.js?v=2026111027';
+import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111027';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -75,9 +75,9 @@ const ERR_A = [9, 1], ERR_P = [18, 2];
 // AI가 쓸 수 있는 특수 무기(무기 번호 -> 최소 level): 수류탄 2, 번개 3, 화염탄 4, 공습 4. level이 없는 빠른 대전은 모두 사용
 const AI_UNLOCK = { 2: 2, 3: 3, 4: 4, 5: 4 };
 const BONUS_LEVEL = 7, BONUS_GRENADE = 1, BONUS_BOLT = 1; // 우리 팀 보너스 탄약: 적 4마리 구간(level 7+)에서 수류탄 +1, 번개 +1
-// 스테이지 모드 AI 오차 [각도 오차 °, 파워 오차]: window.__sim 승률 측정으로 정한 값 (README "밸런스" 표). 스테이지 1은 AI가 거의 못 맞히고, 10은 어렵지만 숙련자는 이길 수 있다.
-// 지형마다 난이도가 달라 단순 선형이 아니다. 스테이지 1~3은 상위 6개 후보 중 무작위로 고르는(pick) 부정확한 조준
-const STAGE_AI = [null, [30, 60], [22, 44], [16, 32], [10, 20], [6.5, 13], [6, 12], [4.5, 9], [4, 8], [3.8, 7.6], [4.5, 9]];
+// 스테이지 모드 AI 오차 [각도 오차 °, 파워 오차]: window.__sim 승률 측정으로 정한 값 (README "밸런스" 표). 보통 플레이어(3°/6 오차) 목표 승률 약 스테이지 1 95% · 3 88% · 5 70% · 7 55% · 9 40% · 10 30%.
+// 지형마다 난이도가 달라 오차가 단조롭지 않다(4는 3보다, 10은 9보다 오차가 크다). 스테이지 1~3은 상위 6개 후보 중 무작위로 고르는(pick) 부정확한 조준
+const STAGE_AI = [null, [17, 34], [13, 26], [9, 18], [13, 26], [4.6, 9.2], [8, 16], [5.6, 11.2], [3.2, 6.4], [3.3, 6.6], [5.2, 10.4]];
 // 스테이지 s(1~10): 고정 시드, 적 수 2→4(1~3: 2마리, 4~6: 3마리, 7~10: 4마리), 바람 범위 ±(3+s), AI level = s
 export function stageConfig(s) {
   return { mode: 'stage', stage: s, seed: 20240 + s * 7919, enemies: s <= 3 ? 2 : s <= 6 ? 3 : 4, windMax: 3 + s, level: s };
