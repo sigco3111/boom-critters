@@ -1,9 +1,9 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111027';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, stageConfig, waveConfig } from './game.js?v=2026111027';
-import * as audio from './audio.js?v=2026111027';
-import * as progress from './progress.js?v=2026111027';
+const VERSION = '2026111028';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig } from './game.js?v=2026111028';
+import * as audio from './audio.js?v=2026111028';
+import * as progress from './progress.js?v=2026111028';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -47,7 +47,8 @@ $('rotateHintClose').addEventListener('click', () => {
   try { sessionStorage.setItem('boom-hint-off', '1'); } catch (e) { /* ignore */ }
 });
 
-let game = null, difficulty = 'normal', touchSticky = false;
+const prefs = progress.loadPrefs();   // 저장된 설정: 난이도·큰 HUD 글씨·고대비 팀 표시
+let game = null, difficulty = prefs.difficulty, touchSticky = false;
 const coarseMQ = window.matchMedia('(pointer: coarse)');
 const portraitMQ = window.matchMedia('(orientation: portrait)');
 const motionMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -129,6 +130,12 @@ function showResult(winner) {
       title = won ? '승리!' : winner === 1 ? '패배...' : '무승부';
       sub = won ? '상대 팀을 모두 쓰러뜨렸습니다.' : winner === 1 ? '우리 팀이 모두 쓰러졌습니다.' : '양 팀이 모두 쓰러졌습니다.';
     }
+    const dl = $('resultDiff');
+    if (dl) { // 빠른 대전: 고른 난이도와 적 수를 결과 화면에 표시
+      const d = DIFF[current.diff];
+      dl.textContent = mode === 'quick' && d ? `난이도: ${d.label} · 적 ${d.enemies}마리` : '';
+      dl.classList.toggle('hidden', !(mode === 'quick' && d));
+    }
     let rec = null;
     if (mode === 'stage') {
       if (won) { const r = progress.recordStats(current.stage, game.stats); rec = { ...r, first: !r.prev }; }
@@ -150,8 +157,8 @@ function showResult(winner) {
 
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
-window.__sim = (n, opts) => import('./sim.js?v=2026111027').then((m) => m.sim(n, opts));
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111027').then((m) => m.table(n, stages, skills));
+window.__sim = (n, opts) => import('./sim.js?v=2026111028').then((m) => m.sim(n, opts));
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111028').then((m) => m.table(n, stages, skills));
 
 function launch(cfg) {
   current = cfg; endlessRecord = false;
@@ -161,9 +168,18 @@ function launch(cfg) {
   ['startScreen', 'stageScreen', 'resultScreen'].forEach((id) => show(id, false));
   if (cfg.mode === 'stage') game.newMatch('normal', stageConfig(cfg.stage));
   else if (cfg.mode === 'endless') game.newMatch('normal', waveConfig(1));
-  else { difficulty = cfg.diff; game.newMatch(cfg.diff); }
+  else { difficulty = cfg.diff; game.newMatch(cfg.diff, quickConfig(cfg.diff)); }
 }
 const startMatch = (diff) => launch({ mode: 'quick', diff });
+// 시작 화면 난이도 선택(쉬움/보통/어려움): 고른 값은 localStorage에 저장되고 '빠른 대전 시작'으로 시작
+function selectDiff(d, save = true) {
+  if (!DIFF[d]) d = 'normal';
+  difficulty = d;
+  if (save) progress.savePrefs({ difficulty: d });
+  document.querySelectorAll('[data-diff]').forEach((b) => { const on = b.dataset.diff === d; b.classList.toggle('sel', on); b.setAttribute('aria-checked', String(on)); });
+  const x = DIFF[d], q = $('quickDesc');
+  if (q) q.textContent = `3 vs ${x.enemies} · AI 오차 ${x.a}°/${x.p}`;
+}
 
 function goStart() {
   audio.setMusicMode('menu');
@@ -255,7 +271,9 @@ function setup(sprites) {
   const k = game.keys;
 
   // 시작 화면
-  document.querySelectorAll('[data-diff]').forEach((b) => b.addEventListener('click', () => startMatch(b.dataset.diff)));
+  document.querySelectorAll('[data-diff]').forEach((b) => b.addEventListener('click', () => { audio.play('select'); selectDiff(b.dataset.diff); }));
+  selectDiff(difficulty, false);
+  $('quickStartBtn')?.addEventListener('click', () => startMatch(difficulty));
   $('stageModeBtn').addEventListener('click', goStageSelect);
   $('endlessModeBtn').addEventListener('click', () => launch({ mode: 'endless' }));
   $('stageBackBtn').addEventListener('click', () => { audio.play('select'); goStart(); });

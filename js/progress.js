@@ -66,3 +66,23 @@ export function recordStats(stage, st) {
 
 // 저장된 스테이지별 최고 기록 (없으면 null)
 export function bestOf(stage) { return load().best[stage] || null; }
+
+// 설정 저장 (localStorage 'boom-prefs-v1'): 빠른 대전 난이도, 큰 HUD 글씨, 고대비 팀 표시. 진행 기록과 별도 키
+const PREF_KEY = 'boom-prefs-v1';
+export const DIFFS = ['easy', 'normal', 'hard'];
+export function loadPrefs() {
+  const p = { difficulty: 'normal', bigHud: false, contrast: false };
+  try {
+    const d = JSON.parse(localStorage.getItem(PREF_KEY));
+    if (d && typeof d === 'object') {
+      if (DIFFS.includes(d.difficulty)) p.difficulty = d.difficulty;
+      p.bigHud = d.bigHud === true; p.contrast = d.contrast === true;
+    }
+  } catch (e) { /* 기본값 */ }
+  return p;
+}
+export function savePrefs(patch) {
+  const p = { ...loadPrefs(), ...patch };
+  try { localStorage.setItem(PREF_KEY, JSON.stringify(p)); } catch (e) { /* 저장 불가 환경은 무시 */ }
+  return p;
+}

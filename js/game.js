@@ -1,7 +1,7 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111027';
-import * as audio from './audio.js?v=2026111027';
-import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111027';
+import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111028';
+import * as audio from './audio.js?v=2026111028';
+import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111028';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -65,7 +65,13 @@ export const WALK_FRAMES = 8;
 const STEP_LEN = 6;      // 걷기 프레임 하나당 이동 거리 (px)
 const SPRITE_H = 64;     // 포즈 이미지(96x128) 표시 높이 -> 캐릭터 키 약 52px
 const FADE_START = 0.6, FADE_END = 1.6; // 사망 후 페이드 (초)
-const DIFF = { easy: { a: 7, p: 14, label: '쉬움' }, normal: { a: 3, p: 6, label: '보통' }, hard: { a: 1, p: 2, label: '어려움' } };
+// 빠른 대전 난이도: AI 각도·파워 오차(a°, p)와 적 수(enemies). 시작 화면에서 고른 값이 localStorage에 저장된다
+export const DIFF = {
+  easy: { a: 8, p: 16, enemies: 2, label: '쉬움' },
+  normal: { a: 5.5, p: 11, enemies: 3, label: '보통' },
+  hard: { a: 3.5, p: 7, enemies: 4, label: '어려움' },
+};
+export function quickConfig(diff) { return { mode: 'quick', enemies: (DIFF[diff] || DIFF.normal).enemies }; }
 const ENEMY_X = { 1: [760], 2: [650, 820], 3: [600, 730, 865], 4: [560, 670, 780, 885] };
 
 // ---------- 스테이지 / 무한 모드 설정 (밸런스 숫자는 README "밸런스" 표 참고) ----------
