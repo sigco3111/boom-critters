@@ -324,3 +324,15 @@ body.touch .rstats small { font-size: 12px; }
 .overlay .mode .seg button.sel { background: #2f6fb5; border-color: #ffe27a; box-shadow: 0 0 0 1px #ffe27a inset; font-weight: 800; }
 .overlay .sub.diff { color: #ffe27a; font-weight: 700; }
 body.touch .overlay .mode .seg button { font-size: 16px; padding: 8px 6px; }
+
+/* ---------- 접근성: 설정 토글 · HUD 큰 글씨(+25%) ---------- */
+.vol.opt > span { width: auto; flex: 1; }
+.vol.opt button { min-width: calc(8 * var(--cq)); }
+.vol.opt button.on { background: #2e9a4b; border-bottom-color: #1d6b32; }
+body.touch .vol.opt > span { width: auto; }
+body.bighud #hud { font-size: 17.5px; }
+body.bighud .hud-units span { font-size: 17.5px; }
+body.bighud #hudWindNum { font-size: 22.5px; }
+body.bighud #hudUnit { font-size: 16.25px; }
+body.bighud #hudTimer { width: 66px; height: 66px; font-size: 35px; }
+body.bighud.domhud #hud { grid-template-columns: 1fr 70px 1fr; }
