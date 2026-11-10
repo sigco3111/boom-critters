@@ -1,9 +1,9 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111025';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, stageConfig, waveConfig } from './game.js?v=2026111025';
-import * as audio from './audio.js?v=2026111025';
-import * as progress from './progress.js?v=2026111025';
+const VERSION = '2026111026';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, stageConfig, waveConfig } from './game.js?v=2026111026';
+import * as audio from './audio.js?v=2026111026';
+import * as progress from './progress.js?v=2026111026';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -84,6 +84,31 @@ const TUT_STEPS = [
   { icon: '📦', title: '보급 상자와 화염 지대', lines: [['상자', '4턴마다 낙하산 상자가 떨어져요. 닿으면 HP +30'], ['화염', '불길 안에 서 있으면 턴 시작 때 8 피해 — 벗어나세요'], ['주의', '물에 빠지면 즉사! 섬 가장자리와 구덩이를 조심']] },
 ];
 
+// 결과 화면 통계 패널 (#resultStats가 있을 때만): 발사 횟수·준 피해·받은 피해·사용한 무기·턴.
+// best가 있으면(스테이지 모드) 항목별로 '신기록!'·'첫 기록' 또는 이전 최고를 함께 보여 준다.
+const STAT_ROWS = [['shots', '발사 횟수', '발'], ['dealt', '준 피해', ''], ['taken', '받은 피해', ''], ['weapons', '사용한 무기', '종'], ['turns', '우리 턴', '턴']];
+function renderStats(st, rec) {
+  const box = $('resultStats');
+  if (!box) return;
+  const wname = (id) => (WEAPONS.find((w) => w.id === id) || { name: id }).name;
+  const used = Object.entries(st.wpn).sort((a, b) => b[1] - a[1]);
+  box.textContent = '';
+  for (const [key, label, unit] of STAT_ROWS) {
+    const cell = document.createElement('div'), k = document.createElement('span'), v = document.createElement('b'), note = document.createElement('small');
+    cell.className = 'rs'; k.className = 'rk'; v.className = 'rv';
+    k.textContent = label;
+    v.textContent = key === 'weapons' ? `${used.length}${unit}` : `${st[key]}${unit}`;
+    if (key === 'weapons') note.textContent = used.map(([id, n]) => `${wname(id)}×${n}`).join(' · ') || '-';
+    else if (rec && key !== 'weapons') {
+      if (rec.isNew && rec.isNew[key]) { note.textContent = rec.first ? '첫 기록' : '신기록!'; note.className = 'newbest'; }
+      else if (rec.best && rec.best[key] !== undefined) note.textContent = `최고 ${rec.best[key]}${unit}`;
+    }
+    cell.append(k, v, note);
+    box.appendChild(cell);
+  }
+  box.classList.remove('hidden');
+}
+
 function showResult(winner) {
   setTimeout(() => {
     const mode = current.mode, won = winner === 0;
@@ -104,6 +129,12 @@ function showResult(winner) {
       title = won ? '승리!' : winner === 1 ? '패배...' : '무승부';
       sub = won ? '상대 팀을 모두 쓰러뜨렸습니다.' : winner === 1 ? '우리 팀이 모두 쓰러졌습니다.' : '양 팀이 모두 쓰러졌습니다.';
     }
+    let rec = null;
+    if (mode === 'stage') {
+      if (won) { const r = progress.recordStats(current.stage, game.stats); rec = { ...r, first: !r.prev }; }
+      else rec = { best: progress.bestOf(current.stage), isNew: {} };
+    }
+    renderStats(game.stats, rec);
     $('resultTitle').textContent = title;
     $('resultSub').textContent = sub;
     $('resultStars').textContent = starN ? stars(starN) : '';
@@ -119,8 +150,8 @@ function showResult(winner) {
 
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
-window.__sim = (n, opts) => import('./sim.js?v=2026111025').then((m) => m.sim(n, opts));
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111025').then((m) => m.table(n, stages, skills));
+window.__sim = (n, opts) => import('./sim.js?v=2026111026').then((m) => m.sim(n, opts));
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111026').then((m) => m.table(n, stages, skills));
 
 function launch(cfg) {
   current = cfg; endlessRecord = false;

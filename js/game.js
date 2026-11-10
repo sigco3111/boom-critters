@@ -1,7 +1,7 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111025';
-import * as audio from './audio.js?v=2026111025';
-import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111025';
+import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111026';
+import * as audio from './audio.js?v=2026111026';
+import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111026';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -92,6 +92,8 @@ export function levelErr(level) {
   return { a: ERR_A[0] + (ERR_A[1] - ERR_A[0]) * t, p: ERR_P[0] + (ERR_P[1] - ERR_P[0]) * t, pick: level <= 3 };
 }
 
+// 우리 팀 경기 기록: shots 발사 수, wpn 무기별 사용 횟수, dealt 적이 잃은 HP, taken 우리 팀이 잃은 HP(아군 오폭·낙하·익사·화염 포함), turns 우리 팀 턴 수
+export const blankStats = () => ({ shots: 0, wpn: {}, dealt: 0, taken: 0, turns: 0 });
 const rad = (d) => (d * Math.PI) / 180;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -160,6 +162,7 @@ export class Game {
     this.airX = W / 2;          // 공습 목표 x (조준 마커)
     this.ammo = freshAmmo();    // 매치 시작 전에도 버튼 표시가 올바르도록
     this.stepTimer = 0;
+    this.stats = blankStats();  // 우리 팀(팀 0) 경기 기록: 결과 화면에 표시
     this.hover = null;          // 마우스를 올려 둔 유닛 (유닛 정보 줄에 표시)
     this.headless = false;      // true면 렌더링 없이 계산만 (window.__sim)
     this.sim = null;            // 시뮬레이션 설정: { skill: [팀0 AI 프로필 | null, ...] } — 있으면 해당 팀을 AI가 조작
@@ -178,6 +181,7 @@ export class Game {
     this.windMax = opts.windMax ?? 10;
     this.level = opts.level ?? null;      // null이면 난이도(쉬움/보통/어려움)의 오차를 사용
     this.units = []; this.particles = []; this.floaters = []; this.proj = null;
+    this.stats = blankStats();
     const seed = opts.seed ?? ((Math.random() * 1e9) | 0);
     // 스테이지 1~3 초원 / 4~6 사막 / 7~8 설원 / 9~10 밤, 빠른 대전·무한은 시드로 결정
     this.buildField(seed, opts.enemies ?? 3, null, this.mode === 'stage' ? themeForStage(this.stage) : themeForSeed(seed));
@@ -327,14 +331,21 @@ export class Game {
 
   drown(u) {
     if (!u.alive) return;
+    this.countLoss(u, u.hp);
     u.alive = false; u.hp = 0; u.drowned = true;
     for (let i = 0; i < 18; i++) this.particles.push({ type: 'splash', x: u.x + rnd(-8, 8), y: WATER_Y, vx: rnd(-60, 60), vy: rnd(-260, -100), r: rnd(2, 5), life: 0, max: rnd(0.6, 1.0) });
     audio.play('sea_splash', { vol: 0.9 });
     this.floaters.push({ x: u.x, y: WATER_Y - 10, text: '풍덩!', color: '#fff', t: 0 });
   }
 
+  // 경기 기록: 팀 1이 잃은 HP = 준 피해, 팀 0이 잃은 HP = 받은 피해
+  countLoss(u, n) {
+    if (u.team === 1) this.stats.dealt += n; else this.stats.taken += n;
+  }
+
   damage(u, dmg, color = '#fff') {
     if (!u.alive || dmg <= 0) return;
+    this.countLoss(u, Math.min(u.hp, dmg));
     u.hp -= dmg; u.hurt = 0.3;
     this.floaters.push({ x: u.x + rnd(-8, 8), y: Math.max(26, u.y - 92), text: '-' + dmg, color: '#ff3b30', t: 0, dmg: true });
     if (u.hp <= 0) {
@@ -473,6 +484,7 @@ export class Game {
       if (c.alive) { u = c; this.nextIdx[t] = (this.nextIdx[t] + k + 1) % mine.length; break; }
     }
     this.activeUnit = u;
+    if (t === 0 && u) this.stats.turns++;
     this.wind = Math.floor(rnd(-this.windMax, this.windMax + 1));
     this.timer = TURN_TIME;
     this.state = 'aim';
@@ -685,6 +697,7 @@ export class Game {
 
   fire(power) {
     const u = this.activeUnit, w = WEAPONS[this.weapon];
+    if (this.turnTeam === 0) { this.stats.shots++; this.stats.wpn[w.id] = (this.stats.wpn[w.id] || 0) + 1; }
     if (w.instant) return this.fireLightning(u, w);
     if (w.airstrike) return this.fireAirstrike(u, w);
     const a = rad(this.angle), v = launchSpeed(w, power), f = u.facing;

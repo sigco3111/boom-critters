@@ -2,7 +2,10 @@
 const KEY = 'boom-critters-progress-v1';
 export const STAGES = 10;
 
-function blank() { return { unlocked: 1, stars: {}, endlessBest: 0 }; }
+function blank() { return { unlocked: 1, stars: {}, endlessBest: 0, best: {} }; }
+
+// 스테이지별 최고 기록 항목: turns·shots·taken은 작을수록, dealt는 클수록 좋다 (승리한 경기만 기록)
+export const BEST_KEYS = { turns: -1, shots: -1, taken: -1, dealt: 1 };
 
 export function load() {
   try {
@@ -10,7 +13,16 @@ export function load() {
     if (!d || typeof d !== 'object') return blank();
     const stars = {};
     for (let i = 1; i <= STAGES; i++) { const v = Number(d.stars && d.stars[i]); if (v >= 1 && v <= 3) stars[i] = v | 0; }
+    const best = {};
+    for (let i = 1; i <= STAGES; i++) {
+      const b = d.best && d.best[i];
+      if (!b || typeof b !== 'object') continue;
+      const o = {};
+      for (const k in BEST_KEYS) { const v = Number(b[k]); if (Number.isFinite(v) && v >= 0) o[k] = Math.round(v); }
+      if (Object.keys(o).length === Object.keys(BEST_KEYS).length) best[i] = o;
+    }
     return {
+      best,
       unlocked: Math.min(STAGES, Math.max(1, Number(d.unlocked) | 0 || 1)),
       stars,
       endlessBest: Math.max(0, Number(d.endlessBest) | 0),
@@ -39,3 +51,18 @@ export function recordEndless(score) {
   d.endlessBest = score; save(d);
   return true;
 }
+
+// 스테이지 승리 기록: 항목별로 이전 최고와 비교해 갱신하고 저장. 반환: { prev(이전 최고 | null), best(저장된 최고), isNew: { 항목: true } }
+// 첫 클리어는 prev가 null (모든 항목이 isNew)
+export function recordStats(stage, st) {
+  const d = load(), prev = d.best[stage] || null, best = { ...(prev || {}) }, isNew = {};
+  for (const k in BEST_KEYS) {
+    const v = Math.max(0, Math.round(st[k] || 0));
+    if (!prev || (BEST_KEYS[k] < 0 ? v < prev[k] : v > prev[k])) { best[k] = v; isNew[k] = true; }
+  }
+  d.best[stage] = best; save(d);
+  return { prev, best, isNew };
+}
+
+// 저장된 스테이지별 최고 기록 (없으면 null)
+export function bestOf(stage) { return load().best[stage] || null; }
