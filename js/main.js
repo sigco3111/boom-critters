@@ -303,6 +303,7 @@ function setup(sprites) {
   document.addEventListener('gesturestart', (e) => e.preventDefault()); // iOS 핀치 줌 방지
 
   // 메인 루프
+  const fireBtn = $('bFire'), fireFx = fireBtn.querySelector('.fx');
   let last = performance.now();
   function frame(now) {
     const dt = Math.min(0.033, (now - last) / 1000);
@@ -314,6 +315,14 @@ function setup(sprites) {
     if (game.domHud) hud.update(game);
     // 메뉴/모달이 떠 있으면 가로 화면의 겹침 컨트롤을 숨김
     document.body.classList.toggle('menu', ['startScreen', 'stageScreen', 'resultScreen', ...MODALS].some((id) => !$(id).classList.contains('hidden')));
+    // 발사 버튼(가로 터치 화면): 각도·파워 표시와 파워 게이지
+    {
+      const mine = game.turnTeam === 0 && (game.state === 'aim' || game.state === 'flying');
+      const info = mine ? `${Math.round(game.angle)}° · ${Math.round(game.power)}` : game.turnTeam === 1 && game.state === 'aim' ? '상대 조준 중' : '';
+      if (fireFx.textContent !== info) fireFx.textContent = info;
+      const pw = mine ? Math.round(game.power) + '%' : '0%';
+      if (fireBtn.dataset.pw !== pw) { fireBtn.dataset.pw = pw; fireBtn.style.setProperty('--pw', pw); }
+    }
     // 무기 버튼 상태 표시
     weaponBtns.forEach((b, i) => {
       b.classList.toggle('sel', game.weapon === i);

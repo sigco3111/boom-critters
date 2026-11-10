@@ -9,7 +9,7 @@ const PROJ_G = 500;      // 투사체 중력
 const UNIT_H = 38, HALF_W = 9;
 const BODY_CY = 26;      // 몸통 중심 높이 (발 기준 위쪽, 스프라이트 키 약 52px)
 const BODY_R = 15;       // 투사체 명중 판정 반경(몸통 중심 기준)
-const BANNER_T = 1.4; // 턴 배너 표시 시간(초)
+const BANNER_T = 1.3; // 턴 배너 표시 시간(초): 0.12초 페이드 인 → 유지 → 0.35초 페이드 아웃
 const TAG_TOP = 84, TAG_H = 26; // 이름표+HP 블록: 발 위 84px부터 높이 26px
 const BODY_HALF = 8;     // 몸통 캡슐의 세로 반길이 (중심에서 위/아래)
 const BOUNCE_E = 0.55, BOUNCE_FRICTION = 0.85; // 수류탄 반발/마찰 계수
@@ -1362,7 +1362,7 @@ export class Game {
     // 무기 (하단 HUD)
     if (!this.touchUI) this.drawWeaponBar(g);
     // 파워 바
-    if (this.turnTeam === 0 && (this.state === 'aim' || this.state === 'flying')) {
+    if (this.turnTeam === 0 && (this.state === 'aim' || this.state === 'flying') && !(this.touchUI && !dom)) { // 가로 터치 화면은 발사 버튼이 각도·파워를 표시
       const bx = W / 2 - 120, by = H - 34;
       g.fillStyle = 'rgba(0,0,0,0.55)'; g.beginPath(); g.roundRect(bx - 4, by - 4, 248, 24, 8); g.fill();
       const gr = g.createLinearGradient(bx, 0, bx + 240, 0);
@@ -1372,17 +1372,17 @@ export class Game {
       if (this.lastPower) { g.fillStyle = '#fff'; g.fillRect(bx + 240 * this.lastPower / 100 - 1, by - 3, 2, 22); }
       if (!dom) this.text(g, `각도 ${Math.round(this.angle)}°  파워 ${Math.round(this.power)}`, W / 2, by - 14, 12);
     }
-    if (!dom && this.turnTeam === 1 && this.state === 'aim') this.text(g, '상대가 조준 중...', W / 2, H - 26, 14, '#fff');
-    // 턴 배너: "내 차례 - 이름" / "상대 차례 - 이름"을 위에서 살짝 내려오며 잠깐 보여줌
+    if (!dom && !this.touchUI && this.turnTeam === 1 && this.state === 'aim') this.text(g, '상대가 조준 중...', W / 2, H - 26, 14, '#fff');
+    // 턴 배너: "내 차례 - 이름" / "상대 차례 - 이름"을 화면 맨 위 중앙(이름표보다 위, 지형 최고점 위 하늘)에 짧은 페이드로 보여줌
     if (this.banner) {
-      const b = this.banner, a = Math.min(1, (BANNER_T - b.t) * 3, b.t * 8);
-      const fz = Math.min(34, Math.max(20, 16 / this.viewScale));
+      const b = this.banner, a = Math.min(1, b.t / 0.12, (BANNER_T - b.t) / 0.35);
+      const fz = Math.min(34, Math.max(18, 15 / this.viewScale));
       g.font = `800 ${fz}px "Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif`;
-      const bw = Math.ceil(g.measureText(b.text).width) + fz * 1.6, bh = fz * 2;
-      const by = (dom ? 56 : 112 * hs) + Math.min(0, -(1 - Math.min(1, b.t * 5)) * 16);
+      const bw = Math.min(W - 40, Math.ceil(g.measureText(b.text).width) + fz * 1.6), bh = fz * 1.8;
+      const by = 6;
       const mine = b.color === TEAMS[0].color;
-      g.save(); g.globalAlpha = Math.max(0, a);
-      g.fillStyle = 'rgba(0,0,0,0.62)'; g.beginPath(); g.roundRect(W / 2 - bw / 2, by, bw, bh, bh / 2); g.fill();
+      g.save(); g.globalAlpha = Math.max(0, a) * 0.95;
+      g.fillStyle = 'rgba(0,0,0,0.7)'; g.beginPath(); g.roundRect(W / 2 - bw / 2, by, bw, bh, bh / 2); g.fill();
       g.strokeStyle = mine ? '#6ea8ff' : '#ff7a7a'; g.lineWidth = 2; g.stroke();
       this.text(g, b.text, W / 2, by + bh / 2 + 1, fz, mine ? '#b5d3ff' : '#ffb3b3', 'center', '800');
       g.restore();

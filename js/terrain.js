@@ -51,7 +51,7 @@ export class Terrain {
       let y = 345;
       for (const c of comps) y += c.a * Math.sin(c.p + (6.283 * c.f * x) / W);
       y += feat * Math.exp(-Math.pow((x - W / 2) / 110, 2));
-      h[x] = Math.max(175, Math.min(458, y));
+      h[x] = Math.max(215, Math.min(458, y)); // 최고점 215: 이름표가 상단 HUD(바람·시드 표시) 아래에 머문다
     }
     this.heights = h;
     const g = this.ctx;
