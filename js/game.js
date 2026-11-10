@@ -374,7 +374,7 @@ export class Game {
     this.angle = 45;
     this.banner = { text: t === 0 ? `내 차례 - ${u.name}` : `상대 차례 - ${u.name}`, color: TEAMS[t].color, t: 0 };
     this.lastTick = 99;
-    this.ai = t === 1 ? { phase: 'think', t: 0, walks: 0, target: null } : null;
+    this.ai = t === 1 ? { phase: 'think', t: 0, walks: 0, crateWalks: 0, fled: 0, target: null } : null;
   }
 
   // ---------- 보급 상자 ----------
@@ -702,10 +702,29 @@ export class Game {
     return { ...this.aiPlan(ai.weapon, pt(ai.target)), target: ai.target };
   }
 
+  // 한 걸음 앞(10px)에 디딜 땅이 있는지 / 새 화염 지대로 걸어 들어가지 않는지
   aiSafeAhead(u, dir) {
     const x = clamp(u.x + dir * 10, 12, W - 12);
-    for (let y = u.y - 12; y < u.y + 34; y++) if (this.terrain.solid(x, y) && y < WATER_Y - 14) return true;
+    for (let y = u.y - 12; y < u.y + 34; y++) {
+      if (this.terrain.solid(x, y) && y < WATER_Y - 14) return !this.aiFireAt(x, u.y, 0) || this.aiFireAt(u.x, u.y, 0);
+    }
     return false;
+  }
+
+  // (x, y)에 선 유닛이 화염 지대 안인지 (margin: 경계 여유)
+  aiFireAt(x, y, margin = 0) {
+    return this.fires.some((f) => Math.hypot(x - f.x, (y - 14) - f.y) < f.r + margin);
+  }
+
+  // 근처(약 150px)의 착지한 보급 상자 중 가장 가까운 것
+  aiNearCrate(u) {
+    let best = null;
+    for (const c of this.crates) {
+      if (c.dead || !c.landed) continue;
+      const d = Math.hypot(c.x - u.x, (c.y - 10) - (u.y - 20));
+      if (d <= 150 && (!best || d < best.d)) best = { c, d };
+    }
+    return best && best.c;
   }
 
   aiUpdate(dt) {
@@ -713,17 +732,37 @@ export class Game {
     a.t += dt;
     if (a.phase === 'think') {
       if (a.t < 0.9) return;
-      // 사격 계획 (무기 선택 포함). 대포/로켓 계획이 빗나가면 목표 쪽으로 걸어가 다시 계산
+      // 1) 화염 지대 안이면 밖으로 이동 (다음 턴 시작 때 또 화상을 입지 않도록)
+      if (a.fled < 2 && this.aiFireAt(u.x, u.y)) {
+        const f = this.fires.find((q) => Math.hypot(u.x - q.x, (u.y - 14) - q.y) < q.r);
+        const first = u.x >= f.x ? 1 : -1;
+        const dir = this.aiSafeAhead(u, first) ? first : this.aiSafeAhead(u, -first) ? -first : 0;
+        a.fled++;
+        if (dir) { a.phase = 'walk'; a.t = 0; a.goal = 'fire'; a.dir = dir; a.dur = 3; return; }
+      }
+      // 2) 체력 70 미만이고 150px 안에 보급 상자가 있으면 상자 쪽으로 이동
+      const crate = u.hp < 70 && a.crateWalks < 3 ? this.aiNearCrate(u) : null;
+      if (crate && Math.abs(crate.x - u.x) > 8) {
+        const dir = crate.x >= u.x ? 1 : -1;
+        if (this.aiSafeAhead(u, dir)) {
+          a.phase = 'walk'; a.t = 0; a.goal = 'crate'; a.crate = crate; a.dir = dir; a.crateWalks++;
+          a.dur = Math.min(3.5, (Math.abs(crate.x - u.x) + 10) / 70 + 0.3);
+          return;
+        }
+      }
+      // 3) 사격 계획 (무기 선택 포함). 대포/로켓 계획이 빗나가면 목표 쪽으로 걸어가 다시 계산
       const plan = this.aiDecide();
       a.target = plan.target;
       if (plan.weapon <= 1 && plan.dist > 110 && a.walks < 2 && this.aiSafeAhead(u, a.target.x >= u.x ? 1 : -1)) {
-        a.phase = 'walk'; a.t = 0; a.walks++; a.dur = rnd(0.5, 1.0); a.dir = a.target.x >= u.x ? 1 : -1;
+        a.phase = 'walk'; a.t = 0; a.goal = null; a.walks++; a.dur = rnd(0.5, 1.0); a.dir = a.target.x >= u.x ? 1 : -1;
       } else {
         a.plan = plan; a.phase = 'aim'; a.t = 0; a.from = this.angle;
         u.facing = plan.facing; this.weapon = plan.weapon;
       }
     } else if (a.phase === 'walk') {
-      if (a.t < a.dur && this.aiSafeAhead(u, a.dir)) this.walk(u, a.dir, dt);
+      const arrived = a.goal === 'crate' && (a.crate.dead || Math.abs(a.crate.x - u.x) < 8);
+      const clear = a.goal === 'fire' && !this.aiFireAt(u.x, u.y, 6);
+      if (a.t < a.dur && !arrived && !clear && this.aiSafeAhead(u, a.dir)) this.walk(u, a.dir, dt);
       else { u.moving = false; a.phase = 'think'; a.t = 0.5; }
     } else if (a.phase === 'aim') {
       const k = Math.min(1, a.t / 0.7);
