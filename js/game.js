@@ -15,13 +15,18 @@ export const WEAPONS = [
   { id: 'rocket', name: '로켓', radius: 58, damage: 42, windK: 3, speedK: 0.85, knock: 470 },
 ];
 export const TEAMS = [
-  { name: '파랑 팀', color: '#3b82f6', tint: 'rgba(40,110,255,0.42)' },
-  { name: '빨강 팀', color: '#ef4444', tint: 'rgba(255,50,50,0.42)' },
+  { name: '파랑 팀', color: '#3b82f6' },
+  { name: '빨강 팀', color: '#ef4444' },
 ];
-const CRITTERS = [
-  [['rabbit', '토끼'], ['pig', '돼지'], ['panda', '판다']],
-  [['monkey', '원숭이'], ['penguin', '펭귄'], ['hippo', '하마']],
+// Kenney Toon Characters 1 (assets/toon/<key>/<pose>.png)
+export const CHARACTERS = [
+  [['maleAdventurer', '남자 모험가'], ['femaleAdventurer', '여자 모험가'], ['malePerson', '남자']],
+  [['robot', '로봇'], ['zombie', '좀비'], ['femalePerson', '여자']],
 ];
+export const WALK_FRAMES = 8;
+const STEP_LEN = 6;      // 걷기 프레임 하나당 이동 거리 (px)
+const SPRITE_H = 64;     // 포즈 이미지(96x128) 표시 높이 -> 캐릭터 키 약 52px
+const FADE_START = 0.6, FADE_END = 1.6; // 사망 후 페이드 (초)
 const DIFF = { easy: { a: 7, p: 14, label: '쉬움' }, normal: { a: 3, p: 6, label: '보통' }, hard: { a: 1, p: 2, label: '어려움' } };
 
 const rad = (d) => (d * Math.PI) / 180;
@@ -61,13 +66,13 @@ class Unit {
     this.facing = team === 0 ? 1 : -1;
     this.fallStart = y; this.moving = false; this.phase = Math.random() * 6;
     this.squash = 0; this.hurt = 0;
+    this.walkDist = 0; this.shootT = 0; this.deadT = 0; this.drowned = false; this.cvy = 0;
   }
 }
 
 export class Game {
   constructor(sprites) {
-    this.sprites = sprites;     // name -> Image
-    this.tinted = {};
+    this.sprites = sprites;     // 캐릭터 키 -> { 포즈 이름 -> Image }
     this.time = 0;
     this.bg = null;
     this.state = 'idle';
@@ -90,7 +95,7 @@ export class Game {
       for (let i = 0; i < 3; i++) {
         const x = clamp(baseX[t][i] + rnd(-25, 25), 20, W - 20);
         const sy = this.terrain.surfaceY(x);
-        const [sp, nm] = CRITTERS[t][i];
+        const [sp, nm] = CHARACTERS[t][i];
         const u = new Unit(t, i, sp, nm, x, sy - 1);
         for (let k = 0; k < 20 && this.blocked(u.x, u.y); k++) u.y--;
         u.fallStart = u.y;
@@ -141,10 +146,11 @@ export class Game {
 
   walk(u, dir, dt) {
     u.facing = dir; u.moving = true;
-    const nx = clamp(u.x + dir * 70 * dt, 12, W - 12);
+    const nx = clamp(u.x + dir * 70 * dt, 12, W - 12), ox = u.x;
     for (let c = 0; c <= 4; c++) {
       if (!this.blocked(nx, u.y - c)) { u.x = nx; u.y -= c; break; }
     }
+    u.walkDist += Math.abs(u.x - ox);
     let d = 0;
     while (d < 7 && !this.feetSolid(u.x, u.y + 1)) { u.y++; d++; }
     if (!this.feetSolid(u.x, u.y + 1)) { u.grounded = false; u.fallStart = u.y - d; u.vy = 0; u.vx = 0; }
@@ -160,7 +166,7 @@ export class Game {
   }
 
   updateUnit(u, dt) {
-    u.phase += dt; u.hurt = Math.max(0, u.hurt - dt);
+    u.phase += dt; u.hurt = Math.max(0, u.hurt - dt); u.shootT = Math.max(0, u.shootT - dt);
     u.squash += (0 - u.squash) * Math.min(1, dt * 10);
     if (u.grounded) {
       if (u.y > WATER_Y + 2) { this.drown(u); return; }
@@ -186,6 +192,11 @@ export class Game {
     }
   }
 
+  updateCorpse(u, dt) {
+    u.deadT += dt;
+    if (!this.feetSolid(u.x, u.y + 1) && u.y < WATER_Y + 40) { u.cvy += UNIT_G * dt; u.y += u.cvy * dt; } else u.cvy = 0;
+  }
+
   land(u) {
     u.grounded = true; u.vx = 0; u.vy = 0; u.squash = 0.3;
     for (let k = 0; k < 6 && this.blocked(u.x, u.y); k++) u.y--;
@@ -199,7 +210,7 @@ export class Game {
 
   drown(u) {
     if (!u.alive) return;
-    u.alive = false; u.hp = 0;
+    u.alive = false; u.hp = 0; u.drowned = true;
     for (let i = 0; i < 18; i++) this.particles.push({ type: 'splash', x: u.x + rnd(-8, 8), y: WATER_Y, vx: rnd(-60, 60), vy: rnd(-260, -100), r: rnd(2, 5), life: 0, max: rnd(0.6, 1.0) });
     audio.play('land', { rate: 1.6, vol: 0.8 });
     this.floaters.push({ x: u.x, y: WATER_Y - 10, text: '풍덩!', color: '#fff', t: 0 });
@@ -349,7 +360,7 @@ export class Game {
     };
     this.lastPower = power; this.power = power;
     this.state = 'flying';
-    u.squash = -0.2;
+    u.squash = -0.2; u.shootT = 0.4;
     audio.play('fire', { rate: w.id === 'rocket' ? 0.8 : 1 });
   }
 
@@ -482,7 +493,10 @@ export class Game {
       this.settleTotal += dt;
     }
 
-    for (const u of this.units) if (u.alive) this.updateUnit(u, dt);
+    for (const u of this.units) {
+      if (u.alive) this.updateUnit(u, dt);
+      else if (!u.drowned) this.updateCorpse(u, dt);
+    }
 
     if (this.state === 'settle') {
       const calm = this.units.every((u) => !u.alive || u.grounded);
@@ -494,18 +508,6 @@ export class Game {
   }
 
   // ---------- 렌더링 ----------
-  tintedSprite(name, team) {
-    const key = name + team;
-    if (this.tinted[key]) return this.tinted[key];
-    const img = this.sprites[name];
-    const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
-    const g = c.getContext('2d');
-    g.drawImage(img, 0, 0);
-    g.globalCompositeOperation = 'source-atop';
-    g.fillStyle = TEAMS[team].tint; g.fillRect(0, 0, c.width, c.height);
-    return (this.tinted[key] = c);
-  }
-
   text(g, str, x, y, size, color = '#fff', align = 'center', weight = '700') {
     g.font = `${weight} ${size}px "Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif`;
     g.textAlign = align; g.textBaseline = 'middle';
@@ -519,7 +521,7 @@ export class Game {
     if (this.shake > 0.3) g.translate(rnd(-this.shake, this.shake), rnd(-this.shake, this.shake));
     g.drawImage(this.bg, 0, 0);
     g.drawImage(this.terrain.canvas, 0, 0);
-    for (const u of this.units) if (u.alive) this.drawUnit(g, u);
+    for (const u of this.units) if (u.alive || (!u.drowned && u.deadT < FADE_END)) this.drawUnit(g, u);
     this.drawWater(g);
     const showAim = this.state === 'aim' && (this.turnTeam === 0 || (this.ai && (this.ai.phase === 'aim' || this.ai.phase === 'charge')));
     if (showAim) this.drawAim(g);
@@ -547,35 +549,48 @@ export class Game {
     g.stroke();
   }
 
+  poseOf(u) {
+    if (!u.alive) return 'down';
+    if (u.hurt > 0) return 'hit';
+    if (!u.grounded) return u.vy < 0 ? 'jump' : 'fall';
+    if (u.moving) return 'walk' + (Math.floor(u.walkDist / STEP_LEN) % WALK_FRAMES);
+    if (u.shootT > 0) return 'attack0';
+    if (u === this.activeUnit && this.charging) return 'hold';
+    return 'idle';
+  }
+
   drawUnit(g, u) {
-    const img = this.tintedSprite(u.sprite, u.team);
-    const h = 40, w = h * (img.width / img.height);
-    let sx = 1, sy = 1, hop = 0;
-    if (u.moving && u.grounded) {
-      const s = Math.sin(u.phase * 20);
-      hop = Math.abs(s) * 3; sy = 1 + 0.09 * s; sx = 1 - 0.07 * s;
-    } else if (!u.grounded) { sy = 1.1; sx = 0.92; }
-    else { sx = 1 + u.squash * 0.5; sy = 1 - u.squash * 0.5; }
-    if (u.hurt > 0) { sx *= 1.05; }
+    const set = this.sprites[u.sprite];
+    const img = set[this.poseOf(u)] || set.idle;
+    const h = SPRITE_H, w = h * (img.naturalWidth / img.naturalHeight);
+    let sx = 1, sy = 1;
+    if (u.alive && u.grounded && !u.moving) { sx = 1 + u.squash * 0.5; sy = 1 - u.squash * 0.5; }
     g.save();
-    g.translate(u.x, u.y + 2 - hop);
+    if (!u.alive) g.globalAlpha = clamp(1 - (u.deadT - FADE_START) / (FADE_END - FADE_START), 0, 1);
+    g.translate(u.x, u.y + 1); // 발(이미지 하단)이 지형 위 u.y
     g.scale(sx * (u.facing < 0 ? -1 : 1), sy);
     g.drawImage(img, -w / 2, -h, w, h);
     g.restore();
-    if (u.hurt > 0) {
+    if (u.hurt > 0 && u.alive) {
       g.save(); g.globalAlpha = u.hurt / 0.3 * 0.5; g.fillStyle = '#fff';
-      g.beginPath(); g.arc(u.x, u.y - 18, 18, 0, 7); g.fill(); g.restore();
+      g.beginPath(); g.arc(u.x, u.y - 24, 20, 0, 7); g.fill(); g.restore();
     }
   }
 
   drawBar(g, u) {
-    const bw = 34, bx = u.x - bw / 2, by = u.y - 56;
+    const bw = 34, bx = u.x - bw / 2, by = u.y - 62;
     g.fillStyle = 'rgba(0,0,0,0.65)'; g.fillRect(bx - 1, by - 1, bw + 2, 8);
     g.fillStyle = TEAMS[u.team].color; g.fillRect(bx, by, bw * (u.hp / 100), 6);
     g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(bx, by, bw * (u.hp / 100), 2);
     this.text(g, String(u.hp), u.x, by - 8, 11);
+    // 팀 색 이름표 (HP 바 위)
+    g.font = '700 10px "Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif';
+    const tw = Math.ceil(g.measureText(u.name).width) + 10;
+    g.fillStyle = TEAMS[u.team].color; g.strokeStyle = '#fff'; g.lineWidth = 1.5;
+    g.beginPath(); g.roundRect(u.x - tw / 2, by - 29, tw, 13, 4); g.fill(); g.stroke();
+    this.text(g, u.name, u.x, by - 22, 10);
     if (u === this.activeUnit && (this.state === 'aim' || this.state === 'flying')) {
-      const ay = by - 24 + Math.sin(this.time * 6) * 3;
+      const ay = by - 42 + Math.sin(this.time * 6) * 3;
       g.fillStyle = TEAMS[u.team].color; g.strokeStyle = '#fff'; g.lineWidth = 2;
       g.beginPath(); g.moveTo(u.x - 7, ay - 8); g.lineTo(u.x + 7, ay - 8); g.lineTo(u.x, ay + 2); g.closePath(); g.fill(); g.stroke();
     }
