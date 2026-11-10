@@ -439,3 +439,24 @@ body.booting #controls, body.booting #topBtns, body.booting #rotateHint { visibi
   body.touch .mapsel canvas { width: 44px; height: 24px; }
   body.touch .mode .mapdesc { display: none; }
 }
+
+/* 무한 모드: 웨이브 보상 화면 · 일시정지 강화 표시 */
+#rewardScreen { background: rgba(10, 25, 45, 0.92); }
+#rewardScreen .sub.hidden { display: none; }
+#rewardBoss { color: #fcd34d; font-weight: bold; }
+.rw-choices { display: flex; gap: calc(1.6 * var(--cq)); justify-content: center; width: 94%; }
+.rw-choices button { position: relative; flex: 1 1 0; max-width: calc(26 * var(--cq)); min-height: calc(15 * var(--cq)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(0.8 * var(--cq)); padding: calc(2.2 * var(--cq)) calc(1.2 * var(--cq)); background: #17314d; border: 2px solid #3b82f6; border-radius: 14px; color: #fff; cursor: pointer; }
+.rw-choices button:hover, .rw-choices button:focus-visible { background: #1f4468; border-color: #fcd34d; outline: none; }
+.rw-choices button b { font-size: calc(2.8 * var(--cq)); }
+.rw-choices button span { font-size: calc(1.8 * var(--cq)); color: #cfe3f7; line-height: 1.35; font-weight: normal; }
+.rw-choices button i { position: absolute; top: calc(0.6 * var(--cq)); left: calc(0.9 * var(--cq)); font-style: normal; font-size: calc(1.6 * var(--cq)); color: #9fb8d0; }
+.boosts { max-width: 80%; font-size: calc(1.9 * var(--cq)); color: #cfe3f7; line-height: 1.5; }
+.boosts p { margin: 0; }
+#resultBoss, #resultBoost { max-width: 86%; }
+@media (max-width: 640px), (max-height: 420px) {
+  .rw-choices { flex-direction: column; align-items: stretch; width: 90%; gap: 8px; }
+  .rw-choices button { max-width: none; min-height: 0; padding: 10px 12px 10px 34px; align-items: flex-start; text-align: left; }
+  .rw-choices button b { font-size: 16px; }
+  .rw-choices button span { font-size: 13px; }
+  .rw-choices button i { top: 50%; transform: translateY(-50%); left: 12px; font-size: 14px; }
+}
