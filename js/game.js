@@ -20,7 +20,7 @@ export const WEAPONS = [
   { id: 'rocket', name: '로켓', radius: 58, damage: 42, windK: 3, speedK: 0.85, knock: 470 },
   { id: 'grenade', name: '수류탄', radius: 55, damage: 60, windK: 1, speedK: 0.9, knock: 640, ammo: 3, fuse: 3 },
   { id: 'lightning', name: '번개', damage: 35, knock: 260, ammo: 2, instant: true },
-  { id: 'fire', name: '화염탄', disabled: true },
+  { id: 'fire', name: '화염탄', radius: 35, damage: 25, windK: 6, speedK: 0.95, knock: 320, ammo: 2, fireR: 50, fireTurns: 3, fireDmg: 8 },
 ];
 // 하단 HUD 무기 슬롯 (캔버스 좌표)
 const SLOT = { x: 10, y: H - 56, w: 62, h: 50, gap: 4 };
@@ -93,7 +93,7 @@ export class Game {
     this.state = 'idle';
     this.units = []; this.particles = []; this.floaters = [];
     this.proj = null; this.shake = 0;
-    this.bolt = null; this.flashT = 0;
+    this.bolt = null; this.flashT = 0; this.fires = [];
     this.keys = { left: false, right: false, up: false, down: false };
     this.onOver = () => {};
     this.ammo = freshAmmo();    // 매치 시작 전에도 버튼 표시가 올바르도록
@@ -107,7 +107,7 @@ export class Game {
     this.terrain = new Terrain(this.seed);
     this.bg = this.makeBackground(this.seed);
     this.units = []; this.particles = []; this.floaters = []; this.proj = null;
-    this.bolt = null; this.flashT = 0;
+    this.bolt = null; this.flashT = 0; this.fires = [];
     const baseX = [[95, 230, 360], [600, 730, 865]];
     for (let t = 0; t < 2; t++) {
       for (let i = 0; i < 3; i++) {
@@ -354,6 +354,7 @@ export class Game {
 
   startTurn() {
     const t = this.turnTeam;
+    if (this.burnFires(t)) return;
     const mine = this.units.filter((u) => u.team === t);
     let u = null;
     for (let k = 0; k < 3; k++) {
@@ -370,6 +371,36 @@ export class Game {
     this.banner = { text: t === 0 ? `내 차례 - ${u.name}` : `상대 차례 - ${u.name}`, color: TEAMS[t].color, t: 0 };
     this.lastTick = 99;
     this.ai = t === 1 ? { phase: 'think', t: 0, walks: 0, target: null } : null;
+  }
+
+  // ---------- 화염 지대 ----------
+  // 화염탄 폭발 지점 아래 지면에 불을 붙인다 (물 위면 불이 붙지 않음)
+  igniteAt(x, y, w) {
+    let fy = y;
+    for (let k = 0; k < 200 && fy < WATER_Y && !this.terrain.solid(x, fy + 1); k++) fy++;
+    if (fy >= WATER_Y - 6) return;
+    this.fires.push({ x, y: fy - 6, r: w.fireR, turns: w.fireTurns, dmg: w.fireDmg, seed: Math.random() * 100 });
+  }
+
+  // 지면 y (원 안에서 위에서 아래로 처음 만나는 지형), 없으면 null
+  fireGround(f, x) {
+    const half = Math.sqrt(Math.max(0, f.r * f.r - (x - f.x) * (x - f.x)));
+    for (let y = Math.floor(f.y - half); y <= f.y + half; y++) if (this.terrain.solid(x, y)) return y;
+    return null;
+  }
+
+  // 팀 턴 시작 시: 화염 지대 안에 서 있는 해당 팀 유닛에게 피해, 지대 수명 1턴 감소. 승패가 나면 true
+  burnFires(team) {
+    if (!this.fires.length) return false;
+    for (const f of this.fires) {
+      for (const u of this.units) {
+        if (!u.alive || u.team !== team) continue;
+        if (Math.hypot(u.x - f.x, (u.y - 14) - f.y) < f.r) { this.damage(u, f.dmg, '#ff9a3a'); audio.play('hit', { vol: 0.5, rate: 1.4 }); }
+      }
+      f.turns--;
+    }
+    this.fires = this.fires.filter((f) => f.turns > 0);
+    return this.checkWinner();
   }
 
   endTurn() {
@@ -444,7 +475,7 @@ export class Game {
     if (this.ammo[this.turnTeam][this.weapon] !== Infinity) this.ammo[this.turnTeam][this.weapon]--;
     this.state = 'flying';
     u.squash = -0.2; u.shootT = 0.4;
-    audio.play('fire', { rate: w.id === 'rocket' ? 0.8 : w.id === 'grenade' ? 1.3 : 1 });
+    audio.play('fire', { rate: w.id === 'rocket' ? 0.8 : w.id === 'grenade' ? 1.3 : w.id === 'fire' ? 0.6 : 1 });
   }
 
   // ---------- 번개 ----------
@@ -567,6 +598,12 @@ export class Game {
     this.updateParticles(dt);
     if (this.bolt) { this.bolt.t += dt; if (this.bolt.t > 0.3) this.bolt = null; }
     this.flashT = Math.max(0, this.flashT - dt);
+    for (const f of this.fires) {
+      if (Math.random() < dt * 24) {
+        const x = f.x + rnd(-f.r, f.r), gy = this.fireGround(f, x);
+        if (gy !== null) this.particles.push({ type: 'fire', x, y: gy - 2, vx: rnd(-10, 10), vy: rnd(-90, -40), r: rnd(2, 4), life: 0, max: rnd(0.4, 0.8) });
+      }
+    }
     this.shake = Math.max(0, this.shake - dt * 30);
     if (this.banner) { this.banner.t += dt; if (this.banner.t > 1.8) this.banner = null; }
 
@@ -603,6 +640,8 @@ export class Game {
         const sec = Math.ceil(p.fuse);
         if (sec < p.tickN && sec > 0) { p.tickN = sec; audio.play('tick', { vol: 0.7 }); }
         this.particles.push({ type: 'fire', x: p.x + 2, y: p.y - 6, vx: rnd(-15, 15), vy: rnd(-40, -15), r: rnd(1.5, 2.5), life: 0, max: 0.25 });
+      } else if (p.w.id === 'fire') {
+        this.particles.push({ type: 'fire', x: p.x, y: p.y, vx: rnd(-25, 25), vy: rnd(-25, 25), r: rnd(3, 6), life: 0, max: 0.4 });
       } else if (p.w.id === 'rocket') {
         this.particles.push({ type: 'fire', x: p.x, y: p.y, vx: rnd(-20, 20), vy: rnd(-20, 20), r: rnd(3, 5), life: 0, max: 0.3 });
         this.particles.push({ type: 'smoke', x: p.x, y: p.y, vx: rnd(-10, 10), vy: rnd(-10, 10), r: rnd(3, 5), life: 0, max: 0.8, color: '120,120,120' });
@@ -611,7 +650,10 @@ export class Game {
       }
       if (r) {
         this.proj = null;
-        if (r === 'terrain' || r === 'unit' || r === 'explode') this.explode(p.x, p.y, p.w);
+        if (r === 'terrain' || r === 'unit' || r === 'explode') {
+          this.explode(p.x, p.y, p.w);
+          if (p.w.fireR) this.igniteAt(p.x, p.y, p.w);
+        }
         else if (r === 'water') {
           for (let i = 0; i < 14; i++) this.particles.push({ type: 'splash', x: p.x, y: WATER_Y, vx: rnd(-70, 70), vy: rnd(-250, -90), r: rnd(2, 4), life: 0, max: rnd(0.5, 0.9) });
           audio.play('land', { rate: 1.6, vol: 0.7 });
@@ -651,6 +693,7 @@ export class Game {
     g.drawImage(this.bg, 0, 0);
     g.drawImage(this.terrain.canvas, 0, 0);
     for (const u of this.units) if (u.alive || (!u.drowned && u.deadT < FADE_END)) this.drawUnit(g, u);
+    this.drawFires(g);
     this.drawWater(g);
     const showAim = this.state === 'aim' && (this.turnTeam === 0 || (this.ai && (this.ai.phase === 'aim' || this.ai.phase === 'charge')));
     if (showAim) this.drawAim(g);
@@ -687,6 +730,30 @@ export class Game {
     g.shadowBlur = 8; g.strokeStyle = '#bfe0ff'; g.lineWidth = 4; path();
     g.shadowBlur = 0; g.strokeStyle = '#fff'; g.lineWidth = 1.8; path();
     g.restore();
+  }
+
+  // 화염 지대: 지면을 따라 깜빡이는 불꽃 + 붉은 바닥 광원 + 남은 턴
+  drawFires(g) {
+    const t = this.time;
+    for (const f of this.fires) {
+      g.save();
+      const glow = g.createRadialGradient(f.x, f.y + 4, 4, f.x, f.y + 4, f.r);
+      glow.addColorStop(0, 'rgba(255,120,30,0.30)'); glow.addColorStop(1, 'rgba(255,60,0,0)');
+      g.fillStyle = glow; g.beginPath(); g.arc(f.x, f.y + 4, f.r, 0, 7); g.fill();
+      for (let x = f.x - f.r + 3; x < f.x + f.r; x += 5) {
+        const gy = this.fireGround(f, Math.round(x));
+        if (gy === null) continue;
+        const edge = 1 - 0.5 * Math.abs(x - f.x) / f.r;
+        const fl = Math.abs(Math.sin(t * 9 + x * 0.55 + f.seed)) * 0.6 + Math.abs(Math.sin(t * 5.3 + x * 1.3)) * 0.4;
+        const h = (9 + 17 * fl) * edge, w = 5.5;
+        g.fillStyle = 'rgba(255,90,20,0.9)';
+        g.beginPath(); g.moveTo(x - w, gy + 1); g.quadraticCurveTo(x - w * 0.6, gy - h * 0.5, x + Math.sin(t * 12 + x) * 2, gy - h); g.quadraticCurveTo(x + w * 0.6, gy - h * 0.5, x + w, gy + 1); g.fill();
+        g.fillStyle = 'rgba(255,215,70,0.95)';
+        g.beginPath(); g.moveTo(x - w * 0.5, gy + 1); g.quadraticCurveTo(x - w * 0.3, gy - h * 0.3, x, gy - h * 0.6); g.quadraticCurveTo(x + w * 0.3, gy - h * 0.3, x + w * 0.5, gy + 1); g.fill();
+      }
+      g.restore();
+      this.text(g, `${f.turns}턴`, f.x, f.y - 32, 11, '#ffd27a');
+    }
   }
 
   drawWater(g) {
@@ -807,6 +874,10 @@ export class Game {
       g.fillStyle = '#e6e6e6'; g.fillRect(-9, -3, 14, 6);
       g.fillStyle = '#d33'; g.beginPath(); g.moveTo(5, -3); g.lineTo(11, 0); g.lineTo(5, 3); g.fill();
       g.fillStyle = '#555'; g.fillRect(-11, -4, 3, 8);
+    } else if (p.w.id === 'fire') {
+      const gr = g.createRadialGradient(0, 0, 1, 0, 0, 9);
+      gr.addColorStop(0, '#fff3a0'); gr.addColorStop(0.5, '#ff9a2a'); gr.addColorStop(1, 'rgba(255,60,0,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 9, 0, 7); g.fill();
     } else if (p.w.id === 'grenade') {
       const hot = p.fuse < 1 && Math.floor(p.fuse * 8) % 2 === 0;
       g.rotate(p.age * 6);
