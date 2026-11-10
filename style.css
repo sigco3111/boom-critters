@@ -326,6 +326,17 @@ body.touch .rstats small { font-size: 12px; }
 .overlay .mode .seg button { flex: 1; font-size: calc(2 * var(--cq)); padding: calc(0.7 * var(--cq)) calc(0.6 * var(--cq)); background: rgba(255, 255, 255, 0.12); border: 2px solid rgba(255, 255, 255, 0.28); border-radius: 10px; }
 .overlay .mode .seg button:hover { background: rgba(255, 255, 255, 0.22); }
 .overlay .mode .seg button.sel { background: #2f6fb5; border-color: #ffe27a; box-shadow: 0 0 0 1px #ffe27a inset; font-weight: 800; }
+/* 빠른 대전 맵 선택(테마·지형) */
+.mapsel { display: flex; gap: calc(0.8 * var(--cq)); align-items: flex-end; align-self: stretch; }
+.mapsel label { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: calc(1.5 * var(--cq)); color: #9fb8d0; min-width: 0; }
+.mapsel select { font: inherit; font-size: calc(2 * var(--cq)); color: #fff; background: rgba(255, 255, 255, 0.14); border: 2px solid rgba(255, 255, 255, 0.28); border-radius: 10px; padding: calc(0.6 * var(--cq)) calc(0.4 * var(--cq)); width: 100%; min-width: 0; cursor: pointer; }
+.mapsel select option { color: #111; background: #fff; }
+.mapsel canvas { flex: none; width: calc(7.2 * var(--cq)); height: calc(4 * var(--cq)); border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.4); }
+.mode .mapdesc { font-size: calc(1.4 * var(--cq)); line-height: 1.3; text-align: center; }
+body.touch .mapsel label { font-size: 12px; }
+body.touch .mapsel select { font-size: 15px; padding: 6px 4px; }
+body.touch .mapsel canvas { width: 54px; height: 30px; }
+body.touch .mode .mapdesc { font-size: 12px; }
 .overlay .sub.diff { color: #ffe27a; font-weight: 700; }
 body.touch .overlay .mode .seg button { font-size: 16px; padding: 8px 6px; }
 
@@ -415,3 +426,11 @@ body.booting #controls, body.booting #topBtns, body.booting #rotateHint { visibi
 .vol .langSeg button { margin-left: 0; min-width: calc(9 * var(--cq)); background: rgba(255, 255, 255, 0.12); border: 2px solid rgba(255, 255, 255, 0.28); }
 .vol .langSeg button:hover { background: rgba(255, 255, 255, 0.22); }
 .vol .langSeg button.sel { background: #2f6fb5; border-color: #ffe27a; box-shadow: 0 0 0 1px #ffe27a inset; font-weight: 800; }
+/* 낮은 가로 화면: 맵 선택 라벨을 선택 상자 왼쪽에 한 줄로 두고 설명 줄은 숨겨 시작 화면이 넘치지 않게 한다 */
+@media (orientation: landscape) and (max-height: 500px) {
+  body.touch .mapsel { align-items: center; }
+  body.touch .mapsel label { flex-direction: row; align-items: center; gap: 4px; white-space: nowrap; }
+  body.touch .mapsel select { padding: 4px 4px; font-size: 14px; }
+  body.touch .mapsel canvas { width: 44px; height: 24px; }
+  body.touch .mode .mapdesc { display: none; }
+}
