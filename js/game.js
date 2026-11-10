@@ -1,7 +1,7 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111028';
-import * as audio from './audio.js?v=2026111028';
-import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111028';
+import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111029';
+import * as audio from './audio.js?v=2026111029';
+import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111029';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -155,6 +155,8 @@ export class Game {
     this.units = []; this.particles = []; this.floaters = [];
     this.proj = null; this.shake = 0;
     this.viewScale = 1;         // 캔버스 CSS 폭 / 논리 폭 (작은 화면일수록 글자를 키우는 데 사용)
+    this.bigHud = false;        // 접근성: HUD 글자 +25% (설정)
+    this.teamMarks = false;     // 접근성: 파랑 원 / 빨강 마름모 팀 표시 (설정)
     this.domHud = false;        // true면 팀 HP·타이머·바람·상태를 DOM HUD(#hud)가 그림 (세로 폰)
     this.reduceMotion = false;  // prefers-reduced-motion이면 화면 흔들림 끔
     this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.turnNo = 0;
@@ -1153,6 +1155,25 @@ export class Game {
     g.strokeText(str, x, y); g.fillStyle = color; g.fillText(str, x, y);
   }
 
+  // 팀 표시 도형: 파랑 팀은 원, 빨강 팀은 마름모 (색 없이도 구분). 흰 테두리 + 검은 바깥 윤곽으로 대비를 높인다
+  mark(g, team, x, y, r) {
+    g.save();
+    g.beginPath();
+    if (team === 0) g.arc(x, y, r, 0, 7);
+    else { g.moveTo(x, y - r * 1.2); g.lineTo(x + r * 1.2, y); g.lineTo(x, y + r * 1.2); g.lineTo(x - r * 1.2, y); g.closePath(); }
+    g.lineJoin = 'round';
+    g.lineWidth = 4; g.strokeStyle = '#000'; g.stroke();
+    g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke();
+    g.fillStyle = TEAMS[team].color; g.fill();
+    g.restore();
+  }
+
+  // 상단 HUD 배율: 작은 화면에서 1~1.3배, '큰 HUD 글씨'를 켜면 +25% (좌우 HP 박스와 중앙 타이머가 겹치지 않도록 최대 1.5배)
+  get hudScale() {
+    const hs = Math.min(1.3, Math.max(1, 0.85 / this.viewScale));
+    return this.bigHud ? Math.min(1.5, hs * 1.25) : hs;
+  }
+
   draw(g) {
     if (!this.bg) { g.fillStyle = '#6bb9ee'; g.fillRect(0, 0, W, H); return; }
     g.save();
@@ -1298,10 +1319,11 @@ export class Game {
 
   // 이름표 + HP 바를 한 블록으로 머리 위에 그린다. 이웃과 겹치면 가로로 밀어낸다.
   drawTags(g) {
-    const ts = Math.min(1.7, Math.max(1, 0.8 / this.viewScale)); // 작은 화면에서는 이름표를 키움
+    let ts = Math.min(1.7, Math.max(1, 0.8 / this.viewScale)); // 작은 화면에서는 이름표를 키움
+    if (this.bigHud) ts = Math.min(2.1, ts * 1.25);   // 큰 HUD 글씨: 이름표도 25% 키움
     g.font = '700 10px "Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif';
     const tags = this.units.filter((u) => u.alive).map((u) => ({
-      u, w: Math.max(46, Math.ceil(g.measureText(u.name).width) + 10), x: u.x, y: u.y - TAG_TOP,
+      u, w: Math.max(46, Math.ceil(g.measureText(u.name).width) + 10 + (this.teamMarks ? 14 : 0)), x: u.x, y: u.y - TAG_TOP,
     }));
     // 가로로 겹치는(세로 범위도 겹치는) 블록 쌍을 서로 밀어낸다
     tags.sort((p, q) => p.u.x - q.u.x);
@@ -1332,7 +1354,8 @@ export class Game {
     // 이름표
     g.fillStyle = col; g.strokeStyle = '#fff'; g.lineWidth = 1.5;
     g.beginPath(); g.roundRect(left, y, w, 13, 4); g.fill(); g.stroke();
-    this.text(g, u.name, x, y + 7, 10);
+    if (this.teamMarks) { this.mark(g, u.team, left + 9, y + 6.5, 4.5); this.text(g, u.name, x + 7, y + 7, 10); }
+    else this.text(g, u.name, x, y + 7, 10);
     // HP 바 (이름표 바로 아래, 숫자는 바 안)
     const by = y + 15;
     g.fillStyle = 'rgba(0,0,0,0.7)'; g.fillRect(left, by, w, 11);
@@ -1393,7 +1416,7 @@ export class Game {
     // 구역 아래쪽은 지형 윤곽을 따라 그린다 (구역 안 지면 높이 샘플)
     const ground = []; for (let x = x0; x <= x0 + AIR_W + 0.1; x += 6) ground.push([x, Math.min(WATER_Y, this.terrain.surfaceY(clamp(x, 0, W - 1))) - 3]);
     const gy = ground[Math.floor(ground.length / 2)][1] + 3, gmin = Math.min(...ground.map((q) => q[1]));
-    const hs = Math.min(1.3, Math.max(1, 0.85 / this.viewScale));
+    const hs = this.hudScale;
     const top = clamp(gy - 170, Math.ceil(107 * hs) + 28, Math.max(Math.ceil(107 * hs) + 28, gmin - 30)), fs = Math.min(26, Math.max(13, 13 / this.viewScale));
     g.save();
     const gr = g.createLinearGradient(0, top, 0, gy);
@@ -1535,9 +1558,9 @@ export class Game {
   }
 
   drawHUD(g) {
-    const dom = this.domHud;
+    const dom = this.domHud, big = this.bigHud ? 1.25 : 1;
     // 작은 화면(가로 폰)에서는 상단 HUD를 키워서 글자 크기를 확보 (hs: 1~1.3). 세로 폰은 DOM HUD가 대신 그림.
-    const hs = Math.min(1.3, Math.max(1, 0.85 / this.viewScale));
+    const hs = this.hudScale;
     if (!dom) {
       // 팀 HP
       for (let t = 0; t < 2; t++) {
@@ -1546,7 +1569,8 @@ export class Game {
         const x = t === 0 ? 14 : W - 14 - 230, y = 12;
         g.save(); g.translate(t === 0 ? 14 : W - 14, 12); g.scale(hs, hs); g.translate(t === 0 ? -14 : -(W - 14), -12);
         g.fillStyle = 'rgba(0,0,0,0.5)'; g.beginPath(); g.roundRect(x, y, 230, 40, 8); g.fill();
-        this.text(g, `${TEAMS[t].name}${t === 0 ? ' (나)' : ' (AI)'}`, x + 8, y + 11, 13, '#fff', 'left');
+        if (this.teamMarks) this.mark(g, t, x + 15, y + 11, 5);
+        this.text(g, `${TEAMS[t].name}${t === 0 ? ' (나)' : ' (AI)'}`, x + (this.teamMarks ? 26 : 8), y + 11, 13, '#fff', 'left');
         this.text(g, `${tot}/${cap}`, x + 222, y + 11, 13, '#fff', 'right');
         g.fillStyle = 'rgba(255,255,255,0.2)'; g.fillRect(x + 8, y + 22, 214, 10);
         g.fillStyle = TEAMS[t].color; g.fillRect(x + 8, y + 22, 214 * tot / cap, 10);
@@ -1577,7 +1601,7 @@ export class Game {
     if (!this.touchUI) this.drawWeaponBar(g);
     // 파워 바
     if (this.turnTeam === 0 && this.airMode && this.state === 'aim' && !this.touchUI) { // 공습 조준 안내 (파워 바 대신)
-      this.text(g, `공습 x${Math.round(this.airX)} · 클릭/Space로 호출`, W / 2, H - 26, 12);
+      this.text(g, `공습 x${Math.round(this.airX)} · 클릭/Space로 호출`, W / 2, H - 26, 12 * big);
     } else if (this.turnTeam === 0 && (this.state === 'aim' || this.state === 'flying') && !(this.touchUI && !dom)) { // 가로 터치 화면은 발사 버튼이 각도·파워를 표시
       const bx = W / 2 - 120, by = H - 34;
       g.fillStyle = 'rgba(0,0,0,0.55)'; g.beginPath(); g.roundRect(bx - 4, by - 4, 248, 24, 8); g.fill();
@@ -1586,22 +1610,22 @@ export class Game {
       g.fillStyle = gr; g.fillRect(bx, by, 240 * this.power / 100, 16);
       g.strokeStyle = 'rgba(255,255,255,0.6)'; g.lineWidth = 1; g.strokeRect(bx, by, 240, 16);
       if (this.lastPower) { g.fillStyle = '#fff'; g.fillRect(bx + 240 * this.lastPower / 100 - 1, by - 3, 2, 22); }
-      if (!dom) this.text(g, `각도 ${Math.round(this.angle)}°  파워 ${Math.round(this.power)}`, W / 2, by - 14, 12);
+      if (!dom) this.text(g, `각도 ${Math.round(this.angle)}°  파워 ${Math.round(this.power)}`, W / 2, by - 14 * big, 12 * big);
     }
-    if (!dom && !this.touchUI && this.turnTeam === 1 && this.state === 'aim') this.text(g, '상대가 조준 중...', W / 2, H - 26, 14, '#fff');
+    if (!dom && !this.touchUI && this.turnTeam === 1 && this.state === 'aim') this.text(g, '상대가 조준 중...', W / 2, H - 26, 14 * big, '#fff');
     // 턴 배너: "내 차례 - 이름" / "상대 차례 - 이름"을 상단 중앙 HUD 바로 아래 하늘에 짧은 페이드로 보여줌
     if (this.banner) {
       const b = this.banner, a = Math.min(1, b.t / 0.12, (BANNER_T - b.t) / 0.35);
-      const fz = Math.min(34, Math.max(18, 15 / this.viewScale));
+      const fz = Math.min(34, Math.max(18, 15 / this.viewScale)) * big;
       g.font = `800 ${fz}px "Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif`;
-      const bw = Math.min(W - 40, Math.ceil(g.measureText(b.text).width) + fz * 1.6), bh = fz * 1.8;
+      const mine = b.color === TEAMS[0].color, btxt = (this.teamMarks ? (mine ? '● ' : '◆ ') : '') + b.text; // 고대비 팀 표시: 파랑 ● / 빨강 ◆
+      const bw = Math.min(W - 40, Math.ceil(g.measureText(btxt).width) + fz * 1.6), bh = fz * 1.8;
       // 상단 중앙 HUD(타이머·바람·시드 알약, 가로 폰에서는 hs배 확대)가 끝나는 곳 바로 아래에 놓아 타이머·HUD를 가리지 않게 함. 세로 폰은 DOM HUD라 맨 위
       const by = dom ? 6 : Math.ceil(107 * hs) + 8;
-      const mine = b.color === TEAMS[0].color;
       g.save(); g.globalAlpha = Math.max(0, a) * 0.95;
       g.fillStyle = 'rgba(0,0,0,0.7)'; g.beginPath(); g.roundRect(W / 2 - bw / 2, by, bw, bh, bh / 2); g.fill();
       g.strokeStyle = mine ? '#6ea8ff' : '#ff7a7a'; g.lineWidth = 2; g.stroke();
-      this.text(g, b.text, W / 2, by + bh / 2 + 1, fz, mine ? '#b5d3ff' : '#ffb3b3', 'center', '800');
+      this.text(g, btxt, W / 2, by + bh / 2 + 1, fz, mine ? '#b5d3ff' : '#ffb3b3', 'center', '800');
       g.restore();
     }
     const label = this.modeLabel;
