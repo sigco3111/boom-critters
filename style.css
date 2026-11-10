@@ -248,3 +248,7 @@ body.touch #pauseScreen .col button { font-size: 18px; padding: 10px 18px; }
 @media (orientation: landscape) { body.touch #pauseScreen .col { gap: 6px; } body.touch #pauseScreen .col button { font-size: 16px; padding: 6px 16px; } }
 body.touch #pauseScreen { justify-content: center; padding: 16px; }
 body.touch #pauseScreen > :first-child, body.touch #pauseScreen > :last-child { margin: 0; }
+
+/* ---------- 버전 표시 (크레딧 화면): 오래된 캐시를 쉽게 알아보도록 ---------- */
+.overlay .ver { margin: 0; font-size: max(12px, calc(1.4 * var(--cq))); color: #8fa8c0; text-align: center; font-variant-numeric: tabular-nums; }
+.overlay .ver .stale { color: #ff9c9c; font-weight: 700; }
