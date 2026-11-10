@@ -1,13 +1,22 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, stageConfig, waveConfig } from './game.js';
-import * as audio from './audio.js';
-import * as progress from './progress.js';
+// 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
+const VERSION = '2026111021';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, stageConfig, waveConfig } from './game.js?v=2026111021';
+import * as audio from './audio.js?v=2026111021';
+import * as progress from './progress.js?v=2026111021';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
 const g = canvas.getContext('2d');
+{ // 크레딧 화면 버전 표시: HTML(스타일·스크립트 주소)과 실제로 불러온 스크립트 버전이 다르면 오래된 캐시라고 알려줌
+  const html = $('verHtml')?.textContent.trim() || '', js = $('verJs');
+  if (js) {
+    js.textContent = VERSION;
+    if (html !== VERSION) { js.textContent = `${VERSION} (페이지 ${html || '없음'}와 다름 - 새로고침하세요)`; js.classList.add('stale'); }
+  }
+}
 canvas.width = W; canvas.height = H;
 
 function loadImages() {
