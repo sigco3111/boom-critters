@@ -1,25 +1,28 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111038';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig } from './game.js?v=2026111038';
-import * as audio from './audio.js?v=2026111038';
-import * as progress from './progress.js?v=2026111038';
-import { MenuBg } from './menubg.js?v=2026111038';
-import * as store from './storage.js?v=2026111038';
-import * as loader from './loader.js?v=2026111038';
+const VERSION = '2026111039';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig } from './game.js?v=2026111039';
+import * as audio from './audio.js?v=2026111039';
+import * as progress from './progress.js?v=2026111039';
+import { MenuBg } from './menubg.js?v=2026111039';
+import * as store from './storage.js?v=2026111039';
+import * as loader from './loader.js?v=2026111039';
+import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111039';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
 const g = canvas.getContext('2d');
-{ // 크레딧 화면 버전 표시: HTML(스타일·스크립트 주소)과 실제로 불러온 스크립트 버전이 다르면 오래된 캐시라고 알려줌
+const updateVer = () => { // 크레딧 화면 버전 표시: HTML(스타일·스크립트 주소)과 실제로 불러온 스크립트 버전이 다르면 오래된 캐시라고 알려줌
   const html = $('verHtml')?.textContent.trim() || '', js = $('verJs');
-  if (js) {
-    js.textContent = VERSION;
-    if (html !== VERSION) { js.textContent = `${VERSION} (페이지 ${html || '없음'}와 다름 - 새로고침하세요)`; js.classList.add('stale'); }
-  }
-}
+  if (!js) return;
+  const stale = html !== VERSION;
+  js.textContent = stale ? tr('ver.stale', { v: VERSION, h: html || tr('ver.none') }) : VERSION;
+  js.classList.toggle('stale', stale);
+};
+applyDom(); // 저장된 언어(없으면 브라우저 언어)로 정적 문구를 바꾼다 — 모듈이 시작되자마자 해서 한국어가 잠깐 비치지 않게 함
+updateVer();
 canvas.width = W; canvas.height = H;
 
 // 로딩 화면에서 받는 캐릭터: 우리 팀 3명과 첫 두 적(빠른 대전 쉬움·스테이지 1~3에 필요). 세 번째 적부터(보통 이상·스테이지 4~)는 뒤에서 받다가 그 경기를 시작할 때 기다린다
@@ -82,31 +85,29 @@ const MODALS = ['settingsScreen', 'helpScreen', 'creditsScreen', 'pauseScreen', 
 
 // 첫 실행 튜토리얼 (4단계). 본 적이 있으면 localStorage 플래그로 다시 띄우지 않고, 게임 방법 화면의 '튜토리얼 보기'로 언제든 다시 볼 수 있다
 const TUT_KEY = 'boom-tutorial-done';
-const TUT_STEPS = [
-  { icon: '🏃', title: '이동과 점프', lines: [['키보드', 'A·D (또는 ←·→)로 걷고, W로 점프'], ['터치', '화면의 ◀ ▶ 와 점프 버튼'], ['팁', '턴마다 30초! 같은 팀 유닛이 차례로 움직여요']] },
-  { icon: '🎯', title: '조준하고 힘을 모아 발사', lines: [['키보드', '↑·↓ 로 각도 → Space를 꾹 눌러 파워를 모았다가 떼면 발사'], ['터치', '오른쪽 화면을 끌어 각도·파워를 정하고 손을 떼면 발사 (발사 버튼 꾹도 가능)'], ['팁', '바람 화살표를 보고 보정하세요']] },
-  { icon: '💣', title: '무기 1~6', lines: [['교체', '숫자 1~6 키 또는 무기 버튼'], ['종류', '1 대포탄 · 2 로켓 · 3 수류탄(3초 뒤 폭발) · 4 번개(직선) · 5 화염탄(불길 3턴) · 6 공습(목표 지정 후 폭탄 5발)'], ['탄약', '3~6번은 개수가 제한돼요 (공습은 스테이지 4부터)']] },
-  { icon: '📦', title: '보급 상자와 화염 지대', lines: [['상자', '4턴마다 낙하산 상자가 떨어져요. 닿으면 HP +30'], ['화염', '불길 안에 서 있으면 턴 시작 때 8 피해 — 벗어나세요'], ['주의', '물에 빠지면 즉사! 섬 가장자리와 구덩이를 조심']] },
-];
+const TUT_ICONS = ['🏃', '🎯', '💣', '📦'];   // 문구는 i18n.js의 tut.<단계>.* 키
+const TUT_COUNT = TUT_ICONS.length;
+const tutStep = (n) => ({ icon: TUT_ICONS[n - 1], title: tr(`tut.${n}.t`), lines: ['a', 'b', 'c'].map((x) => [tr(`tut.${n}.${x}.k`), tr(`tut.${n}.${x}.v`)]) });
 
 // 결과 화면 통계 패널 (#resultStats가 있을 때만): 발사 횟수·준 피해·받은 피해·사용한 무기·턴.
 // best가 있으면(스테이지 모드) 항목별로 '신기록!'·'첫 기록' 또는 이전 최고를 함께 보여 준다.
-const STAT_ROWS = [['shots', '발사 횟수', '발'], ['dealt', '준 피해', ''], ['taken', '받은 피해', ''], ['weapons', '사용한 무기', '종'], ['turns', '우리 턴', '턴']];
+const STAT_ROWS = ['shots', 'dealt', 'taken', 'weapons', 'turns'];
 function renderStats(st, rec) {
   const box = $('resultStats');
   if (!box) return;
   const wname = (id) => (WEAPONS.find((w) => w.id === id) || { name: id }).name;
   const used = Object.entries(st.wpn).sort((a, b) => b[1] - a[1]);
   box.textContent = '';
-  for (const [key, label, unit] of STAT_ROWS) {
+  for (const key of STAT_ROWS) {
+    const label = tr('rs.' + key), unit = ['shots', 'weapons', 'turns'].includes(key) ? tr('rs.u.' + key) : '';
     const cell = document.createElement('div'), k = document.createElement('span'), v = document.createElement('b'), note = document.createElement('small');
     cell.className = 'rs'; k.className = 'rk'; v.className = 'rv';
     k.textContent = label;
     v.textContent = key === 'weapons' ? `${used.length}${unit}` : `${st[key]}${unit}`;
     if (key === 'weapons') note.textContent = used.map(([id, n]) => `${wname(id)}×${n}`).join(' · ') || '-';
     else if (rec && key !== 'weapons') {
-      if (rec.isNew && rec.isNew[key]) { note.textContent = rec.first ? '첫 기록' : '신기록!'; note.className = 'newbest'; }
-      else if (rec.best && rec.best[key] !== undefined) note.textContent = `최고 ${rec.best[key]}${unit}`;
+      if (rec.isNew && rec.isNew[key]) { note.textContent = rec.first ? tr('rs.first') : tr('rs.new'); note.className = 'newbest'; }
+      else if (rec.best && rec.best[key] !== undefined) note.textContent = tr('rs.best', { v: rec.best[key], u: unit });
     }
     cell.append(k, v, note);
     box.appendChild(cell);
@@ -141,74 +142,78 @@ async function shareResult() {
   if (!shareText) return;
   const text = shareText;
   if (navigator.share) {
-    try { await navigator.share({ title: '붐 크리터스', text }); return; } catch (e) {
+    try { await navigator.share({ title: tr('share.title'), text }); return; } catch (e) {
       if (e && e.name === 'AbortError') return; // 사용자가 공유 창을 닫음
     }
   }
-  showToast(await copyText(text) ? '결과를 클립보드에 복사했어요' : `복사하지 못했어요. 주소: ${GAME_URL}`);
+  showToast(await copyText(text) ? tr('share.copied') : tr('share.fail', { url: GAME_URL }));
 }
 
+let resultView = null; // 결과 화면의 글자를 (다시) 채우는 함수 — 언어를 바꾸면 다시 불러 번역한다
 function showResult(winner) {
   setTimeout(() => {
-    const mode = current.mode, won = winner === 0;
-    let title, sub = '', starN = 0;
-    if (mode === 'endless') {
-      const score = game.cleared, record = endlessRecord;
-      title = '게임 오버';
-      sub = `클리어한 웨이브: ${score} · 최고 기록: ${progress.load().endlessBest}${record && score > 0 ? ' (신기록!)' : ''}`;
-    } else if (mode === 'stage') {
-      title = won ? `스테이지 ${current.stage} 클리어!` : '패배...';
-      if (won) {
-        const alive = game.units.filter((u) => u.team === 0 && u.alive).length;
-        starN = Math.max(1, Math.min(3, alive));
-        const r = progress.completeStage(current.stage, starN);
-        sub = `생존 ${alive}마리 · 최고 ${r.best}개${r.unlockedNext && current.stage < STAGE_COUNT ? ` · 스테이지 ${current.stage + 1} 해금!` : ''}`;
-      } else sub = winner === 1 ? '우리 팀이 모두 쓰러졌습니다.' : '양 팀이 모두 쓰러졌습니다.';
-    } else {
-      title = won ? '승리!' : winner === 1 ? '패배...' : '무승부';
-      sub = won ? '상대 팀을 모두 쓰러뜨렸습니다.' : winner === 1 ? '우리 팀이 모두 쓰러졌습니다.' : '양 팀이 모두 쓰러졌습니다.';
+    const mode = current.mode, won = winner === 0, stage = current.stage, record = endlessRecord, stats = game.stats, cleared = game.cleared;
+    let starN = 0, alive = 0, r = null, rec = null;
+    if (mode === 'stage' && won) {
+      alive = game.units.filter((u) => u.team === 0 && u.alive).length;
+      starN = Math.max(1, Math.min(3, alive));
+      r = progress.completeStage(stage, starN);
     }
-    const dl = $('resultDiff');
-    if (dl) { // 빠른 대전: 고른 난이도와 적 수를 결과 화면에 표시
-      const d = DIFF[current.diff];
-      dl.textContent = mode === 'quick' && d ? `난이도: ${d.label} · 적 ${d.enemies}마리` : '';
-      dl.classList.toggle('hidden', !(mode === 'quick' && d));
-    }
-    let rec = null;
     if (mode === 'stage') {
-      if (won) { const r = progress.recordStats(current.stage, game.stats); rec = { ...r, first: !r.prev }; }
-      else rec = { best: progress.bestOf(current.stage), isNew: {} };
+      if (won) { const rr = progress.recordStats(stage, stats); rec = { ...rr, first: !rr.prev }; }
+      else rec = { best: progress.bestOf(stage), isNew: {} };
     }
-    { // 공유 글: 모드/스테이지 · 결과 · 별 + 게임 주소
-      const word = won ? '승리' : winner === 1 ? '패배' : '무승부';
-      let line;
-      if (mode === 'endless') line = `붐 크리터스 무한 모드 - 웨이브 ${game.cleared} 클리어${endlessRecord && game.cleared > 0 ? ' (신기록!)' : ''}`;
-      else if (mode === 'stage') line = `붐 크리터스 스테이지 ${current.stage} ${word} ${stars(starN)}`;
-      else line = `붐 크리터스 빠른 대전(${(DIFF[current.diff] || {}).label || '보통'}) ${word}`;
-      shareText = `${line}\n${GAME_URL}`;
-    }
-    renderStats(game.stats, rec);
-    $('resultTitle').textContent = title;
-    $('resultSub').textContent = sub;
-    $('resultStars').textContent = starN ? stars(starN) : '';
-    show('resultStars', starN > 0);
-    show('nextBtn', mode === 'stage' && won && current.stage < STAGE_COUNT);
-    show('stageSelBtn', mode === 'stage');
-    $('againBtn').textContent = mode === 'quick' ? '다시 하기' : '다시 도전';
-    $('menuBtn').textContent = mode === 'quick' ? '난이도 선택' : '처음으로';
+    resultView = () => {
+      let title, sub = '';
+      if (mode === 'endless') {
+        title = tr('res.over');
+        sub = tr('res.endSub', { n: cleared, b: progress.load().endlessBest, rec: record && cleared > 0 ? tr('res.new') : '' });
+      } else if (mode === 'stage') {
+        title = won ? tr('res.clear', { n: stage }) : tr('res.lose');
+        if (won) sub = tr('res.alive', { n: alive, b: r.best }) + (r.unlockedNext && stage < STAGE_COUNT ? tr('res.unlock', { n: stage + 1 }) : '');
+        else sub = tr(winner === 1 ? 'res.allDown' : 'res.bothDown');
+      } else {
+        title = won ? tr('res.win') : winner === 1 ? tr('res.lose') : tr('res.draw');
+        sub = tr(won ? 'res.foeDown' : winner === 1 ? 'res.allDown' : 'res.bothDown');
+      }
+      const dl = $('resultDiff');
+      if (dl) { // 빠른 대전: 고른 난이도와 적 수를 결과 화면에 표시
+        const d = DIFF[current.diff];
+        dl.textContent = mode === 'quick' && d ? tr('res.diff', { d: d.label, n: d.enemies }) : '';
+        dl.classList.toggle('hidden', !(mode === 'quick' && d));
+      }
+      { // 공유 글: 모드/스테이지 · 결과 · 별 + 게임 주소
+        const word = tr(won ? 'share.word.win' : winner === 1 ? 'share.word.lose' : 'share.word.draw');
+        let line;
+        if (mode === 'endless') line = tr('share.endless', { n: cleared, rec: record && cleared > 0 ? tr('res.new') : '' });
+        else if (mode === 'stage') line = tr('share.stage', { n: stage, w: word, s: stars(starN) });
+        else line = tr('share.quick', { d: (DIFF[current.diff] || DIFF.normal).label, w: word });
+        shareText = `${line}\n${GAME_URL}`;
+      }
+      renderStats(stats, rec);
+      $('resultTitle').textContent = title;
+      $('resultSub').textContent = sub;
+      $('resultStars').textContent = starN ? stars(starN) : '';
+      show('resultStars', starN > 0);
+      show('nextBtn', mode === 'stage' && won && stage < STAGE_COUNT);
+      show('stageSelBtn', mode === 'stage');
+      $('againBtn').textContent = tr(mode === 'quick' ? 'res.again' : 'res.retry');
+      $('menuBtn').textContent = tr(mode === 'quick' ? 'res.menuQuick' : 'res.menu');
+    };
+    resultView();
     show('resultScreen');
     audio.setMusicMode('result');
     // 결과 징글: 승리/신기록이면 밝은 음, 패배·무승부·게임 오버면 낮은 음 (음악 볼륨·음소거를 따르고 재생 동안 배경음악이 작아진다)
-    audio.playJingle(mode === 'endless' ? (endlessRecord && game.cleared > 0 ? 'win' : 'lose') : won ? 'win' : 'lose');
+    audio.playJingle(mode === 'endless' ? (record && cleared > 0 ? 'win' : 'lose') : won ? 'win' : 'lose');
   }, 900);
 }
 
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
 window.__audio = audio; // 디버깅/테스트용: __audio.musicInfo()
-window.__sim = (n, opts) => import('./sim.js?v=2026111038').then((m) => m.sim(n, opts));
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111038').then((m) => m.table(n, stages, skills));
-window.__sim.soak = (n, opts) => import('./sim.js?v=2026111038').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
+window.__sim = (n, opts) => import('./sim.js?v=2026111039').then((m) => m.sim(n, opts));
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111039').then((m) => m.table(n, stages, skills));
+window.__sim.soak = (n, opts) => import('./sim.js?v=2026111039').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
 
 // 이 경기에 뒤에서 받는 캐릭터가 필요한가: 적이 3마리 이상(보통 이상·스테이지 4~)이거나 무한 모드(웨이브가 오르면 적이 4마리)
 function needsLazy(cfg) {
@@ -220,7 +225,7 @@ async function launch(cfg) {
   if (launching) return;
   if (needsLazy(cfg) && !loader.isLoaded(LAZY_KEYS)) { // 대개 이미 받아 둔 상태. 아직이면 잠깐 안내를 띄우고 최대 BOOT_TIMEOUT까지 기다린 뒤 (없는 그림은 임시 그림) 시작
     launching = true;
-    const ld = $('loading'), timer = setTimeout(() => { $('loadText').textContent = '캐릭터를 불러오는 중...'; ld.classList.remove('hidden', 'fade'); ld.classList.add('slim'); }, 250);
+    const ld = $('loading'), timer = setTimeout(() => { $('loadText').textContent = tr('load.chars'); ld.classList.remove('hidden', 'fade'); ld.classList.add('slim'); }, 250);
     await Promise.race([loader.loadChars(window.__sprites, LAZY_KEYS, POSES), wait(BOOT_TIMEOUT)]);
     clearTimeout(timer); ld.classList.add('hidden'); ld.classList.remove('slim');
     launching = false;
@@ -243,14 +248,15 @@ function selectDiff(d, save = true) {
   if (save) progress.savePrefs({ difficulty: d });
   document.querySelectorAll('[data-diff]').forEach((b) => { const on = b.dataset.diff === d; b.classList.toggle('sel', on); b.setAttribute('aria-checked', String(on)); });
   const x = DIFF[d], q = $('quickDesc');
-  if (q) q.textContent = `3 vs ${x.enemies} · AI 오차 ${x.a}°/${x.p}`;
+  if (q) q.textContent = tr('quick.desc', { n: x.enemies, a: x.a, p: x.p });
 }
 
+const refreshEndless = () => { $('endlessBest').textContent = tr('best.endless', { n: progress.load().endlessBest }); };
 function goStart() {
   audio.stopJingle();
   audio.setMusicMode('menu');
   show('resultScreen', false); show('stageScreen', false); show('startScreen');
-  $('endlessBest').textContent = `최고 기록: ${progress.load().endlessBest} 웨이브`;
+  refreshEndless();
 }
 
 // 스테이지 선택 화면: 잠긴 스테이지는 비활성, 클리어한 스테이지는 별 표시
@@ -263,8 +269,8 @@ function renderStages() {
     b.type = 'button'; b.dataset.stage = String(i);
     b.className = (locked ? 'locked ' : '') + (st ? 'done' : '');
     b.disabled = locked;
-    b.innerHTML = `<b>${i}</b><span class="stars">${locked ? '🔒' : stars(st)}</span><small>적 ${cfg.enemies}마리</small>`;
-    b.setAttribute('aria-label', locked ? `스테이지 ${i} 잠김` : `스테이지 ${i}${st ? ` 별 ${st}개` : ''}`);
+    b.innerHTML = `<b>${i}</b><span class="stars">${locked ? '🔒' : stars(st)}</span><small>${tr('stage.enemies', { n: cfg.enemies })}</small>`;
+    b.setAttribute('aria-label', locked ? tr('stage.locked', { n: i }) : st ? tr('stage.stars', { n: i, s: st }) : tr('stage.plain', { n: i }));
     b.addEventListener('click', () => launch({ mode: 'stage', stage: i }));
     grid.appendChild(b);
   }
@@ -293,7 +299,7 @@ function makeHud() {
   const teams = [q('#hudMe'), q('#hudFoe')].map((el) => ({ el, name: el.querySelector('.hud-name'), tot: el.querySelector('.hud-tot'), bar: el.querySelector('.hud-bar i'), units: el.querySelector('.hud-units') }));
   const unitEl = $('hudUnit'), timer = $('hudTimer'), arrow = $('hudWindArrow'), num = $('hudWindNum'), mode = $('hudMode'), status = $('hudStatus');
   const windSvg = (w) => {
-    if (!w) return '<span style="font-size:14px">없음</span>';
+    if (!w) return `<span style="font-size:14px">${tr('hud.none')}</span>`;
     const len = 16 + Math.abs(w) * 7, h = 20, y = h / 2;
     return `<svg width="${len + 4}" height="${h}" viewBox="0 0 ${len + 4} ${h}" style="${w < 0 ? 'transform:scaleX(-1)' : ''}"><path d="M2 ${y}H${len - 8}" stroke="#ffe27a" stroke-width="5" stroke-linecap="round"/><path d="M${len + 2} ${y}L${len - 10} 2V${h - 2}Z" fill="#ffe27a" stroke="#000" stroke-width="1" stroke-linejoin="round"/></svg>`;
   };
@@ -301,7 +307,7 @@ function makeHud() {
     update(gm) {
       for (let t = 0; t < 2; t++) {
         const mem = gm.units.filter((u) => u.team === t), tot = mem.reduce((a, u) => a + u.hp, 0), cap = mem.reduce((a, u) => a + u.maxHp, 0), T = teams[t];
-        set('n' + t, T.name, 'textContent', (gm.teamMarks ? (t === 0 ? '● ' : '◆ ') : '') + TEAMS[t].name.replace(' 팀', '') + (t === 0 ? '(나)' : '(AI)'));
+        set('n' + t, T.name, 'textContent', (gm.teamMarks ? (t === 0 ? '● ' : '◆ ') : '') + tr('team.short.' + t) + '(' + tr(t === 0 ? 'who.me' : 'who.ai') + ')');
         set('t' + t, T.tot, 'textContent', `${tot}/${cap}`);
         set('b' + t, T.bar, 'style', `width:${cap ? (100 * tot) / cap : 0}%;--tc:${TEAMS[t].color}`);
         const act = gm.state === 'aim' || gm.state === 'flying' || gm.state === 'strike' ? gm.activeUnit : null;
@@ -314,12 +320,12 @@ function makeHud() {
       set('wn', num, 'textContent', String(Math.abs(gm.wind || 0)));
       set('md', mode, 'textContent', gm.modeLabel);
       let st = '';
-      if (gm.state === 'aim') st = gm.turnTeam === 0 ? (gm.airMode ? `내 차례 · 공습 목표 ${Math.round(gm.airX)} · 화면을 눌러 호출` : `내 차례 · 각도 ${Math.round(gm.angle)}° · 파워 ${Math.round(gm.power)}`) : '상대가 조준 중...';
-      else if (gm.state === 'strike') st = '공습 중!';
+      if (gm.state === 'aim') st = gm.turnTeam === 0 ? (gm.airMode ? tr('st.mineAir', { x: Math.round(gm.airX) }) : tr('st.mineAim', { a: Math.round(gm.angle), p: Math.round(gm.power) })) : tr('st.foe');
+      else if (gm.state === 'strike') st = tr('st.strike');
       set('st', status, 'textContent', st);
       if (unitEl) { // 지금 차례인 유닛(또는 마우스를 올린 유닛)의 이름·HP·특성
         const u = gm.infoUnit;
-        set('un', unitEl, 'textContent', u ? `${u.name} (HP ${u.hp}/${u.maxHp}) · ${u.trait.name}: ${u.trait.desc}` : '');
+        set('un', unitEl, 'textContent', u ? tr('hud.unit', { name: u.name, hp: u.hp, max: u.maxHp, tn: u.trait.name, td: u.trait.desc }) : '');
       }
     },
   };
@@ -361,16 +367,17 @@ function setup(sprites) {
     document.body.classList.toggle('bighud', prefs.bigHud);
     document.body.classList.toggle('teammarks', prefs.contrast);
     for (const [id, on] of [['bigHudToggle', prefs.bigHud], ['contrastToggle', prefs.contrast]]) {
-      const b = $(id); if (!b) continue; b.textContent = on ? '켜짐' : '꺼짐'; b.setAttribute('aria-checked', String(on)); b.classList.toggle('on', on);
+      const b = $(id); if (!b) continue; b.textContent = tr(on ? 'on' : 'off'); b.setAttribute('aria-checked', String(on)); b.classList.toggle('on', on);
     }
   };
   $('bigHudToggle')?.addEventListener('click', () => { audio.play('select'); prefs.bigHud = !prefs.bigHud; progress.savePrefs({ bigHud: prefs.bigHud }); applyA11y(); });
   $('contrastToggle')?.addEventListener('click', () => { audio.play('select'); prefs.contrast = !prefs.contrast; progress.savePrefs({ contrast: prefs.contrast }); applyA11y(); });
   applyA11y();
   const refreshMute = () => {
-    muteBtn.innerHTML = audio.isMuted() ? '🔇<span class="tx"> 소리 꺼짐</span>' : '🔊<span class="tx"> 소리 켜짐</span>';
-    muteBtn.setAttribute('aria-label', audio.isMuted() ? '소리 켜기' : '소리 끄기');
-    $('muteToggle').textContent = audio.isMuted() ? '꺼짐 (누르면 켜기)' : '켜짐 (누르면 끄기)';
+    const m = audio.isMuted();
+    muteBtn.innerHTML = `${m ? '🔇' : '🔊'}<span class="tx"> ${tr(m ? 'snd.off' : 'snd.on')}</span>`;
+    muteBtn.setAttribute('aria-label', tr(m ? 'snd.turnOn' : 'snd.turnOff'));
+    $('muteToggle').textContent = tr(m ? 'mute.on' : 'mute.off');
   };
   muteBtn.addEventListener('click', () => { audio.initAudio(); audio.setMuted(!audio.isMuted()); refreshMute(); });
   $('muteToggle').addEventListener('click', () => muteBtn.click());
@@ -420,11 +427,11 @@ function setup(sprites) {
   // 튜토리얼: 키보드(→/←/Enter/Space/Esc)와 터치(다음·이전·건너뛰기 버튼) 모두 지원. 게임 방법 화면 위에서도 열 수 있음
   const tutorial = (() => {
     const scr = $('tutorialScreen');
-    if (!scr) return { open() {}, close() {}, next() {}, prev() {}, isOpen: () => false };
+    if (!scr) return { open() {}, close() {}, next() {}, prev() {}, rerender() {}, isOpen: () => false };
     let i = 0;
     const render = () => {
-      const st = TUT_STEPS[i];
-      $('tutStep').textContent = `${i + 1} / ${TUT_STEPS.length}`;
+      const st = tutStep(i + 1);
+      $('tutStep').textContent = `${i + 1} / ${TUT_COUNT}`;
       $('tutIcon').textContent = st.icon;
       $('tutTitle').textContent = st.title;
       const ul = $('tutBody'); ul.textContent = '';
@@ -432,12 +439,13 @@ function setup(sprites) {
         const li = document.createElement('li'), b = document.createElement('b');
         b.textContent = tag; li.append(b, ' ' + text); ul.appendChild(li);
       }
-      $('tutDots').innerHTML = TUT_STEPS.map((_, n) => `<i class="${n === i ? 'on' : ''}"></i>`).join('');
+      $('tutDots').innerHTML = TUT_ICONS.map((_, n) => `<i class="${n === i ? 'on' : ''}"></i>`).join('');
       $('tutPrev').hidden = i === 0;
-      $('tutNext').textContent = i === TUT_STEPS.length - 1 ? '시작하기' : '다음';
+      $('tutNext').textContent = tr(i === TUT_COUNT - 1 ? 'tut.start' : 'tut.next');
       $('tutNext').focus({ preventScroll: true });
     };
     const api = {
+      rerender() { if (api.isOpen()) render(); },
       isOpen: () => !scr.classList.contains('hidden'),
       open() {
         if (api.isOpen()) return;
@@ -449,7 +457,7 @@ function setup(sprites) {
         if (!api.isOpen()) return;
         closeModal('tutorialScreen');
       },
-      next() { if (i >= TUT_STEPS.length - 1) api.close(); else { i++; render(); } },
+      next() { if (i >= TUT_COUNT - 1) api.close(); else { i++; render(); } },
       prev() { if (i > 0) { i--; render(); } },
     };
     $('tutNext').addEventListener('click', () => { audio.play('select'); api.next(); });
@@ -519,7 +527,7 @@ function setup(sprites) {
   const compactTick = () => { // 매 프레임: 항목 상태 갱신, 메뉴 화면·모달이 뜨면 팝오버 닫기
     if (!popItems) return;
     popItems.pause.disabled = !canPause();
-    const t = audio.isMuted() ? '🔇 소리 켜기' : '🔊 소리 끄기';
+    const t = tr(audio.isMuted() ? 'pop.on' : 'pop.off');
     if (t !== popSoundLabel) { popSoundLabel = t; popItems.sound.textContent = t; }
     if (popOpen() && (modalOpen || !compactMQ.matches)) closePop();
   };
@@ -610,6 +618,18 @@ function setup(sprites) {
   let lastTap = 0; // iOS 더블탭 확대: 캔버스는 포인터 이벤트만 쓰므로 빠른 두 번째 touchend의 기본 동작(확대)만 막는다
   canvas.addEventListener('touchend', (e) => { const n = Date.now(); if (n - lastTap < 350 && e.cancelable) e.preventDefault(); lastTap = n; }, { passive: false });
 
+  // 언어 선택(설정): 한국어/English. 저장은 i18n.js가 하고, 바뀌면 지금 떠 있는 화면의 글자를 모두 다시 채운다
+  const langBtns = [...document.querySelectorAll('[data-lang]')];
+  const syncLang = () => langBtns.forEach((b) => { const on = b.dataset.lang === getLang(); b.classList.toggle('sel', on); b.setAttribute('aria-checked', String(on)); });
+  langBtns.forEach((b) => b.addEventListener('click', () => { audio.play('select'); setLang(b.dataset.lang); }));
+  syncLang();
+  onLangChange(() => {
+    syncLang(); selectDiff(difficulty, false); refreshEndless(); refreshMute(); applyA11y(); updateVer(); popSoundLabel = '';
+    if (!$('stageScreen').classList.contains('hidden')) renderStages();
+    if (resultView && !$('resultScreen').classList.contains('hidden')) resultView();
+    tutorial.rerender();
+  });
+
   // 첫 실행이면 튜토리얼을 자동으로 띄움
   let seen = false;
   seen = store.local.get(TUT_KEY) === '1';
@@ -640,13 +660,13 @@ function setup(sprites) {
     // 발사 버튼(가로 터치 화면): 각도·파워 표시와 파워 게이지
     {
       const mine = game.turnTeam === 0 && (game.state === 'aim' || game.state === 'flying');
-      const info = mine && game.airMode ? `목표 ${Math.round(game.airX)}` : mine ? `${Math.round(game.angle)}° · ${Math.round(game.power)}` : game.turnTeam === 1 && game.state === 'aim' ? '상대 조준 중' : '';
+      const info = mine && game.airMode ? tr('fire.target', { x: Math.round(game.airX) }) : mine ? `${Math.round(game.angle)}° · ${Math.round(game.power)}` : game.turnTeam === 1 && game.state === 'aim' ? tr('fire.foe') : '';
       if (fireFx.textContent !== info) fireFx.textContent = info;
       const pw = mine ? Math.round(game.power) + '%' : '0%';
       if (fireBtn.dataset.pw !== pw) { fireBtn.dataset.pw = pw; fireBtn.style.setProperty('--pw', pw); }
       pauseBtn.disabled = !canPause();
       compactTick();
-      const fl = game.airMode ? '공습 호출' : '발사 (꾹)';
+      const fl = game.airMode ? tr('fire.air') : tr('fire.label');
       if (fireLabel.textContent !== fl) fireLabel.textContent = fl;
     }
     // 무기 버튼 상태 표시
@@ -676,7 +696,7 @@ function setup(sprites) {
 // 시작: 로딩 화면(진행 막대)에서 첫 화면에 필요한 소리·그림을 받고, 끝나면(또는 BOOT_TIMEOUT 뒤) 시작 화면으로 부드럽게 넘어간다. 실패해도 게임은 멈추지 않는다
 async function boot() {
   const ld = $('loading'), fill = $('loadBar').firstElementChild, count = $('loadCount'), note = $('loadNote');
-  $('loadText').textContent = '불러오는 중...';
+  $('loadText').textContent = tr('load.text');
   await loader.placeholder();
   const sprites = loader.createSprites([...new Set(CHAR_KEYS)], POSES);
   window.__sprites = sprites; // 디버깅/테스트용
@@ -697,13 +717,13 @@ async function boot() {
   ]);
   await Promise.race([work, wait(BOOT_TIMEOUT)]);
   const bad = [];
-  if (snd < sndTotal) bad.push('일부 소리를 불러오지 못했어요');
-  if (img < imgTotal) bad.push('일부 그림을 불러오지 못했어요');
+  if (snd < sndTotal) bad.push(tr('load.sounds'));
+  if (img < imgTotal) bad.push(tr('load.images'));
   if (bad.length) { note.textContent = bad.join(' · '); note.classList.remove('hidden'); }
   await wait(Math.max(bad.length ? 900 : 0, MIN_SHOW - (performance.now() - t0)));
   try { setup(sprites); } catch (err) {
     console.error(err);
-    $('loadText').textContent = '에셋을 불러오지 못했습니다: ' + err.message;
+    $('loadText').textContent = tr('load.fail', { msg: err.message });
     return;
   }
   if (bad.length) showToast(bad.join(' · '));

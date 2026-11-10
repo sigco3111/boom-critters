@@ -1,9 +1,10 @@
 // 스테이지 테마: 배경(하늘·구름·별·언덕)과 지형/물 색을 캔버스 코드로 그린다 (외부 이미지 없음)
-import { W, H, mulberry32 } from './terrain.js?v=2026111038';
+import { W, H, mulberry32 } from './terrain.js?v=2026111039';
+import { t as tr } from './i18n.js?v=2026111039';
 
 export const THEMES = [
   {
-    id: 'grass', name: '초원',
+    id: 'grass', get name() { return tr('th.grass'); },
     sky: [[0, '#4fa8ea'], [0.55, '#a9dcf8'], [1, '#e8f8ff']],
     hills: [['#a8d3d6', 285, 36], ['#86c48a', 325, 32], ['#63a85a', 365, 26]],
     tile: { base: '#8a5a30', dark: 'rgba(60,35,15,0.35)', light: 'rgba(190,140,80,0.30)', pebble: 'rgba(150,140,130,0.55)' },
@@ -11,7 +12,7 @@ export const THEMES = [
     water: 'rgba(40,120,200,0.72)', debris: '110,70,35',
   },
   {
-    id: 'desert', name: '사막 노을',
+    id: 'desert', get name() { return tr('th.desert'); },
     sky: [[0, '#3a2a6e'], [0.35, '#b4446c'], [0.65, '#f28048'], [0.88, '#ffc56a'], [1, '#ffe3a2']],
     hills: [['#7a3a5e', 300, 22], ['#c4643e', 335, 28], ['#a04c2c', 370, 24]],
     tile: { base: '#c8934c', dark: 'rgba(120,70,25,0.35)', light: 'rgba(250,215,140,0.38)', pebble: 'rgba(120,90,60,0.5)' },
@@ -19,7 +20,7 @@ export const THEMES = [
     water: 'rgba(30,140,150,0.72)', debris: '170,120,60',
   },
   {
-    id: 'snow', name: '설원',
+    id: 'snow', get name() { return tr('th.snow'); },
     sky: [[0, '#8fb0d4'], [0.5, '#d5e5f3'], [1, '#f6fafd']],
     hills: [['#a3bad4', 280, 40], ['#d3e2ef', 325, 28], ['#eef5fa', 368, 22]],
     tile: { base: '#6c5b55', dark: 'rgba(30,25,38,0.38)', light: 'rgba(190,210,232,0.30)', pebble: 'rgba(205,220,235,0.55)' },
@@ -27,7 +28,7 @@ export const THEMES = [
     water: 'rgba(90,160,215,0.75)', debris: '200,215,230',
   },
   {
-    id: 'night', name: '별밤',
+    id: 'night', get name() { return tr('th.night'); },
     sky: [[0, '#040821'], [0.55, '#151c4c'], [1, '#3a3a7c']],
     hills: [['#1b2356', 300, 30], ['#141a42', 340, 26], ['#0d1230', 372, 22]],
     tile: { base: '#4b3b60', dark: 'rgba(10,5,28,0.45)', light: 'rgba(150,130,205,0.26)', pebble: 'rgba(125,125,165,0.5)' },
