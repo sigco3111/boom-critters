@@ -291,7 +291,7 @@ export class Game {
     if (!u.alive) return;
     u.alive = false; u.hp = 0; u.drowned = true;
     for (let i = 0; i < 18; i++) this.particles.push({ type: 'splash', x: u.x + rnd(-8, 8), y: WATER_Y, vx: rnd(-60, 60), vy: rnd(-260, -100), r: rnd(2, 5), life: 0, max: rnd(0.6, 1.0) });
-    audio.play('land', { rate: 1.6, vol: 0.8 });
+    audio.play('sea_splash', { vol: 0.9 });
     this.floaters.push({ x: u.x, y: WATER_Y - 10, text: '풍덩!', color: '#fff', t: 0 });
   }
 
@@ -358,7 +358,7 @@ export class Game {
     this.emitExplosion(x, y, r);
     this.blastCrates(x, y, r);
     this.shake = Math.max(this.shake, r / 4);
-    audio.play('explosion', { rate: w.id === 'rocket' ? 0.8 : 1.05, vol: 1 });
+    audio.play(w.id === 'rocket' ? 'sea_boom_big' : w.id === 'cannon' ? 'sea_boom' : 'sea_boom_small', { rate: w.id === 'rocket' ? 0.95 : 1, vol: 1 });
     let hit = false;
     for (const u of this.units) {
       if (!u.alive) continue;
@@ -600,7 +600,8 @@ export class Game {
     if (this.ammo[this.turnTeam][this.weapon] !== Infinity) this.ammo[this.turnTeam][this.weapon]--;
     this.state = 'flying';
     u.squash = -0.2; u.shootT = 0.4;
-    audio.play('fire', { rate: w.id === 'rocket' ? 0.8 : w.id === 'grenade' ? 1.3 : w.id === 'fire' ? 0.6 : 1 });
+    if (w.id === 'cannon' || w.id === 'rocket') audio.play('sea_cannon', { rate: w.id === 'rocket' ? 1.15 : 1, vol: 0.9 });
+    else audio.play('fire', { rate: w.id === 'grenade' ? 1.3 : 0.6 });
   }
 
   // ---------- 번개 ----------
@@ -913,7 +914,7 @@ export class Game {
         }
         else if (r === 'water') {
           for (let i = 0; i < 14; i++) this.particles.push({ type: 'splash', x: p.x, y: WATER_Y, vx: rnd(-70, 70), vy: rnd(-250, -90), r: rnd(2, 4), life: 0, max: rnd(0.5, 0.9) });
-          audio.play('land', { rate: 1.6, vol: 0.7 });
+          audio.play('sea_splash', { vol: 0.8, rate: 1.1 });
         }
         this.state = 'settle'; this.settleT = 0; this.settleTotal = 0;
       }

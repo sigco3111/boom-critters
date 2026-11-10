@@ -1,5 +1,6 @@
-// Web Audio 효과음 (Kenney Impact Sounds / Interface Sounds, CC0)
-const NAMES = ['explosion', 'fire', 'land', 'step', 'hit', 'select', 'win', 'lose', 'tick', 'switch'];
+// Web Audio 효과음 (Kenney Impact Sounds / Interface Sounds, Battle at sea by Thimras — 모두 CC0)
+const NAMES = ['explosion', 'fire', 'land', 'step', 'hit', 'select', 'win', 'lose', 'tick', 'switch',
+  'sea_cannon', 'sea_boom', 'sea_boom_big', 'sea_boom_small', 'sea_splash'];
 let ctx = null, master = null, loading = null;
 const buffers = {};
 let muted = false;
