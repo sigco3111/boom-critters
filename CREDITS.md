@@ -2,6 +2,10 @@
 
 게임 코드는 MIT 라이선스(`LICENSE`)입니다. 게임 안에서도 시작 화면의 **크레딧** 버튼으로 같은 목록을 볼 수 있습니다.
 
+> MIT 라이선스(`LICENSE`)는 **코드에만** 적용됩니다. 아래 에셋은 각자의 라이선스를 따릅니다. 게임 안의 크레딧 화면은 이 표와 같은 6개 항목(제작자·라이선스·출처)을 보여 줍니다. 요약은 [README](README.md#에셋-크레딧)에 있습니다.
+
+라이선스 원문: [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) · [CC-BY 3.0](https://creativecommons.org/licenses/by/3.0/)
+
 ## 에셋
 
 | 팩 | 제작자 | 라이선스 | 출처 | 사용 파일 |
