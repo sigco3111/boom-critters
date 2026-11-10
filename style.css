@@ -410,3 +410,8 @@ button:focus-visible, input:focus-visible, a:focus-visible, #canvasWrap:focus-vi
 #loadNote { margin: 0; font-size: calc(1.7 * var(--cq)); color: #ffe27a; }
 @media (prefers-reduced-motion: reduce) { #loading, #loadBar i { transition: none; } }
 body.booting #controls, body.booting #topBtns, body.booting #rotateHint { visibility: hidden; } /* 로딩 중에는 조작 버튼을 숨김 */
+/* 설정의 언어 선택(한국어 / English): 어느 언어에서든 같은 이름으로 보인다 */
+.langSeg { display: flex; gap: calc(0.5 * var(--cq)); margin-left: auto; }
+.vol .langSeg button { margin-left: 0; min-width: calc(9 * var(--cq)); background: rgba(255, 255, 255, 0.12); border: 2px solid rgba(255, 255, 255, 0.28); }
+.vol .langSeg button:hover { background: rgba(255, 255, 255, 0.22); }
+.vol .langSeg button.sel { background: #2f6fb5; border-color: #ffe27a; box-shadow: 0 0 0 1px #ffe27a inset; font-weight: 800; }

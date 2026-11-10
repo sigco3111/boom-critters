@@ -9,13 +9,13 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="assets/icons/icon-192.png">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
-  <link rel="stylesheet" href="style.css?v=2026111038">
+  <link rel="stylesheet" href="style.css?v=2026111039">
 </head>
 <body class="booting">
   <div id="app">
-    <div id="rotateHint" role="status"><span>📱 가로로 돌리면 더 크게 보여요</span><button id="rotateHintClose" type="button" aria-label="안내 닫기">✕</button></div>
+    <div id="rotateHint" role="status"><span data-i18n="rot.hint">📱 가로로 돌리면 더 크게 보여요</span><button id="rotateHintClose" type="button" aria-label="안내 닫기" data-i18n-aria="rot.close">✕</button></div>
     <div id="stage">
-      <div id="canvasWrap" role="application" aria-label="붐 크리터스 게임 화면 (이동 A·D, 점프 W, 각도 ↑·↓, 발사 Space, 무기 1~6, 일시정지 Esc)" tabindex="0"><canvas id="game" width="960" height="540"></canvas></div>
+      <div id="canvasWrap" role="application" aria-label="붐 크리터스 게임 화면 (이동 A·D, 점프 W, 각도 ↑·↓, 발사 Space, 무기 1~6, 일시정지 Esc)" data-i18n-aria="app.aria" tabindex="0"><canvas id="game" width="960" height="540"></canvas></div>
       <div id="loading" class="overlay" role="status" aria-live="polite">
         <p id="loadText">...</p>
         <div id="loadBar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
@@ -23,55 +23,55 @@
         <p id="loadNote" class="hidden"></p>
       </div>
       <div id="topBtns">
-        <button id="pauseBtn" type="button" aria-label="일시정지" hidden>⏸<span class="tx"> 일시정지</span></button>
-        <button id="gearBtn" type="button" aria-label="설정">⚙</button>
+        <button id="pauseBtn" type="button" aria-label="일시정지" data-i18n-aria="pause.aria" hidden>⏸<span class="tx" data-i18n="pause.tx"> 일시정지</span></button>
+        <button id="gearBtn" type="button" aria-label="설정" data-i18n-aria="gear.aria">⚙</button>
         <button id="muteBtn" type="button" aria-label="소리 끄기">소리</button>
-        <button id="compactBtn" type="button" aria-label="메뉴 열기" aria-haspopup="true" aria-expanded="false" aria-controls="menuPop">☰</button>
-        <div id="menuPop" class="hidden" role="menu" aria-label="메뉴">
-          <button id="popPause" type="button" role="menuitem">⏸ 일시정지</button>
-          <button id="popSettings" type="button" role="menuitem">⚙ 설정</button>
+        <button id="compactBtn" type="button" aria-label="메뉴 열기" data-i18n-aria="menu.open" aria-haspopup="true" aria-expanded="false" aria-controls="menuPop">☰</button>
+        <div id="menuPop" class="hidden" role="menu" aria-label="메뉴" data-i18n-aria="menu.aria">
+          <button id="popPause" type="button" role="menuitem" data-i18n="pop.pause">⏸ 일시정지</button>
+          <button id="popSettings" type="button" role="menuitem" data-i18n="pop.settings">⚙ 설정</button>
           <button id="popSound" type="button" role="menuitem">🔊 소리 끄기</button>
         </div>
       </div>
 
       <div id="startScreen" class="overlay hidden">
         <canvas class="menuBg" width="640" height="360" aria-hidden="true"></canvas>
-        <h1>붐 크리터스</h1>
-        <p class="sub">귀여운 캐릭터 3명으로 상대 팀을 포격하세요!</p>
+        <h1 data-i18n="title">붐 크리터스</h1>
+        <p class="sub" data-i18n="start.sub">귀여운 캐릭터 3명으로 상대 팀을 포격하세요!</p>
         <div class="modes">
           <div class="mode">
-            <h2>빠른 대전</h2>
+            <h2 data-i18n="quick.h">빠른 대전</h2>
             <p id="quickDesc">3 vs 3 단판 승부</p>
-            <div class="seg" role="radiogroup" aria-label="난이도">
-              <button type="button" role="radio" aria-checked="false" data-diff="easy">쉬움</button>
-              <button type="button" role="radio" aria-checked="true" data-diff="normal">보통</button>
-              <button type="button" role="radio" aria-checked="false" data-diff="hard">어려움</button>
+            <div class="seg" role="radiogroup" aria-label="난이도" data-i18n-aria="diff.aria">
+              <button type="button" role="radio" aria-checked="false" data-diff="easy" data-i18n="diff.easy">쉬움</button>
+              <button type="button" role="radio" aria-checked="true" data-diff="normal" data-i18n="diff.normal">보통</button>
+              <button type="button" role="radio" aria-checked="false" data-diff="hard" data-i18n="diff.hard">어려움</button>
             </div>
-            <div class="col"><button type="button" id="quickStartBtn" class="big">빠른 대전 시작</button></div>
+            <div class="col"><button type="button" id="quickStartBtn" class="big" data-i18n="quick.btn">빠른 대전 시작</button></div>
           </div>
           <div class="mode">
-            <h2>스테이지 모드</h2>
-            <p>10개 스테이지 · 별 최대 3개</p>
-            <div class="col"><button type="button" id="stageModeBtn" class="big">스테이지 모드</button></div>
+            <h2 data-i18n="stage.h">스테이지 모드</h2>
+            <p data-i18n="stage.note">10개 스테이지 · 별 최대 3개</p>
+            <div class="col"><button type="button" id="stageModeBtn" class="big" data-i18n="stage.btn">스테이지 모드</button></div>
           </div>
           <div class="mode">
-            <h2>무한 모드</h2>
+            <h2 data-i18n="endless.h">무한 모드</h2>
             <p id="endlessBest">최고 기록: 0 웨이브</p>
-            <div class="col"><button type="button" id="endlessModeBtn" class="big">무한 모드</button></div>
+            <div class="col"><button type="button" id="endlessModeBtn" class="big" data-i18n="endless.btn">무한 모드</button></div>
           </div>
         </div>
         <div class="row menu-row">
-          <button type="button" id="helpBtn">게임 방법</button>
-          <button type="button" id="creditsBtn">크레딧</button>
+          <button type="button" id="helpBtn" data-i18n="help.btn">게임 방법</button>
+          <button type="button" id="creditsBtn" data-i18n="credits.btn">크레딧</button>
         </div>
-        <p class="help">이동 A/D 또는 ←/→ · 점프 W · 각도 ↑/↓ 또는 드래그 · 파워 Space 꾹 눌렀다 떼기 · 무기 1~6 · 음소거 M</p>
+        <p class="help" data-i18n="start.help">이동 A/D 또는 ←/→ · 점프 W · 각도 ↑/↓ 또는 드래그 · 파워 Space 꾹 눌렀다 떼기 · 무기 1~6 · 음소거 M</p>
       </div>
 
       <div id="stageScreen" class="overlay hidden">
         <canvas class="menuBg" width="640" height="360" aria-hidden="true"></canvas>
-        <h1>스테이지 선택</h1>
+        <h1 data-i18n="stagesel.h">스테이지 선택</h1>
         <div id="stageGrid"></div>
-        <button type="button" id="stageBackBtn">뒤로</button>
+        <button type="button" id="stageBackBtn" data-i18n="back">뒤로</button>
       </div>
 
       <div id="resultScreen" class="overlay hidden">
@@ -81,84 +81,85 @@
         <p id="resultDiff" class="sub diff hidden"></p>
         <div id="resultStats" class="rstats hidden"></div>
         <div class="row">
-          <button type="button" id="nextBtn" class="hidden">다음 스테이지</button>
+          <button type="button" id="nextBtn" class="hidden" data-i18n="res.next">다음 스테이지</button>
           <button type="button" id="againBtn">다시 하기</button>
-          <button type="button" id="stageSelBtn" class="hidden">스테이지 선택</button>
+          <button type="button" id="stageSelBtn" class="hidden" data-i18n="res.stageSel">스테이지 선택</button>
           <button type="button" id="menuBtn">처음으로</button>
-          <button type="button" id="shareBtn" class="share">결과 공유</button>
+          <button type="button" id="shareBtn" class="share" data-i18n="res.share">결과 공유</button>
         </div>
       </div>
 
-      <div id="helpScreen" class="overlay modal hidden" role="dialog" aria-modal="true" aria-label="게임 방법">
-        <h1>게임 방법</h1>
-        <div class="doc" tabindex="0" role="region" aria-label="내용 (방향키·스크롤로 읽기)">
+      <div id="helpScreen" class="overlay modal hidden" role="dialog" aria-modal="true" aria-label="게임 방법" data-i18n-aria="help.btn">
+        <h1 data-i18n="help.h">게임 방법</h1>
+        <div class="doc" tabindex="0" role="region" aria-label="내용 (방향키·스크롤로 읽기)" data-i18n-aria="doc.aria">
           <section>
-            <h2>목표</h2>
-            <p>파랑 팀(나) 3마리로 상대 팀을 모두 쓰러뜨리면 승리합니다. 턴마다 30초, 같은 팀 유닛이 차례로 조작하며 바람(화살표 방향·세기)이 매 턴 바뀝니다. 폭발은 지형을 파내고, 물에 빠지면 즉사합니다.</p>
+            <h2 data-i18n="hp.goal.h">목표</h2>
+            <p data-i18n-html="hp.goal.p">파랑 팀(나) 3마리로 상대 팀을 모두 쓰러뜨리면 승리합니다. 턴마다 30초, 같은 팀 유닛이 차례로 조작하며 바람(화살표 방향·세기)이 매 턴 바뀝니다. 폭발은 지형을 파내고, 물에 빠지면 즉사합니다.</p>
           </section>
           <section>
-            <h2>조작</h2>
+            <h2 data-i18n="hp.ctl.h">조작</h2>
             <table>
-              <tr><th>이동 / 점프</th><td>A·D 또는 ←·→ / W (화면 ◀ ▶ · 점프 버튼)</td></tr>
-              <tr><th>각도</th><td>↑·↓ 또는 화면 드래그 (각도 ▲▼ 버튼)</td></tr>
-              <tr><th>터치 조준</th><td>화면 오른쪽 절반을 끌어 각도·파워 설정 → 손을 떼면 발사 (거리가 길수록 강함)</td></tr>
-              <tr><th>발사</th><td>Space 꾹 눌러 파워 충전 → 떼면 발사 (발사 버튼 꾹)</td></tr>
-              <tr><th>무기 변경</th><td>숫자 1~6 또는 하단 무기 버튼 (6 공습은 스테이지 4부터)</td></tr>
-              <tr><th>일시정지</th><td>Esc 또는 ⏸ 버튼 (계속하기 · 매치 다시 시작 · 메뉴로 나가기)</td></tr>
-              <tr><th>소리</th><td>M 음소거 · ⚙ 설정(음악/효과음 볼륨). 번개 지직, 공습 휘파람, 수류탄 똑딱, 치유 차임 효과음도 효과음 볼륨·음소거를 따릅니다. 결과 화면의 승리·패배 징글은 음악 볼륨·음소거를 따르고, 나오는 동안 배경음악이 잠깐 작아집니다. OGG를 재생하지 못하는 오래된 기기(구형 iOS Safari 등)에서는 배경음악이 MP3로, 효과음과 결과 징글은 즉석에서 만든 합성음으로 바뀌어 같은 볼륨·음소거를 따릅니다</td></tr>
-              <tr><th>접근성</th><td>⚙ 설정에서 <b>HUD 큰 글씨</b>(HUD 글자와 하단 무기 버튼의 이름·탄약 +25%)와 <b>고대비 팀 표시</b>(우리 팀 파랑 ● 원, 상대 팀 빨강 ◆ 마름모를 이름표·팀 HP 박스·턴 배너에 표시)를 켤 수 있습니다. 설정은 저장됩니다</td></tr>
-              <tr><th>시작 화면 배경</th><td>별밤 하늘의 구름과 별이 천천히 흐릅니다. 기기의 '움직임 줄이기' 설정을 켜면 정지 화면으로 보이고, 탭이 가려지면 애니메이션을 멈춰 배터리를 아낍니다</td></tr>
-              <tr><th>결과 공유</th><td>결과 화면의 <b>결과 공유</b> 버튼은 스테이지(또는 모드)·결과·별과 게임 주소를 공유합니다. 공유 기능이 있는 기기에서는 공유 창이 열리고, 없으면 같은 글이 클립보드에 복사되며 작은 안내가 잠깐 뜹니다</td></tr>
-              <tr><th>앱 설치</th><td>브라우저 메뉴의 '앱 설치' / '홈 화면에 추가'로 <b>포탄 동물원</b> 아이콘을 만들어 전체 화면 앱처럼 실행할 수 있습니다. 서비스 워커를 쓰지 않아 업데이트는 항상 최신 파일로 받습니다. 진행 기록은 이 브라우저에 저장됩니다</td></tr>
-              <tr><th>튜토리얼</th><td>처음 실행하면 4단계 안내가 한 번 나옵니다. 아래 '튜토리얼 보기'로 언제든 다시 볼 수 있어요 (←/→ 이동, Esc 건너뛰기)</td></tr>
-              <tr><th>불러오기</th><td>처음 실행하면 진행 막대가 있는 불러오기 화면이 나오며 첫 화면에 필요한 소리와 그림을 받습니다. 일부가 실패해도 약 8초 뒤 게임이 계속되고, 나머지 소리와 추가 캐릭터는 뒤에서 받습니다</td></tr>
+              <tr><th data-i18n="hp.move.k">이동 / 점프</th><td data-i18n-html="hp.move.v">A·D 또는 ←·→ / W (화면 ◀ ▶ · 점프 버튼)</td></tr>
+              <tr><th data-i18n="hp.angle.k">각도</th><td data-i18n-html="hp.angle.v">↑·↓ 또는 화면 드래그 (각도 ▲▼ 버튼)</td></tr>
+              <tr><th data-i18n="hp.touch.k">터치 조준</th><td data-i18n-html="hp.touch.v">화면 오른쪽 절반을 끌어 각도·파워 설정 → 손을 떼면 발사 (거리가 길수록 강함)</td></tr>
+              <tr><th data-i18n="hp.fire.k">발사</th><td data-i18n-html="hp.fire.v">Space 꾹 눌러 파워 충전 → 떼면 발사 (발사 버튼 꾹)</td></tr>
+              <tr><th data-i18n="hp.weapon.k">무기 변경</th><td data-i18n-html="hp.weapon.v">숫자 1~6 또는 하단 무기 버튼 (6 공습은 스테이지 4부터)</td></tr>
+              <tr><th data-i18n="hp.pause.k">일시정지</th><td data-i18n-html="hp.pause.v">Esc 또는 ⏸ 버튼 (계속하기 · 매치 다시 시작 · 메뉴로 나가기)</td></tr>
+              <tr><th data-i18n="hp.sound.k">소리</th><td data-i18n-html="hp.sound.v">M 음소거 · ⚙ 설정(음악/효과음 볼륨). 번개 지직, 공습 휘파람, 수류탄 똑딱, 치유 차임 효과음도 효과음 볼륨·음소거를 따릅니다. 결과 화면의 승리·패배 징글은 음악 볼륨·음소거를 따르고, 나오는 동안 배경음악이 잠깐 작아집니다. OGG를 재생하지 못하는 오래된 기기(구형 iOS Safari 등)에서는 배경음악이 MP3로, 효과음과 결과 징글은 즉석에서 만든 합성음으로 바뀌어 같은 볼륨·음소거를 따릅니다</td></tr>
+              <tr><th data-i18n="hp.a11y.k">접근성</th><td data-i18n-html="hp.a11y.v">⚙ 설정에서 <b>HUD 큰 글씨</b>(HUD 글자와 하단 무기 버튼의 이름·탄약 +25%)와 <b>고대비 팀 표시</b>(우리 팀 파랑 ● 원, 상대 팀 빨강 ◆ 마름모를 이름표·팀 HP 박스·턴 배너에 표시)를 켤 수 있습니다. 설정은 저장됩니다</td></tr>
+              <tr><th data-i18n="hp.bg.k">시작 화면 배경</th><td data-i18n-html="hp.bg.v">별밤 하늘의 구름과 별이 천천히 흐릅니다. 기기의 '움직임 줄이기' 설정을 켜면 정지 화면으로 보이고, 탭이 가려지면 애니메이션을 멈춰 배터리를 아낍니다</td></tr>
+              <tr><th data-i18n="hp.share.k">결과 공유</th><td data-i18n-html="hp.share.v">결과 화면의 <b>결과 공유</b> 버튼은 스테이지(또는 모드)·결과·별과 게임 주소를 공유합니다. 공유 기능이 있는 기기에서는 공유 창이 열리고, 없으면 같은 글이 클립보드에 복사되며 작은 안내가 잠깐 뜹니다</td></tr>
+              <tr><th data-i18n="hp.install.k">앱 설치</th><td data-i18n-html="hp.install.v">브라우저 메뉴의 '앱 설치' / '홈 화면에 추가'로 <b>포탄 동물원</b> 아이콘을 만들어 전체 화면 앱처럼 실행할 수 있습니다. 서비스 워커를 쓰지 않아 업데이트는 항상 최신 파일로 받습니다. 진행 기록은 이 브라우저에 저장됩니다</td></tr>
+              <tr><th data-i18n="hp.tut.k">튜토리얼</th><td data-i18n-html="hp.tut.v">처음 실행하면 4단계 안내가 한 번 나옵니다. 아래 '튜토리얼 보기'로 언제든 다시 볼 수 있어요 (←/→ 이동, Esc 건너뛰기)</td></tr>
+              <tr><th data-i18n="hp.lang.k">언어</th><td data-i18n-html="hp.lang.v">⚙ 설정에서 한국어/English를 바꿀 수 있어요. 기본값은 브라우저 언어를 따르고 선택은 저장됩니다</td></tr>
+              <tr><th data-i18n="hp.load.k">불러오기</th><td data-i18n-html="hp.load.v">처음 실행하면 진행 막대가 있는 불러오기 화면이 나오며 첫 화면에 필요한 소리와 그림을 받습니다. 일부가 실패해도 약 8초 뒤 게임이 계속되고, 나머지 소리와 추가 캐릭터는 뒤에서 받습니다</td></tr>
             </table>
           </section>
           <section>
-            <h2>무기</h2>
+            <h2 data-i18n="hp.wpn.h">무기</h2>
             <table>
-              <tr><th>1 대포탄</th><td>기본 포탄. 바람 영향 큼, 무한</td></tr>
-              <tr><th>2 로켓</th><td>폭발 반경이 넓고 바람 영향 작음, 무한</td></tr>
-              <tr><th>3 수류탄</th><td>지형에서 튕기다 3초 뒤 폭발, 강한 넉백, 팀당 3발</td></tr>
-              <tr><th>4 번개</th><td>각도 방향으로 곧게 뻗어 처음 맞은 유닛에게 35 피해, 팀당 2발</td></tr>
-              <tr><th>5 화염탄</th><td>폭발 후 화염 지대가 3턴 유지, 턴 시작 시 8 피해, 팀당 2발</td></tr>
-              <tr><th>6 공습</th><td>화면(지형)을 눌러 목표 x를 정하면 1초 경고 뒤 폭탄 5발이 폭 120px 구역에 떨어짐 (폭발 반경 28, 최대 18 피해). ←/→로 마커 이동 후 Space. 스테이지 4부터 해금(빠른 대전은 항상), 팀당 1발</td></tr>
+              <tr><th data-i18n="hp.w1.k">1 대포탄</th><td data-i18n-html="hp.w1.v">기본 포탄. 바람 영향 큼, 무한</td></tr>
+              <tr><th data-i18n="hp.w2.k">2 로켓</th><td data-i18n-html="hp.w2.v">폭발 반경이 넓고 바람 영향 작음, 무한</td></tr>
+              <tr><th data-i18n="hp.w3.k">3 수류탄</th><td data-i18n-html="hp.w3.v">지형에서 튕기다 3초 뒤 폭발, 강한 넉백, 팀당 3발</td></tr>
+              <tr><th data-i18n="hp.w4.k">4 번개</th><td data-i18n-html="hp.w4.v">각도 방향으로 곧게 뻗어 처음 맞은 유닛에게 35 피해, 팀당 2발</td></tr>
+              <tr><th data-i18n="hp.w5.k">5 화염탄</th><td data-i18n-html="hp.w5.v">폭발 후 화염 지대가 3턴 유지, 턴 시작 시 8 피해, 팀당 2발</td></tr>
+              <tr><th data-i18n="hp.w6.k">6 공습</th><td data-i18n-html="hp.w6.v">화면(지형)을 눌러 목표 x를 정하면 1초 경고 뒤 폭탄 5발이 폭 120px 구역에 떨어짐 (폭발 반경 28, 최대 18 피해). ←/→로 마커 이동 후 Space. 스테이지 4부터 해금(빠른 대전은 항상), 팀당 1발</td></tr>
             </table>
           </section>
           <section>
-            <h2>캐릭터 특성</h2>
-            <p>유닛마다 작은 특성이 있습니다. 자기 차례인 유닛(또는 마우스를 올린 유닛)의 이름·HP·특성이 화면 위 HP 박스 아래 정보 줄에 표시됩니다.</p>
+            <h2 data-i18n="hp.trait.h">캐릭터 특성</h2>
+            <p data-i18n-html="hp.trait.p">유닛마다 작은 특성이 있습니다. 자기 차례인 유닛(또는 마우스를 올린 유닛)의 이름·HP·특성이 화면 위 HP 박스 아래 정보 줄에 표시됩니다.</p>
             <table>
-              <tr><th>남자 모험가</th><td>균형형 — 특별한 능력 없음 (우리 팀)</td></tr>
-              <tr><th>여자 모험가</th><td>높이뛰기 — 점프 높이 +10% (우리 팀)</td></tr>
-              <tr><th>남자</th><td>튼튼함 — 최대 HP +10 (110) (우리 팀)</td></tr>
-              <tr><th>로봇</th><td>철갑 — 폭발 피해 -15%, 대신 이동 속도 -20% (상대 팀)</td></tr>
-              <tr><th>좀비</th><td>재생 — 자기 팀 턴이 시작될 때 HP +5 (상대 팀)</td></tr>
-              <tr><th>여자</th><td>안정 조준 +15% — AI가 조작하면 조준 오차 -15%, 직접 조작하면 파워 충전이 15% 느려져 원하는 힘에서 떼기 쉬움 (상대 팀)</td></tr>
-              <tr><th>남자 2</th><td>균형형 — 주황색 이름표의 4번째 상대 유닛</td></tr>
+              <tr><th data-i18n="hp.c1.k">남자 모험가</th><td data-i18n-html="hp.c1.v">균형형 — 특별한 능력 없음 (우리 팀)</td></tr>
+              <tr><th data-i18n="hp.c2.k">여자 모험가</th><td data-i18n-html="hp.c2.v">높이뛰기 — 점프 높이 +10% (우리 팀)</td></tr>
+              <tr><th data-i18n="hp.c3.k">남자</th><td data-i18n-html="hp.c3.v">튼튼함 — 최대 HP +10 (110) (우리 팀)</td></tr>
+              <tr><th data-i18n="hp.c4.k">로봇</th><td data-i18n-html="hp.c4.v">철갑 — 폭발 피해 -15%, 대신 이동 속도 -20% (상대 팀)</td></tr>
+              <tr><th data-i18n="hp.c5.k">좀비</th><td data-i18n-html="hp.c5.v">재생 — 자기 팀 턴이 시작될 때 HP +5 (상대 팀)</td></tr>
+              <tr><th data-i18n="hp.c6.k">여자</th><td data-i18n-html="hp.c6.v">안정 조준 +15% — AI가 조작하면 조준 오차 -15%, 직접 조작하면 파워 충전이 15% 느려져 원하는 힘에서 떼기 쉬움 (상대 팀)</td></tr>
+              <tr><th data-i18n="hp.c7.k">남자 2</th><td data-i18n-html="hp.c7.v">균형형 — 주황색 이름표의 4번째 상대 유닛</td></tr>
             </table>
           </section>
           <section>
-            <h2>보급 상자</h2>
-            <p>4번째 턴마다 낙하산 상자가 떨어집니다. 유닛이 닿으면 HP +30(최대 100)과 함께 맑은 차임이 울립니다. 폭발에 맞으면 파괴됩니다. 화염 지대 안에서는 턴 시작 때 피해를 받으니 벗어나세요.</p>
+            <h2 data-i18n="hp.crate.h">보급 상자</h2>
+            <p data-i18n-html="hp.crate.p">4번째 턴마다 낙하산 상자가 떨어집니다. 유닛이 닿으면 HP +30(최대 100)과 함께 맑은 차임이 울립니다. 폭발에 맞으면 파괴됩니다. 화염 지대 안에서는 턴 시작 때 피해를 받으니 벗어나세요.</p>
           </section>
           <section>
-            <h2>모드</h2>
+            <h2 data-i18n="hp.modes.h">모드</h2>
             <table>
-              <tr><th>빠른 대전</th><td>시작 화면에서 난이도를 고르고 '빠른 대전 시작'. 쉬움(적 2마리·AI 오차 큼) · 보통(적 3마리) · 어려움(적 4마리·AI 오차 작음). 고른 난이도는 저장되고 결과 화면에 표시됩니다</td></tr>
-              <tr><th>스테이지</th><td>10개 스테이지, 승리하면 다음이 열림. 생존 수에 따라 별 1~3개. 스테이지 7부터는 적이 4마리라서 우리 팀에게 수류탄 +1(4발)·번개 +1(3발)이 주어짐</td></tr>
-              <tr><th>결과 화면</th><td>발사 횟수 · 준 피해 · 받은 피해 · 사용한 무기 · 우리 턴 수를 보여 줍니다. 스테이지는 항목별 최고 기록을 저장하고 갱신하면 '신기록!'이 뜹니다</td></tr>
-              <tr><th>무한</th><td>웨이브가 이어지며 적이 늘어남. 전멸하면 종료, 최고 웨이브 기록 저장</td></tr>
+              <tr><th data-i18n="hp.m1.k">빠른 대전</th><td data-i18n-html="hp.m1.v">시작 화면에서 난이도를 고르고 '빠른 대전 시작'. 쉬움(적 2마리·AI 오차 큼) · 보통(적 3마리) · 어려움(적 4마리·AI 오차 작음). 고른 난이도는 저장되고 결과 화면에 표시됩니다</td></tr>
+              <tr><th data-i18n="hp.m2.k">스테이지</th><td data-i18n-html="hp.m2.v">10개 스테이지, 승리하면 다음이 열림. 생존 수에 따라 별 1~3개. 스테이지 7부터는 적이 4마리라서 우리 팀에게 수류탄 +1(4발)·번개 +1(3발)이 주어짐</td></tr>
+              <tr><th data-i18n="hp.m3.k">결과 화면</th><td data-i18n-html="hp.m3.v">발사 횟수 · 준 피해 · 받은 피해 · 사용한 무기 · 우리 턴 수를 보여 줍니다. 스테이지는 항목별 최고 기록을 저장하고 갱신하면 '신기록!'이 뜹니다</td></tr>
+              <tr><th data-i18n="hp.m4.k">무한</th><td data-i18n-html="hp.m4.v">웨이브가 이어지며 적이 늘어남. 전멸하면 종료, 최고 웨이브 기록 저장</td></tr>
             </table>
           </section>
         </div>
         <div class="row">
-          <button type="button" id="helpTutorialBtn">튜토리얼 보기</button>
-          <button type="button" id="helpCloseBtn">닫기</button>
+          <button type="button" id="helpTutorialBtn" data-i18n="hp.tutBtn">튜토리얼 보기</button>
+          <button type="button" id="helpCloseBtn" data-i18n="close">닫기</button>
         </div>
       </div>
 
-      <div id="tutorialScreen" class="overlay modal hidden" role="dialog" aria-modal="true" aria-label="튜토리얼">
+      <div id="tutorialScreen" class="overlay modal hidden" role="dialog" aria-modal="true" aria-label="튜토리얼" data-i18n-aria="tut.aria">
         <p class="tut-step" id="tutStep">1 / 4</p>
         <div class="tut-card">
           <div class="tut-icon" id="tutIcon" aria-hidden="true"></div>
@@ -167,49 +168,50 @@
         </div>
         <div class="tut-dots" id="tutDots" aria-hidden="true"></div>
         <div class="row">
-          <button type="button" id="tutSkip">건너뛰기</button>
-          <button type="button" id="tutPrev" hidden>이전</button>
+          <button type="button" id="tutSkip" data-i18n="tut.skip">건너뛰기</button>
+          <button type="button" id="tutPrev" data-i18n="tut.prev" hidden>이전</button>
           <button type="button" id="tutNext" class="primary">다음</button>
         </div>
       </div>
 
-      <div id="creditsScreen" class="overlay modal hidden" role="dialog" aria-modal="true" aria-label="크레딧">
-        <h1>크레딧</h1>
-        <div class="doc" tabindex="0" role="region" aria-label="내용 (방향키·스크롤로 읽기)">
+      <div id="creditsScreen" class="overlay modal hidden" role="dialog" aria-modal="true" aria-label="크레딧" data-i18n-aria="credits.btn">
+        <h1 data-i18n="cr.h">크레딧</h1>
+        <div class="doc" tabindex="0" role="region" aria-label="내용 (방향키·스크롤로 읽기)" data-i18n-aria="doc.aria">
           <ul class="credits">
             <li><b>Toon Characters 1</b> — Kenney (CC0)<br><a href="https://kenney.nl/assets/toon-characters-1" target="_blank" rel="noopener">https://kenney.nl/assets/toon-characters-1</a></li>
             <li><b>Impact Sounds</b> — Kenney (CC0)<br><a href="https://kenney.nl/assets/impact-sounds" target="_blank" rel="noopener">https://kenney.nl/assets/impact-sounds</a></li>
             <li><b>Interface Sounds</b> — Kenney (CC0)<br><a href="https://kenney.nl/assets/interface-sounds" target="_blank" rel="noopener">https://kenney.nl/assets/interface-sounds</a></li>
-            <li><b>Music Jingles</b> — Kenney (CC0)<br><a href="https://kenney.nl/assets/music-jingles" target="_blank" rel="noopener">https://kenney.nl/assets/music-jingles</a><br>결과 화면의 승리·패배 징글 (jingles_STEEL10, jingles_PIZZI07)</li>
+            <li><b>Music Jingles</b> — Kenney (CC0)<br><a href="https://kenney.nl/assets/music-jingles" target="_blank" rel="noopener">https://kenney.nl/assets/music-jingles</a><br><span data-i18n="cr.jingle">결과 화면의 승리·패배 징글 (jingles_STEEL10, jingles_PIZZI07)</span></li>
             <li><b>Battle at sea</b> by Thimras (CC0)<br><a href="https://opengameart.org/content/battle-at-sea" target="_blank" rel="noopener">https://opengameart.org/content/battle-at-sea</a></li>
-            <li class="must"><b>Enchanted Festival by Matthew Pablo, <a href="https://opengameart.org/content/enchanted-festival" target="_blank" rel="noopener">https://opengameart.org/content/enchanted-festival</a>, licensed <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener">CC-BY 3.0</a></b><br>배경음악 (원곡의 루프 버전을 OGG로 변환하고 루프 이음매에 0.4초 크로스페이드를 적용함). OGG를 읽지 못하는 기기에서는 원곡 <code>Enchanted Festival.mp3</code>를 수정 없이 그대로 반복 재생함</li>
+            <li class="must"><b>Enchanted Festival by Matthew Pablo, <a href="https://opengameart.org/content/enchanted-festival" target="_blank" rel="noopener">https://opengameart.org/content/enchanted-festival</a>, licensed <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener">CC-BY 3.0</a></b><br><span data-i18n-html="cr.music.p">배경음악 (원곡의 루프 버전을 OGG로 변환하고 루프 이음매에 0.4초 크로스페이드를 적용함). OGG를 읽지 못하는 기기에서는 원곡 <code>Enchanted Festival.mp3</code>를 수정 없이 그대로 반복 재생함</span></li>
           </ul>
-          <p class="note">CC0 에셋은 표기 의무가 없지만 감사의 뜻으로 적습니다. 게임 코드는 MIT 라이선스입니다. 지형·스테이지 테마 배경(초원·사막·설원·밤)·이펙트·무기 아이콘은 외부 이미지 없이 캔버스 코드로 직접 그렸습니다. 앱 아이콘(대포와 별)도 직접 그린 그림입니다.</p>
+          <p class="note" data-i18n="cr.note">CC0 에셋은 표기 의무가 없지만 감사의 뜻으로 적습니다. 게임 코드는 MIT 라이선스입니다. 지형·스테이지 테마 배경(초원·사막·설원·밤)·이펙트·무기 아이콘은 외부 이미지 없이 캔버스 코드로 직접 그렸습니다. 앱 아이콘(대포와 별)도 직접 그린 그림입니다.</p>
         </div>
-        <p class="ver">버전 <span id="verHtml">2026111038</span> · 스크립트 <span id="verJs">-</span></p>
-        <button type="button" id="creditsCloseBtn">닫기</button>
+        <p class="ver"><span data-i18n="cr.ver">버전</span> <span id="verHtml">2026111039</span> · <span data-i18n="cr.script">스크립트</span> <span id="verJs">-</span></p>
+        <button type="button" id="creditsCloseBtn" data-i18n="close">닫기</button>
       </div>
 
-      <div id="pauseScreen" class="overlay modal hidden" role="dialog" aria-modal="true" aria-label="일시정지">
-        <h1>일시정지</h1>
+      <div id="pauseScreen" class="overlay modal hidden" role="dialog" aria-modal="true" aria-label="일시정지" data-i18n-aria="pause.aria">
+        <h1 data-i18n="pause.h">일시정지</h1>
         <div class="col">
-          <button type="button" id="resumeBtn">계속하기</button>
-          <button type="button" id="restartBtn">매치 다시 시작</button>
-          <button type="button" id="quitBtn">메뉴로 나가기</button>
+          <button type="button" id="resumeBtn" data-i18n="pause.resume">계속하기</button>
+          <button type="button" id="restartBtn" data-i18n="pause.restart">매치 다시 시작</button>
+          <button type="button" id="quitBtn" data-i18n="pause.quit">메뉴로 나가기</button>
         </div>
-        <p class="help">Esc로도 계속할 수 있어요</p>
+        <p class="help" data-i18n="pause.help">Esc로도 계속할 수 있어요</p>
       </div>
 
-      <div id="settingsScreen" class="overlay modal hidden" role="dialog" aria-modal="true" aria-label="설정">
-        <h1>설정</h1>
+      <div id="settingsScreen" class="overlay modal hidden" role="dialog" aria-modal="true" aria-label="설정" data-i18n-aria="gear.aria">
+        <h1 data-i18n="set.h">설정</h1>
         <div class="panel">
-          <label class="vol"><span>음악</span><input type="range" id="musicVol" min="0" max="100" step="1" aria-label="음악 볼륨"><output id="musicVolOut">0%</output></label>
-          <label class="vol"><span>효과음</span><input type="range" id="sfxVol" min="0" max="100" step="1" aria-label="효과음 볼륨"><output id="sfxVolOut">0%</output></label>
-          <div class="vol"><span>음소거</span><button type="button" id="muteToggle">끔</button></div>
-          <div class="vol opt"><span>HUD 큰 글씨 (+25%)</span><button type="button" id="bigHudToggle" role="switch" aria-checked="false">꺼짐</button></div>
-          <div class="vol opt"><span>고대비 팀 표시 (● 파랑 / ◆ 빨강)</span><button type="button" id="contrastToggle" role="switch" aria-checked="false">꺼짐</button></div>
+          <label class="vol"><span data-i18n="set.music">음악</span><input type="range" id="musicVol" min="0" max="100" step="1" aria-label="음악 볼륨" data-i18n-aria="set.music.aria"><output id="musicVolOut">0%</output></label>
+          <label class="vol"><span data-i18n="set.sfx">효과음</span><input type="range" id="sfxVol" min="0" max="100" step="1" aria-label="효과음 볼륨" data-i18n-aria="set.sfx.aria"><output id="sfxVolOut">0%</output></label>
+          <div class="vol"><span data-i18n="set.mute">음소거</span><button type="button" id="muteToggle">끔</button></div>
+          <div class="vol opt"><span data-i18n="set.bighud">HUD 큰 글씨 (+25%)</span><button type="button" id="bigHudToggle" role="switch" aria-checked="false">꺼짐</button></div>
+          <div class="vol opt"><span data-i18n="set.contrast">고대비 팀 표시 (● 파랑 / ◆ 빨강)</span><button type="button" id="contrastToggle" role="switch" aria-checked="false">꺼짐</button></div>
+          <div class="vol opt"><span data-i18n="set.lang">언어</span><div class="langSeg" role="radiogroup" aria-label="언어" data-i18n-aria="set.lang"><button type="button" role="radio" aria-checked="false" lang="ko" data-lang="ko">한국어</button><button type="button" role="radio" aria-checked="false" lang="en" data-lang="en">English</button></div></div>
         </div>
-        <button type="button" id="settingsCloseBtn">닫기</button>
+        <button type="button" id="settingsCloseBtn" data-i18n="close">닫기</button>
       </div>
     </div>
 
@@ -219,20 +221,20 @@
       <div class="hud-team me" id="hudMe"><div class="hud-head"><span class="hud-name"></span><b class="hud-tot"></b></div><div class="hud-bar"><i></i></div><div class="hud-units"></div></div>
       <div id="hudTimer">30</div>
       <div class="hud-team foe" id="hudFoe"><div class="hud-head"><span class="hud-name"></span><b class="hud-tot"></b></div><div class="hud-bar"><i></i></div><div class="hud-units"></div></div>
-      <div class="hud-row"><div id="hudWind"><span>바람</span><span id="hudWindArrow"></span><b id="hudWindNum">0</b></div><div id="hudMode"></div></div>
+      <div class="hud-row"><div id="hudWind"><span data-i18n="hud.windLabel">바람</span><span id="hudWindArrow"></span><b id="hudWindNum">0</b></div><div id="hudMode"></div></div>
       <div id="hudStatus"></div>
       <div id="hudUnit"></div>
     </div>
 
     <div id="controls">
       <div class="grp move">
-        <button id="bLeft" type="button" aria-label="왼쪽">◀</button>
-        <button id="bRight" type="button" aria-label="오른쪽">▶</button>
-        <button id="bJump" type="button" aria-label="점프">점프</button>
+        <button id="bLeft" type="button" aria-label="왼쪽" data-i18n-aria="ctl.left">◀</button>
+        <button id="bRight" type="button" aria-label="오른쪽" data-i18n-aria="ctl.right">▶</button>
+        <button id="bJump" type="button" aria-label="점프" data-i18n-aria="ctl.jump" data-i18n="ctl.jump.t">점프</button>
       </div>
       <div class="grp aim">
-        <button id="bUp" type="button" aria-label="각도 올리기">각도 ▲</button>
-        <button id="bDown" type="button" aria-label="각도 내리기">각도 ▼</button>
+        <button id="bUp" type="button" aria-label="각도 올리기" data-i18n-aria="ctl.up" data-i18n="ctl.up.t">각도 ▲</button>
+        <button id="bDown" type="button" aria-label="각도 내리기" data-i18n-aria="ctl.down" data-i18n="ctl.down.t">각도 ▼</button>
       </div>
       <div class="grp weapons">
         <button id="bW1" type="button">1 대포탄</button>
@@ -247,6 +249,6 @@
       </div>
     </div>
   </div>
-  <script type="module" src="js/main.js?v=2026111038"></script>
+  <script type="module" src="js/main.js?v=2026111039"></script>
 </body>
 </html>
