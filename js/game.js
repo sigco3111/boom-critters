@@ -260,7 +260,7 @@ export class Game {
   }
 
   // 수류탄 한 스텝: 지형에서 튕기고, 퓨즈가 끝나면 'explode', 물에 빠지면 'water'
-  stepGrenade(p, dt) {
+  stepGrenade(p, dt, quiet = false) {
     p.vx += this.wind * p.w.windK * dt;
     p.vy += PROJ_G * dt;
     p.age += dt; p.fuse -= dt;
@@ -282,7 +282,7 @@ export class Game {
           const px = p.vx - vn * tx, py = p.vy - vn * ty; // 접선 성분
           p.vx = px * BOUNCE_FRICTION - BOUNCE_E * vn * tx;
           p.vy = py * BOUNCE_FRICTION - BOUNCE_E * vn * ty;
-          if (speed > 70) audio.play('land', { vol: Math.min(0.6, speed / 400), rate: 1.7 });
+          if (speed > 70 && !quiet) audio.play('land', { vol: Math.min(0.6, speed / 400), rate: 1.7 });
         }
         break;
       }
@@ -540,11 +540,11 @@ export class Game {
 
   // ---------- 번개 ----------
   // 활성 유닛에서 각도 방향으로 곧게 뻗는 번개. 처음 맞은 유닛 하나에게만 피해를 준다 (지형은 관통).
-  fireLightning(u, w) {
-    const a = rad(this.angle), f = u.facing;
+  // 번개 궤적 계산: 지형은 관통하고 처음 닿는 유닛(발사자 제외)에서 멈춘다
+  traceBolt(u, angle, f) {
+    const a = rad(angle);
     const dx = f * Math.cos(a), dy = -Math.sin(a);
     const ox = u.x + dx * 18, oy = u.y - 20 + dy * 18;
-    if (this.ammo[this.turnTeam][this.weapon] !== Infinity) this.ammo[this.turnTeam][this.weapon]--;
     let len = 1300, target = null;
     for (let s = 0; s < 1300; s += 3) {
       const x = ox + dx * s, y = oy + dy * s;
@@ -556,6 +556,12 @@ export class Game {
       }
       if (target) { len = s; break; }
     }
+    return { dx, dy, ox, oy, len, target };
+  }
+
+  fireLightning(u, w) {
+    const { dx, dy, ox, oy, len, target } = this.traceBolt(u, this.angle, u.facing);
+    if (this.ammo[this.turnTeam][this.weapon] !== Infinity) this.ammo[this.turnTeam][this.weapon]--;
     const ex = ox + dx * len, ey = oy + dy * len;
     this.bolt = { x1: ox, y1: oy, x2: ex, y2: ey, t: 0, seed: Math.random() * 1000 };
     this.flashT = 0.14;
@@ -588,31 +594,112 @@ export class Game {
     return { x: p.x, y: p.y, kind: 'out' };
   }
 
-  aiPlan() {
-    const u = this.activeUnit, ai = this.ai;
-    const tgt = ai.target, facing = tgt.x >= u.x ? 1 : -1;
-    const weapon = ai.weapon;
+  simulateGrenade(u, angle, power, facing) {
+    const w = WEAPONS[2], a = rad(angle), v = launchSpeed(w, power);
+    const p = { x: u.x + facing * Math.cos(a) * 18, y: u.y - 20 - Math.sin(a) * 18, vx: facing * Math.cos(a) * v, vy: -Math.sin(a) * v, w, owner: u, age: 0, fuse: w.fuse };
+    for (let i = 0; i < 420; i++) {
+      const r = this.stepGrenade(p, 1 / 60, true);
+      if (r) return { x: p.x, y: p.y, kind: r };
+    }
+    return { x: p.x, y: p.y, kind: 'out' };
+  }
+
+  // AI 오차 계수 (스테이지/웨이브 단계가 있으면 단계별, 없으면 난이도별)
+  aiErr() {
+    const d = DIFF[this.difficulty] || DIFF.normal;
+    return { a: d.a, p: d.p, pick: this.difficulty === 'easy' };
+  }
+
+  // 목표점 pt({x,y}=몸통 중심)에 무기 weapon(0 대포,1 로켓,2 수류탄,4 화염탄)을 가장 가깝게 떨어뜨리는 (각도, 파워) 탐색
+  aiPlan(weapon, pt) {
+    const u = this.activeUnit;
+    const facing = pt.x >= u.x ? 1 : -1;
+    const grenade = weapon === 2, step = grenade ? 5 : 2.5;
     const friends = this.units.filter((o) => o.alive && o.team === 1);
+    const rad2 = WEAPONS[weapon].radius * 1.1;
     let best = null;
     const cands = [];
-    for (let angle = 12; angle <= 85; angle += 2.5) {
-      for (let power = 15; power <= 100; power += 2.5) {
-        const r = this.simulate(u, weapon, angle, power, facing);
-        let score = r.kind === 'water' || r.kind === 'out' ? 9999 : Math.hypot(r.x - tgt.x, r.y - (tgt.y - BODY_CY));
-        const rad2 = WEAPONS[weapon].radius * 1.1;
+    for (let angle = 12; angle <= 85; angle += step) {
+      for (let power = 15; power <= 100; power += step) {
+        const r = grenade ? this.simulateGrenade(u, angle, power, facing) : this.simulate(u, weapon, angle, power, facing);
+        let score = r.kind === 'water' || r.kind === 'out' ? 9999 : Math.hypot(r.x - pt.x, r.y - pt.y);
         for (const o of friends) if (Math.hypot(r.x - o.x, r.y - (o.y - BODY_CY)) < rad2) score += 150;
         cands.push({ angle, power, score });
         if (!best || score < best.score) best = { angle, power, score };
       }
     }
     cands.sort((a, b) => a.score - b.score);
-    const d = DIFF[this.difficulty];
-    if (this.difficulty === 'easy') best = cands[Math.floor(Math.random() * 6)];
+    const e = this.aiErr(), min = best.score;
+    if (e.pick) best = cands[Math.floor(Math.random() * 6)];
     return {
-      facing, weapon, dist: best.score,
-      angle: clamp(best.angle + gauss() * 2 * d.a, 5, 88),
-      power: clamp(best.power + gauss() * 2 * d.p, 10, 100),
+      facing, weapon, dist: best.score, min,
+      angle: clamp(best.angle + gauss() * 2 * e.a, 5, 88),
+      power: clamp(best.power + gauss() * 2 * e.p, 10, 100),
     };
+  }
+
+  // 목표가 지형 뒤(시선이 지형에 막힘)이거나 구덩이(양쪽 지면이 25px 이상 높음)에 있는지
+  aiHidden(u, e) {
+    const x1 = u.x, y1 = u.y - BODY_CY, x2 = e.x, y2 = e.y - BODY_CY, len = Math.hypot(x2 - x1, y2 - y1);
+    for (let s = 14; s < len - 14; s += 4) {
+      if (this.terrain.solid(x1 + ((x2 - x1) * s) / len, y1 + ((y2 - y1) * s) / len)) return true;
+    }
+    const g = this.terrain.surfaceY(e.x);
+    return this.terrain.surfaceY(e.x - 45) < g - 25 && this.terrain.surfaceY(e.x + 45) < g - 25;
+  }
+
+  // 번개: 목표를 향한 직선(지형 관통)에서 처음 맞는 유닛이 적일 때만 후보. 아군이 먼저 맞으면 제외
+  aiBoltOptions(u, enemies) {
+    const out = [];
+    for (const e of enemies) {
+      const f = e.x >= u.x ? 1 : -1;
+      let ang = 45;
+      for (let k = 0; k < 3; k++) { // 발사 원점이 각도에 따라 달라지므로 몇 번 보정
+        const ox = u.x + f * Math.cos(rad(ang)) * 18, oy = u.y - 20 - Math.sin(rad(ang)) * 18;
+        ang = (Math.atan2(oy - (e.y - BODY_CY), Math.abs(e.x - ox)) * 180) / Math.PI;
+      }
+      if (ang < 5 || ang > 88) continue;
+      const tr = this.traceBolt(u, ang, f);
+      if (tr.target && tr.target.team === 0) out.push({ target: tr.target, angle: ang, facing: f });
+    }
+    return out;
+  }
+
+  // 이번 사격의 무기·목표·각도·파워 결정
+  // 번개(직선 사선 확보) > 화염탄(적 2명 이상이 60px 이내) > 수류탄(구덩이/지형 뒤 목표) > 대포/로켓
+  aiDecide() {
+    const u = this.activeUnit, ai = this.ai, am = this.ammo[1];
+    const enemies = this.units.filter((o) => o.alive && o.team === 0);
+    const pt = (e) => ({ x: e.x, y: e.y - BODY_CY });
+    const hidden = enemies.filter((e) => this.aiHidden(u, e));
+    if (am[3] > 0) {
+      const opts = this.aiBoltOptions(u, enemies).sort((p, q) => p.target.hp - q.target.hp);
+      const o = opts[0];
+      if (o && (hidden.includes(o.target) || o.target.hp <= WEAPONS[3].damage || Math.random() < 0.6)) {
+        const e = this.aiErr();
+        return { weapon: 3, facing: o.facing, dist: 0, min: 0, target: o.target, angle: clamp(o.angle + gauss() * 2 * e.a * 0.5, 5, 88), power: 0 };
+      }
+    }
+    if (am[4] > 0) {
+      let pair = null;
+      for (let i = 0; i < enemies.length; i++) for (let j = i + 1; j < enemies.length; j++) {
+        const d = Math.hypot(enemies[i].x - enemies[j].x, enemies[i].y - enemies[j].y);
+        if (d <= 60 && (!pair || d < pair.d)) pair = { d, a: enemies[i], b: enemies[j] };
+      }
+      if (pair) {
+        const plan = this.aiPlan(4, { x: (pair.a.x + pair.b.x) / 2, y: (pair.a.y + pair.b.y) / 2 - BODY_CY });
+        if (plan.min <= 40) return { ...plan, target: pair.a };
+      }
+    }
+    if (am[2] > 0 && hidden.length) {
+      for (const e of hidden.sort((p, q) => Math.abs(p.x - u.x) - Math.abs(q.x - u.x))) {
+        const plan = this.aiPlan(2, pt(e));
+        if (plan.min <= 45) return { ...plan, target: e };
+      }
+    }
+    if (!ai.target || !ai.target.alive) ai.target = enemies[Math.floor(Math.random() * enemies.length)];
+    if (ai.weapon === undefined) ai.weapon = Math.random() < 0.35 ? 1 : 0;
+    return { ...this.aiPlan(ai.weapon, pt(ai.target)), target: ai.target };
   }
 
   aiSafeAhead(u, dir) {
@@ -626,13 +713,10 @@ export class Game {
     a.t += dt;
     if (a.phase === 'think') {
       if (a.t < 0.9) return;
-      if (!a.target) {
-        const t = this.units.filter((o) => o.team === 0 && o.alive);
-        a.target = t[Math.floor(Math.random() * t.length)];
-        a.weapon = Math.random() < 0.35 ? 1 : 0;
-      }
-      const plan = this.aiPlan();
-      if (plan.dist > 110 && a.walks < 2 && this.aiSafeAhead(u, a.target.x >= u.x ? 1 : -1)) {
+      // 사격 계획 (무기 선택 포함). 대포/로켓 계획이 빗나가면 목표 쪽으로 걸어가 다시 계산
+      const plan = this.aiDecide();
+      a.target = plan.target;
+      if (plan.weapon <= 1 && plan.dist > 110 && a.walks < 2 && this.aiSafeAhead(u, a.target.x >= u.x ? 1 : -1)) {
         a.phase = 'walk'; a.t = 0; a.walks++; a.dur = rnd(0.5, 1.0); a.dir = a.target.x >= u.x ? 1 : -1;
       } else {
         a.plan = plan; a.phase = 'aim'; a.t = 0; a.from = this.angle;
@@ -644,7 +728,10 @@ export class Game {
     } else if (a.phase === 'aim') {
       const k = Math.min(1, a.t / 0.7);
       this.angle = a.from + (a.plan.angle - a.from) * k;
-      if (k >= 1) { a.phase = 'charge'; a.t = 0; this.charging = true; this.power = 0; }
+      if (k >= 1) {
+        if (WEAPONS[a.plan.weapon].instant) { this.fire(0); this.ai = null; } // 번개는 파워 충전 없이 즉시 발사
+        else { a.phase = 'charge'; a.t = 0; this.charging = true; this.power = 0; }
+      }
     } else if (a.phase === 'charge') {
       this.power = Math.min(100, this.power + 100 * dt / 1.6);
       if (this.power >= a.plan.power) { this.charging = false; this.fire(a.plan.power); this.ai = null; }
@@ -696,7 +783,11 @@ export class Game {
     } else if (this.state === 'flying') {
       const p = this.proj;
       const grenade = p.w.id === 'grenade';
-      const r = grenade ? this.stepGrenade(p, dt) : stepProj(p, dt, this.wind, this.terrain, this.units);
+      let r = null;
+      if (grenade) { // 고정 1/60초 스텝: 프레임 속도와 무관하게 AI 시뮬레이션과 같은 궤적
+        p.acc = (p.acc || 0) + dt;
+        while (p.acc >= 1 / 60 && !r) { p.acc -= 1 / 60; r = this.stepGrenade(p, 1 / 60); }
+      } else r = stepProj(p, dt, this.wind, this.terrain, this.units);
       if (grenade) {
         const sec = Math.ceil(p.fuse);
         if (sec < p.tickN && sec > 0) { p.tickN = sec; audio.play('tick', { vol: 0.7 }); }
