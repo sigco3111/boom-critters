@@ -372,3 +372,14 @@ body.touch.bighud #controls .weapons .wk { display: none; } /* 터치: 번호 �
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body, #stage, #controls, #topBtns, #hud, .overlay, button { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .doc, .doc *, input { -webkit-user-select: text; user-select: text; }
+
+/* ---------- 작은 가로 화면(폭 700px 이하): 일시정지·설정·소리를 메뉴 버튼 하나로 합침 (터치 영역 44px 이상) ---------- */
+#compactBtn, #menuPop { display: none; }
+@media (orientation: landscape) and (max-width: 700px) {
+  body.touch #topBtns #pauseBtn, body.touch #topBtns #gearBtn, body.touch #topBtns #muteBtn { display: none; }
+  body.touch #topBtns #compactBtn { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0; font-size: 22px; line-height: 1; }
+  body.touch #topBtns #menuPop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 6; display: flex; flex-direction: column; gap: 4px; padding: 6px; min-width: 150px; background: rgba(12, 26, 44, 0.97); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 12px; box-shadow: 0 4px 14px #0009; }
+  body.touch #topBtns #menuPop.hidden { display: none; }
+  body.touch #topBtns #menuPop button { width: auto; height: auto; min-width: 44px; min-height: 44px; padding: 0 14px; font-size: 15px; line-height: 1.2; text-align: left; white-space: nowrap; background: #2f6fb5; border-bottom: 2px solid #1d4a7d; }
+  body.touch #topBtns #menuPop button:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.6); }
+}
