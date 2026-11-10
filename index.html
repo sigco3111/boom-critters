@@ -6,7 +6,7 @@
   <title>붐 크리터스 - 포격 웹게임</title>
   <meta name="description" content="웜즈·포트리스 스타일 싱글플레이 포격 웹게임">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=2026111021">
+  <link rel="stylesheet" href="style.css?v=2026111022">
 </head>
 <body>
   <div id="app">
@@ -48,7 +48,7 @@
           <button type="button" id="helpBtn">게임 방법</button>
           <button type="button" id="creditsBtn">크레딧</button>
         </div>
-        <p class="help">이동 A/D 또는 ←/→ · 점프 W · 각도 ↑/↓ 또는 드래그 · 파워 Space 꾹 눌렀다 떼기 · 무기 1~5 · 음소거 M</p>
+        <p class="help">이동 A/D 또는 ←/→ · 점프 W · 각도 ↑/↓ 또는 드래그 · 파워 Space 꾹 눌렀다 떼기 · 무기 1~6 · 음소거 M</p>
       </div>
 
       <div id="stageScreen" class="overlay hidden">
@@ -83,7 +83,7 @@
               <tr><th>각도</th><td>↑·↓ 또는 화면 드래그 (각도 ▲▼ 버튼)</td></tr>
               <tr><th>터치 조준</th><td>화면 오른쪽 절반을 끌어 각도·파워 설정 → 손을 떼면 발사 (거리가 길수록 강함)</td></tr>
               <tr><th>발사</th><td>Space 꾹 눌러 파워 충전 → 떼면 발사 (발사 버튼 꾹)</td></tr>
-              <tr><th>무기 변경</th><td>숫자 1~5 또는 하단 무기 버튼</td></tr>
+              <tr><th>무기 변경</th><td>숫자 1~6 또는 하단 무기 버튼 (6 공습은 스테이지 4부터)</td></tr>
               <tr><th>일시정지</th><td>Esc 또는 ⏸ 버튼 (계속하기 · 매치 다시 시작 · 메뉴로 나가기)</td></tr>
               <tr><th>소리</th><td>M 음소거 · ⚙ 설정(음악/효과음 볼륨)</td></tr>
             </table>
@@ -96,6 +96,7 @@
               <tr><th>3 수류탄</th><td>지형에서 튕기다 3초 뒤 폭발, 강한 넉백, 팀당 3발</td></tr>
               <tr><th>4 번개</th><td>각도 방향으로 곧게 뻗어 처음 맞은 유닛에게 35 피해, 팀당 2발</td></tr>
               <tr><th>5 화염탄</th><td>폭발 후 화염 지대가 3턴 유지, 턴 시작 시 8 피해, 팀당 2발</td></tr>
+              <tr><th>6 공습</th><td>화면(지형)을 눌러 목표 x를 정하면 1초 경고 뒤 폭탄 5발이 폭 120px 구역에 떨어짐 (폭발 반경 28, 최대 18 피해). ←/→로 마커 이동 후 Space. 스테이지 4부터 해금(빠른 대전은 항상), 팀당 1발</td></tr>
             </table>
           </section>
           <section>
@@ -126,7 +127,7 @@
           </ul>
           <p class="note">CC0 에셋은 표기 의무가 없지만 감사의 뜻으로 적습니다. 게임 코드는 MIT 라이선스입니다. 지형·스테이지 테마 배경(초원·사막·설원·밤)·이펙트·무기 아이콘은 외부 이미지 없이 캔버스 코드로 직접 그렸습니다.</p>
         </div>
-        <p class="ver">버전 <span id="verHtml">2026111021</span> · 스크립트 <span id="verJs">-</span></p>
+        <p class="ver">버전 <span id="verHtml">2026111022</span> · 스크립트 <span id="verJs">-</span></p>
         <button type="button" id="creditsCloseBtn">닫기</button>
       </div>
 
@@ -175,12 +176,13 @@
         <button id="bW3" type="button">3 수류탄</button>
         <button id="bW4" type="button">4 번개</button>
         <button id="bW5" type="button">5 화염탄</button>
+        <button id="bW6" type="button">6 공습</button>
       </div>
       <div class="grp firegrp">
         <button id="bFire" type="button" class="fire"><span class="fl">발사 (꾹)</span><span class="fx"></span></button>
       </div>
     </div>
   </div>
-  <script type="module" src="js/main.js?v=2026111021"></script>
+  <script type="module" src="js/main.js?v=2026111022"></script>
 </body>
 </html>

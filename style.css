@@ -86,8 +86,9 @@ body.touch #topBtns .tx { display: none; }
 /* 세로 화면: 캔버스 아래에 컨트롤을 배치 */
 @media (orientation: portrait) {
   body.touch #controls { display: grid; grid-template-columns: auto auto auto; grid-template-areas: "weap weap weap" "move aim fire"; justify-content: space-between; align-items: center; gap: 10px 8px; width: 100%; padding: 10px 8px calc(10px + env(safe-area-inset-bottom)); }
-  body.touch #controls .weapons { grid-area: weap; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
-  body.touch #controls .weapons button { min-height: 52px; min-width: 0; }
+  body.touch #controls .weapons { grid-area: weap; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; }
+  body.touch #controls .weapons button { min-height: 52px; min-width: 0; padding: 4px 0; font-size: clamp(10px, 3.2vw, 13px); white-space: nowrap; }
+  body.touch #controls .weapons .wa { font-size: clamp(10px, 3vw, 12px); }
   body.touch #controls .move { grid-area: move; }
   body.touch #controls .move button { width: min(60px, 15vw); height: min(60px, 15vw); min-width: 44px; min-height: 44px; padding: 0; font-size: 16px; }
   body.touch #controls .aim { grid-area: aim; flex-direction: column; }
@@ -102,29 +103,29 @@ body.touch #topBtns .tx { display: none; }
   body.touch #controls { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; pointer-events: none; display: flex; flex-wrap: nowrap; align-items: flex-end; justify-content: flex-start; gap: 6px; padding: 0 max(8px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
   body.touch #controls .grp { pointer-events: auto; gap: 4px; flex: 0 0 auto; }
   body.touch #controls .move { order: 1; }
-  body.touch #controls .weapons { order: 2; margin: 0 auto; flex: 0 1 auto; min-width: 0; }
+  body.touch #controls .weapons { order: 2; margin: 0; flex: 1 1 0; min-width: 0; justify-content: center; overflow-x: auto; scrollbar-width: none; touch-action: pan-x; } /* 남는 폭을 6개 무기 버튼이 나눠 쓰고, 그래도 모자라면 가로 스크롤 */
+  body.touch #controls .weapons::-webkit-scrollbar { display: none; }
   body.touch #controls .aim { order: 3; flex-direction: row; }
   body.touch #controls .firegrp { order: 4; }
   body.touch #controls button { min-height: 46px; height: 46px; padding: 0; }
   body.touch #controls .move button { width: 46px; min-width: 46px; }
   body.touch #controls .move #bJump { width: 54px; font-size: 14px; }
   body.touch #controls .aim button { width: 46px; min-width: 46px; font-size: 14px; }
-  body.touch #controls .weapons button { width: clamp(46px, 7.2vw, 62px); min-width: 46px; padding: 0 1px; white-space: nowrap; font-size: clamp(10px, 1.45vw, 12px); }
+  body.touch #controls .weapons button { flex: 1 1 0; width: auto; min-width: 40px; max-width: 64px; padding: 0 1px; white-space: nowrap; touch-action: pan-x; font-size: clamp(10px, 1.45vw, 12px); }
   body.touch #controls .weapons .wa { font-size: clamp(10px, 1.4vw, 12px); }
   body.touch #controls .fire { width: 92px; min-width: 92px; height: 50px; min-height: 50px; border-radius: 14px; flex-direction: column; display: flex; align-items: center; justify-content: center; gap: 1px; line-height: 1.15; font-size: 15px; background: linear-gradient(to right, #ff9a3c var(--pw, 0%), #d33b2f var(--pw, 0%)); overflow: hidden; }
   body.touch #controls .fire .fx { display: block; font-size: 11px; font-weight: 600; color: #fff2d0; white-space: nowrap; }
   body.touch.menu #controls { visibility: hidden; }
 }
 @media (orientation: landscape) and (max-height: 380px) {
-  body.touch #controls button { min-height: 42px; height: 42px; }
+  body.touch #controls button { min-height: 44px; height: 44px; } /* 무기 버튼 포함 모든 터치 버튼은 높이 44px 이상 */
   body.touch #controls .fire { height: 46px; min-height: 46px; }
 }
-@media (orientation: landscape) and (max-width: 620px) {
+@media (orientation: landscape) and (max-width: 700px) {
   body.touch #controls { gap: 4px; }
   body.touch #controls .move button { width: 38px; min-width: 38px; }
   body.touch #controls .move #bJump { width: 42px; font-size: 13px; }
   body.touch #controls .aim button { width: 38px; min-width: 38px; font-size: 11px; line-height: 1.1; }
-  body.touch #controls .weapons button { width: 44px; min-width: 40px; }
   body.touch #controls .fire { width: 70px; min-width: 70px; font-size: 14px; }
 }
 #controls .fire .fx { display: none; }
