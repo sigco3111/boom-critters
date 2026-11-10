@@ -1,14 +1,20 @@
 // Web Audio 효과음·배경음악
 // 효과음: Kenney Impact Sounds / Interface Sounds, Battle at sea by Thimras — 모두 CC0
 // 음악: Enchanted Festival by Matthew Pablo (CC-BY 3.0) — CREDITS.md 참고
+// 결과 화면 징글: Kenney Music Jingles (CC0) — 음악 볼륨·음소거를 따르고, 재생하는 동안 배경음악을 낮춘다
 // 번개·공습·수류탄 카운트다운·치유 효과음은 파일 없이 Web Audio(노이즈·오실레이터)로 합성 — 모두 sfxGain을 거치므로 효과음 볼륨·음소거를 따른다
 const NAMES = ['explosion', 'fire', 'land', 'step', 'hit', 'select', 'win', 'lose', 'tick', 'switch',
   'sea_cannon', 'sea_boom', 'sea_boom_big', 'sea_boom_small', 'sea_splash'];
 const MUSIC_URL = 'assets/music/enchanted-festival-loop.ogg';
 const MUSIC_LEVEL = { menu: 0.7, match: 1, result: 0.3 }; // 화면별 음악 배율
+// 결과 화면 징글 (승리: 스틸 드럼이 올라가는 밝은 음 / 패배: 피치카토가 반음씩 내려오는 낮은 음). gain은 파일 음량 차이를 맞추는 값
+const JINGLES = { win: { url: 'assets/music/jingle-win.ogg', gain: 1.0 }, lose: { url: 'assets/music/jingle-lose.ogg', gain: 1.5 } };
+const JINGLE_DUCK = 0.08;  // 징글이 나오는 동안 배경음악 배율
 
 let ctx = null, sfxGain = null, musicGain = null, duck = null, loading = null;
-const buffers = {};
+const buffers = {}, jingleBufs = {};
+let jingle = { src: null, gain: null, timer: 0 };
+const jingleStats = { played: {}, errors: 0, lastError: '' };
 let music = { buf: null, src: null, want: false, mode: 'menu' };
 let muted = false;
 const vols = { music: 0.5, sfx: 0.7 }; // 0~1, localStorage('boom-volumes')에 저장
@@ -48,6 +54,7 @@ export function initAudio() {
         if (document.hidden) ctx.suspend(); else ctx.resume();
       });
       loadBuffer(MUSIC_URL).then((b) => { music.buf = b; if (music.want) startMusic(); }).catch(() => { /* 음악 없이 진행 */ });
+      for (const k of Object.keys(JINGLES)) loadBuffer(JINGLES[k].url).then((b) => { jingleBufs[k] = b; }).catch(() => { /* 징글 없이 진행 */ });
       await Promise.all(NAMES.map(async (n) => {
         try { buffers[n] = await loadBuffer(`assets/sfx/${n}.ogg`); } catch (e) { /* 디코드 실패는 무시 (소리 없이 진행) */ }
       }));
@@ -160,10 +167,42 @@ export function startMusic() {
 // 'menu' | 'match' | 'result' — 결과 화면에서는 음악을 낮춤
 export function setMusicMode(mode) {
   music.mode = mode;
-  if (duck) duck.gain.setTargetAtTime(MUSIC_LEVEL[mode], ctx.currentTime, 0.4);
+  if (duck && !jingle.src) duck.gain.setTargetAtTime(MUSIC_LEVEL[mode], ctx.currentTime, 0.4); // 징글이 끝나면 stopJingle이 현재 모드 값으로 되돌린다
+}
+
+// 결과 화면 징글: kind 'win' | 'lose'. musicGain(음악 볼륨·음소거)을 거치고, 재생하는 동안 배경음악을 낮췄다가 끝나면 되돌린다.
+// 소리가 꺼져 있거나 아직 불러오지 못했으면 아무것도 하지 않는다. 반환: 재생했으면 true
+export function playJingle(kind) {
+  stopJingle();
+  const j = JINGLES[kind], buf = jingleBufs[kind];
+  if (!ctx || !musicGain || muted || !j || !buf) return false;
+  try {
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const g = ctx.createGain();
+    g.gain.value = j.gain;
+    src.connect(g); g.connect(musicGain);
+    const t = ctx.currentTime;
+    duck.gain.cancelScheduledValues(t);
+    duck.gain.setTargetAtTime(JINGLE_DUCK, t, 0.08);
+    jingle = { src, gain: g, timer: setTimeout(() => stopJingle(), (buf.duration + 0.5) * 1000) };
+    src.onended = () => { if (jingle.src === src) stopJingle(); };
+    src.start(t + 0.05);
+    jingleStats.played[kind] = (jingleStats.played[kind] || 0) + 1;
+    return true;
+  } catch (e) { jingleStats.errors++; jingleStats.lastError = `${kind}: ${e && e.message}`; jingle = { src: null, gain: null, timer: 0 }; return false; }
+}
+// 진행 중인 징글을 멈추고 배경음악 배율을 현재 화면 모드로 되돌림
+export function stopJingle() {
+  const { src, gain, timer } = jingle;
+  if (!src) return;
+  clearTimeout(timer);
+  jingle = { src: null, gain: null, timer: 0 };
+  try { src.onended = null; gain.gain.setTargetAtTime(0, ctx.currentTime, 0.03); src.stop(ctx.currentTime + 0.15); } catch (e) { /* 이미 끝남 */ }
+  if (duck) duck.gain.setTargetAtTime(MUSIC_LEVEL[music.mode], ctx.currentTime, 0.4);
 }
 export function musicInfo() {
-  return { ctx: ctx && ctx.state, sfxLoaded: Object.keys(buffers).length, loaded: !!music.buf, playing: !!music.src, mode: music.mode, duck: duck && duck.gain.value, music: musicGain && musicGain.gain.value, sfx: sfxGain && sfxGain.gain.value, muted, synth: synthStats };
+  return { ctx: ctx && ctx.state, sfxLoaded: Object.keys(buffers).length, loaded: !!music.buf, playing: !!music.src, mode: music.mode, duck: duck && duck.gain.value, music: musicGain && musicGain.gain.value, sfx: sfxGain && sfxGain.gain.value, muted, synth: synthStats, jingles: { loaded: Object.keys(jingleBufs), playing: !!jingle.src, ...jingleStats } };
 }
 
 export function getVolumes() { return { ...vols }; }

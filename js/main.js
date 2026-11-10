@@ -1,9 +1,9 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111030';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig } from './game.js?v=2026111030';
-import * as audio from './audio.js?v=2026111030';
-import * as progress from './progress.js?v=2026111030';
+const VERSION = '2026111031';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig } from './game.js?v=2026111031';
+import * as audio from './audio.js?v=2026111031';
+import * as progress from './progress.js?v=2026111031';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -152,17 +152,20 @@ function showResult(winner) {
     $('menuBtn').textContent = mode === 'quick' ? '난이도 선택' : '처음으로';
     show('resultScreen');
     audio.setMusicMode('result');
+    // 결과 징글: 승리/신기록이면 밝은 음, 패배·무승부·게임 오버면 낮은 음 (음악 볼륨·음소거를 따르고 재생 동안 배경음악이 작아진다)
+    audio.playJingle(mode === 'endless' ? (endlessRecord && game.cleared > 0 ? 'win' : 'lose') : won ? 'win' : 'lose');
   }, 900);
 }
 
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
-window.__sim = (n, opts) => import('./sim.js?v=2026111030').then((m) => m.sim(n, opts));
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111030').then((m) => m.table(n, stages, skills));
-window.__sim.soak = (n, opts) => import('./sim.js?v=2026111030').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
+window.__sim = (n, opts) => import('./sim.js?v=2026111031').then((m) => m.sim(n, opts));
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111031').then((m) => m.table(n, stages, skills));
+window.__sim.soak = (n, opts) => import('./sim.js?v=2026111031').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
 
 function launch(cfg) {
   current = cfg; endlessRecord = false;
+  audio.stopJingle();
   audio.initAudio();
   audio.play('select');
   audio.setMusicMode('match');
@@ -183,6 +186,7 @@ function selectDiff(d, save = true) {
 }
 
 function goStart() {
+  audio.stopJingle();
   audio.setMusicMode('menu');
   show('resultScreen', false); show('stageScreen', false); show('startScreen');
   $('endlessBest').textContent = `최고 기록: ${progress.load().endlessBest} 웨이브`;
@@ -205,6 +209,7 @@ function renderStages() {
   }
 }
 function goStageSelect() {
+  audio.stopJingle();
   audio.play('select');
   renderStages();
   show('startScreen', false); show('resultScreen', false); show('stageScreen');
