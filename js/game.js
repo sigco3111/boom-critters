@@ -1,8 +1,8 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111043';
-import * as audio from './audio.js?v=2026111043';
-import { t as tr, getLang } from './i18n.js?v=2026111043';
-import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111043';
+import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111044';
+import * as audio from './audio.js?v=2026111044';
+import { t as tr, getLang } from './i18n.js?v=2026111044';
+import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111044';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -1357,6 +1357,7 @@ export class Game {
     this.drawBolt(g);
     this.drawParticles(g);
     this.drawTags(g);
+    if (showAim && !this.airMode) this.drawCross(g);
     if (this.airLabel && this.airLabel.str) { const l = this.airLabel; this.text(g, l.str, l.x, l.y, l.fs, l.color); } // 이름표 위에 보이도록 마지막에
     const fs = Math.min(34, Math.max(18, 15 / this.viewScale)); // 작은 화면에서도 CSS 15px 안팎
     for (const f of this.floaters) {
@@ -1581,9 +1582,6 @@ export class Game {
     const reach = WEAPONS[this.weapon].instant ? 220 : 62;
     g.beginPath(); g.moveTo(ox + dx * 20, oy + dy * 20); g.lineTo(ox + dx * reach, oy + dy * reach); g.stroke();
     g.setLineDash(DASH_NONE);
-    g.strokeStyle = '#ff4d3d'; g.lineWidth = 2.5;
-    const cx = ox + dx * 74, cy = oy + dy * 74;
-    g.beginPath(); g.arc(cx, cy, 8, 0, 7); g.moveTo(cx - 12, cy); g.lineTo(cx + 12, cy); g.moveTo(cx, cy - 12); g.lineTo(cx, cy + 12); g.stroke();
     this.hintDots = 0;
     if (this.trajHint && (this.drag || (this.charging && pw > 0))) this.drawHint(g, u);
     if (this.drag) { // 터치 드래그: 누른 지점 -> 손가락 위치 선과 파워 표시
@@ -1597,10 +1595,25 @@ export class Game {
       g.beginPath(); g.arc(d.x, d.y, 9, 0, 7); g.fill();
       this.text(g, powerLabel(pw), d.x, d.y - 24, 20, '#fff');
     }
-    if (this.charging || pw > 0) {
-      const len = 20 + pw * 0.6;
-      g.strokeStyle = pcol; g.lineWidth = 5; g.lineCap = 'round';
+    if (this.charging || pw > 0) { // 파워 선: 조준점(반지름 약 12px) 안쪽에서 끝나도록 짧게, 반투명으로 그린다
+      const len = 20 + pw * 0.38;
+      g.strokeStyle = pcol; g.lineWidth = 4; g.lineCap = 'round'; g.globalAlpha = 0.7;
       g.beginPath(); g.moveTo(ox + dx * 20, oy + dy * 20); g.lineTo(ox + dx * len, oy + dy * len); g.stroke();
+      g.globalAlpha = 1;
+    }
+    g.restore();
+  }
+
+  // 조준점: 이름표·파워 선·궤적 힌트·드래그 표시보다 위(맨 마지막)에, 어두운 외곽선과 함께 그려 항상 보이게 한다. 작은 화면에서는 이름표처럼 키운다
+  drawCross(g) {
+    const u = this.activeUnit; if (!u) return;
+    const a = rad(this.angle), cx = u.x + u.facing * Math.cos(a) * 74, cy = u.y - 20 - Math.sin(a) * 74;
+    const k = Math.min(1.7, Math.max(1, 0.8 / this.viewScale));
+    g.save();
+    g.lineCap = 'butt'; g.lineJoin = 'round';
+    for (let i = 0; i < 2; i++) {
+      g.strokeStyle = i ? '#ff4d3d' : 'rgba(0,0,0,0.85)'; g.lineWidth = (i ? 2.5 : 6) * k;
+      g.beginPath(); g.arc(cx, cy, 8 * k, 0, 7); g.moveTo(cx - 12 * k, cy); g.lineTo(cx + 12 * k, cy); g.moveTo(cx, cy - 12 * k); g.lineTo(cx, cy + 12 * k); g.stroke();
     }
     g.restore();
   }
@@ -1837,11 +1850,11 @@ export class Game {
     if (this.turnTeam === 0 && this.airMode && this.state === 'aim' && !this.touchUI) { // 공습 조준 안내 (파워 바 대신)
       this.text(g, tr('hud.air', { x: Math.round(this.airX) }), W / 2, H - 26, 12 * big);
     } else if (this.turnTeam === 0 && (this.state === 'aim' || this.state === 'flying') && !(this.touchUI && !dom)) { // 가로 터치 화면은 발사 버튼이 각도·파워를 표시
-      const bx = W / 2 - 120, by = H - 34;
-      g.fillStyle = 'rgba(0,0,0,0.55)'; g.beginPath(); g.roundRect(bx - 4, by - 4, 248, 24, 8); g.fill();
-      g.fillStyle = powerGrad(g, bx); g.fillRect(bx, by, 240 * this.power / 100, 16);
-      g.strokeStyle = 'rgba(255,255,255,0.6)'; g.lineWidth = 1; g.strokeRect(bx, by, 240, 16);
-      if (this.lastPower) { g.fillStyle = '#fff'; g.fillRect(bx + 240 * this.lastPower / 100 - 1, by - 3, 2, 22); }
+      const bx = W / 2 - 120, by = H - 30; // 얇고 반투명한 파워 바: 화면 맨 아래 가장자리에 붙여 조준선·조준점과 겹치지 않게 한다
+      g.fillStyle = 'rgba(0,0,0,0.4)'; g.beginPath(); g.roundRect(bx - 3, by - 3, 246, 16, 6); g.fill();
+      g.globalAlpha = 0.7; g.fillStyle = powerGrad(g, bx); g.fillRect(bx, by, 240 * this.power / 100, 10); g.globalAlpha = 1;
+      g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 1; g.strokeRect(bx, by, 240, 10);
+      if (this.lastPower) { g.fillStyle = '#fff'; g.fillRect(bx + 240 * this.lastPower / 100 - 1, by - 2, 2, 14); }
       if (!dom) this.text(g, tr('hud.aim', { a: Math.round(this.angle), p: Math.round(this.power) }), W / 2, by - 14 * big, 12 * big);
     }
     if (!dom && !this.touchUI && this.turnTeam === 1 && this.state === 'aim') this.text(g, tr('hud.foeAim'), W / 2, H - 26, 14 * big, '#fff');
