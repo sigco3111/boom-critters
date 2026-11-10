@@ -59,7 +59,7 @@
 
 | 모드 | 내용 |
 |---|---|
-| **빠른 대전** | 단판 승부, 매번 새 지형·바람 ±10. 시작 화면에서 난이도(쉬움 / 보통 / 어려움)를 고르며 선택은 저장됩니다. 우리 팀은 항상 3마리, 적 수는 난이도에 따라 2~4마리 |
+| **빠른 대전** | 단판 승부, 매번 새 지형·바람 ±10. 시작 화면에서 난이도(쉬움 / 보통 / 어려움)와 맵(테마·지형, 아래 '빠른 대전 맵')을 고르며 선택은 저장됩니다. 우리 팀은 항상 3마리, 적 수는 난이도에 따라 2~4마리 |
 | **스테이지 모드** | 10개 스테이지, 지형 고정(시드 고정). 처음엔 스테이지 1만 열려 있고 승리하면 다음이 해금됩니다. 별: 생존 3마리 ★★★ / 2마리 ★★☆ / 1마리 ★☆☆. 결과 화면에서 다음 스테이지 · 다시 도전 · 스테이지 선택 |
 | **무한 모드** | 적을 모두 쓰러뜨리면 새 지형에서 다음 웨이브. 웨이브가 오를수록 적이 늘고(2→4마리) 바람이 세지고 AI가 정확해집니다. 우리 팀이 전멸하면 끝이며 점수는 클리어한 웨이브 수. 웨이브 사이에 생존 유닛 HP +35·탄약 보충, 4·7·10…웨이브 직전에 쓰러진 유닛 1마리가 HP 50으로 복귀 |
 
@@ -69,9 +69,9 @@
 | 날씨 효과 | 꽃잎·나뭇잎 | 모래 알갱이 | 눈 | 반딧불이 |
 | 적 수 | 2 | 3 | 4 | 4 |
 
-빠른 대전·무한 모드는 시드로 테마가 정해집니다(화면 위쪽 시드 표시에 테마 이름 포함). 하늘·구름·별·언덕·지형 질감·물 색·날씨는 모두 캔버스 코드로 그리며 외부 이미지가 없습니다. 날씨 파티클은 테마당 20~70개(전체 상한 80개)이고 바람 방향으로 살짝 쏠립니다.
+빠른 대전(테마 '랜덤')·무한 모드는 시드로 테마가 정해집니다(화면 위쪽 시드 표시에 테마 이름 포함). 하늘·구름·별·언덕·지형 질감·물 색·날씨는 모두 캔버스 코드로 그리며 외부 이미지가 없습니다. 날씨 파티클은 테마당 20~70개(전체 상한 80개)이고 바람 방향으로 살짝 쏠립니다.
 
-결과 화면에는 **발사 횟수 · 준 피해 · 받은 피해 · 사용한 무기 · 우리 턴 수**가 표시됩니다(빠른 대전은 `난이도: 보통 · 적 3마리`도 함께). 스테이지 모드는 항목별 최고 기록을 저장해 '첫 기록 / 신기록! / 최고 N'을 보여 줍니다.
+결과 화면에는 **발사 횟수 · 준 피해 · 받은 피해 · 사용한 무기 · 우리 턴 수**가 표시됩니다(빠른 대전은 `난이도: 보통 · 적 3마리 · 맵: 사막 노을 · 협곡`도 함께). 스테이지 모드는 항목별 최고 기록을 저장해 '첫 기록 / 신기록! / 최고 N'을 보여 줍니다.
 
 ## 캐릭터 특성
 유닛마다 작은 특성이 하나씩 있습니다(보정은 10~20% 안팎). 지금 차례인 유닛(또는 마우스를 올린 유닛)의 이름·HP·특성은 팀 HP 박스 아래 정보 줄에 표시됩니다.
@@ -88,6 +88,16 @@
 
 ## 난이도와 밸런스
 AI는 후보 (각도, 파워)를 지형·바람과 함께 시뮬레이션해 목표 근처에 떨어지는 값을 고른 뒤 **오차**(정규분포 표준편차)를 더해 쏩니다. 오차가 작을수록 어렵습니다.
+
+### 빠른 대전 맵
+시작 화면의 **테마**와 **지형** 선택 상자로 맵을 고릅니다(작은 미리보기와 설명 한 줄 표시, 선택은 설정과 같은 `localStorage`에 저장되며 막혀 있으면 이번 접속 동안만 기억). 결과 화면에 실제로 플레이한 맵이 표시되고 '랜덤'을 고른 항목은 `(랜덤)`이 붙습니다. 스테이지·무한 모드는 영향을 받지 않습니다.
+
+| 선택 | 값 |
+|---|---|
+| 테마 | 랜덤(시드로 결정, 예전과 같음) · 초원 · 사막 · 설원 · 별밤 |
+| 지형 | 랜덤(시드로 결정: 완만 25% · 언덕 50% · 협곡 25%) · 완만(낮은 진폭) · 언덕(기본) · 협곡 |
+
+협곡은 가운데(x 400~540)에 깊은 골짜기와 높은 벽을 만들고, 양 팀 시작 구역은 평평한 고원 위에 두어 유닛이 항상 배치되고 한쪽이 불리하게 시작하지 않게 했습니다(AI 대 AI 시뮬레이션 24판씩: 완만 15승 9패, 언덕 19승 5패, 협곡 15승 9패, 시간 초과 없음). `await __sim(30, { map: { terrain: 'canyon' } })`처럼 시뮬레이션에도 지정할 수 있습니다.
 
 ### 빠른 대전 난이도
 | 난이도 | 적 수 | AI 각도 / 파워 오차 | 승률(보통 플레이어 300판) | 승률(서툰 플레이어 100판) |
@@ -160,7 +170,7 @@ HP가 70 미만이고 약 150px 안에 상자가 있으면 상자 쪽으로 걷�
 - **실제 폰 대응**: iOS Safari를 포함해 첫 `touchend`/`click`/`keydown`에서 오디오를 깨웁니다. 모든 `localStorage` 접근은 `js/storage.js`를 거쳐 막힌 환경(사생활 보호 모드)에서는 메모리에 보관합니다. `viewport-fit=cover`와 `env(safe-area-inset-*)`로 노치·홈 바를 피하고 `100dvh`로 주소창 변화에도 캔버스가 잘리지 않습니다. 회전·크기 변경은 디바운스해서 경기를 그대로 둡니다.
 - **로딩**: 진행 막대 로딩 화면에서 첫 화면에 필요한 것(메뉴 음악, 버튼 효과음, 우리 팀 3명과 첫 두 적 이미지)만 먼저 받고 나머지는 뒤에서 받습니다. 이미지는 한 번 더 시도하고 안 되면 임시 그림으로 대신하며, 약 8초가 지나면 받은 것만으로 시작합니다.
 - **앱으로 설치**: `manifest.webmanifest`(이름 *Boom Critters*, 짧은 이름 *포탄 동물원*, `display: standalone`)와 192·512 아이콘이 연결돼 있어 크롬·엣지의 앱 설치, 사파리·크롬 모바일의 홈 화면에 추가를 쓸 수 있습니다. 오래된 캐시가 남지 않도록 **서비스 워커는 일부러 넣지 않았습니다**(오프라인 실행 불가).
-- **버전 확인(캐시)**: JS·CSS 주소 뒤에 `?v=버전`을 붙입니다(현재 `2026111043`). 크레딧 화면에 "버전(페이지) · 스크립트"가 표시되고 둘이 다르면 새로고침 안내가 나옵니다.
+- **버전 확인(캐시)**: JS·CSS 주소 뒤에 `?v=버전`을 붙입니다(현재 `2026111045`). 크레딧 화면에 "버전(페이지) · 스크립트"가 표시되고 둘이 다르면 새로고침 안내가 나옵니다.
 
 ## 소리
 - 효과음: 대포탄·로켓 발사/폭발과 물에 빠지는 소리는 Battle at sea(CC0), 나머지는 Kenney Impact/Interface Sounds(CC0).
@@ -200,7 +210,7 @@ LICENSE                 MIT (코드)
 CREDITS.md              에셋 출처·저작자·라이선스 전체 목록
 js/main.js              진입점: 에셋 로딩, 입력, UI 화면, 메인 루프, 자동 품질 조절
 js/game.js              유닛 물리·특성, 턴 흐름, 무기·투사체, AI, 스테이지/웨이브 설정, 렌더링
-js/terrain.js           높이맵 생성, 오프스크린 캔버스 지형, 알파 충돌, 크레이터, 높이 열 캐시
+js/terrain.js           높이맵 생성(지형 프리셋 완만·언덕·협곡), 오프스크린 캔버스 지형, 알파 충돌, 크레이터, 높이 열 캐시
 js/themes.js            스테이지 테마(초원·사막·설원·밤) 배경과 날씨 파티클
 js/audio.js             Web Audio 효과음(샘플 + 합성)·배경음악·승패 징글·볼륨
 js/i18n.js              한국어/English 문구 사전, tr(), 언어 감지·저장·화면 바꾸기
@@ -245,7 +255,7 @@ python -m http.server 8000      # Python 3 (python3 -m http.server 8000도 동�
 ## English summary
 **Boom Critters** is a single-player, turn-based artillery game in the spirit of Worms and Pocket Tanks, written in plain HTML5 Canvas and vanilla ES modules (no build step). Play it at https://sigco3111.github.io/boom-critters/.
 
-- **Modes**: Quick Match (easy / normal / hard), 10 fixed-seed Stages with stars, and an Endless wave mode. Four themes (meadow, desert, snow, night) with ambient weather.
+- **Modes**: Quick Match (easy / normal / hard, with a theme and terrain picker: random / meadow / desert / snow / night and random / gentle / hills / canyon, saved), 10 fixed-seed Stages with stars, and an Endless wave mode. Four themes (meadow, desert, snow, night) with ambient weather.
 - **Weapons**: cannon, rocket, grenade, lightning, fire shell and airstrike, each with different damage, radius and ammo (see the Korean table above). Wind changes every turn; supply crates drop every 4th turn.
 - **Controls**: keyboard (A/D move, W jump, ↑/↓ aim, hold Space to charge, 1–6 weapons, Esc pause, M mute) or on-screen touch controls with drag-to-aim.
 - **Settings & accessibility**: music/SFX volume, large HUD text, high-contrast team marks (● / ◆), reduced-motion support, keyboard focus handling, and a Korean / English language switch. Progress is stored in `localStorage`.
