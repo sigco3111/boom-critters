@@ -1,8 +1,8 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111041';
-import * as audio from './audio.js?v=2026111041';
-import { t as tr, getLang } from './i18n.js?v=2026111041';
-import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111041';
+import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111042';
+import * as audio from './audio.js?v=2026111042';
+import { t as tr, getLang } from './i18n.js?v=2026111042';
+import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111042';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -22,6 +22,7 @@ const CHARGE_T = 1.6;    // 파워 0→100 충전 시간(초)
 const AIR_WARN = 1.0, AIR_W = 120, AIR_N = 5, AIR_IDX = 5; // 공습: 경고 마커 1초 → 폭탄 5발이 폭 120px 구역에 순서 없이 떨어짐 (무기 슬롯 6번)
 const MAX_PARTICLES = 500, MAX_FLOATERS = 24; // 파티클·떠오르는 글자 상한 (넘치면 가장 오래된 것부터 재활용=제거)
 const AI_MAX_TRIES = 3;      // AI가 유효한 사격(물/화면 밖이 아닌 착탄)을 못 찾을 때 다시 계산해 보는 횟수. 넘으면 턴을 넘긴다
+const AI_SLICE_MS = 4;       // AI 사격 계산을 한 프레임에 쓰는 최대 시간(ms): 나머지는 다음 프레임에 이어서 (느린 폰의 프레임 끊김 방지)
 const AI_TURN_MAX = 22;      // AI 한 턴의 최대 시간(초): 이 안에 쏘지 못하면 강제로 넘김 (제한 시간 30초보다 먼저)
 const SETTLE_MAX = 8;        // 발사 후 유닛이 안정되길 기다리는 최대 시간(초)
 const DRAG_MIN = 14; // 터치 드래그 조준: 발사에 필요한 최소 드래그 거리 (캔버스 px)
@@ -35,9 +36,35 @@ const _smoke = {};
 const smokeStyle = (c) => _smoke[c] || (_smoke[c] = `rgb(${c})`);
 const WBAR_H = 72; // 무기 바 오프스크린 높이 (큰 HUD 글씨일 때 70px)
 const TOP_HUD_H = 176; // 상단 HUD 오프스크린 높이 (hs 최대 1.5배일 때 알약 아래끝 약 161px)
-const TEXT_CACHE = new Map(), TEXT_CACHE_MAX = 600, WIDTH_CACHE = new Map();
+const TEXT_CACHE = new Map(), TEXT_CACHE_MAX = 900, WIDTH_CACHE = new Map(); // TEXT_CACHE: 글자 -> [{ size, color, weight, sc, c, ... }] (같은 글자의 크기·색 변형들)
+let textCount = 0;
+const DASH_AIM = [4, 5], DASH_NONE = [];
+const PW_COL = Array.from({ length: 101 }, (_, i) => `hsl(${120 - i * 1.2},90%,55%)`); // 파워 0~100의 색 (프레임마다 색 문자열을 만들지 않음)
+const powerColor = (p) => PW_COL[p <= 0 ? 0 : p >= 100 ? 100 : Math.round(p)];
+let pwLabelN = -1, pwLabel = '', pwLabelLang = '';
+const powerLabel = (p) => { const n = Math.round(p), lg = getLang(); if (n !== pwLabelN || lg !== pwLabelLang) { pwLabelN = n; pwLabelLang = lg; pwLabel = tr('hud.power', { p: n }); } return pwLabel; };
+const byUnitX = (p, q) => p.u.x - q.u.x;
+const HUDC = { wbar: null, top: null }; // 무기 바·상단 HUD 오프스크린 캔버스 (경기 객체와 무관하게 하나만 두고 로딩 중 미리 만든다)
+const FLASH = new WeakMap(); // 피격 번쩍임용 흰 실루엣 (이미지 -> 캔버스)
 let _mctx = null;
 const measureCtx = () => _mctx || (_mctx = document.createElement('canvas').getContext('2d'));
+// 윤곽선 글자를 오프스크린 캔버스에 한 번 구워 캐시에 넣는다. 캐시가 가득 차면 오래된 글자부터 비움
+function bakeText(str, size, color, weight, sc) {
+  const font = `${weight} ${size}px ${FONT}`, k = measureCtx();
+  k.font = font;
+  const tw = k.measureText(str).width, pad = Math.ceil(Math.max(2, size / 5)) + 2, wl = tw + pad * 2, hl = Math.ceil(size * 1.5) + pad * 2;
+  const c = document.createElement('canvas'); c.width = Math.ceil(wl * sc); c.height = Math.ceil(hl * sc);
+  const q = c.getContext('2d');
+  q.scale(sc, sc); q.font = font; q.textAlign = 'left'; q.textBaseline = 'middle';
+  q.lineWidth = Math.max(2, size / 5); q.strokeStyle = 'rgba(0,0,0,0.6)'; q.lineJoin = 'round';
+  q.strokeText(str, pad, hl / 2); q.fillStyle = color; q.fillText(str, pad, hl / 2);
+  const e = { size, color, weight, sc, c, tw, pad, wl: c.width / sc, hl: c.height / sc };
+  if (textCount >= TEXT_CACHE_MAX) { let n = 0; for (const kk of TEXT_CACHE.keys()) { textCount -= TEXT_CACHE.get(kk).length; TEXT_CACHE.delete(kk); if (++n > TEXT_CACHE_MAX / 4) break; } }
+  const list = TEXT_CACHE.get(str);
+  if (list) list.push(e); else TEXT_CACHE.set(str, [e]);
+  textCount++;
+  return e;
+}
 
 export const WEAPONS = [
   { id: 'cannon', get name() { return tr('w.cannon'); }, radius: 40, damage: 50, windK: 8, speedK: 1.0, knock: 380 },
@@ -173,6 +200,7 @@ export class Game {
     this.weather = null;        // 잔잔한 날씨 파티클(눈·모래·꽃잎·반딧불), 헤드리스에서는 없음
     this.state = 'idle';
     this.units = []; this.particles = []; this.floaters = [];
+    this.ppool = []; this.fpool = []; // 재사용할 파티클·떠오르는 글자 객체
     this.proj = null; this.shake = 0;
     this.viewScale = 1;         // 캔버스 CSS 폭 / 논리 폭 (작은 화면일수록 글자를 키우는 데 사용)
     this.bigHud = false;        // 접근성: HUD 글자 +25% (설정)
@@ -380,9 +408,9 @@ export class Game {
     if (!u.alive) return;
     this.countLoss(u, u.hp);
     u.alive = false; u.hp = 0; u.drowned = true;
-    for (let i = 0; i < 18; i++) this.particles.push({ type: 'splash', x: u.x + rnd(-8, 8), y: WATER_Y, vx: rnd(-60, 60), vy: rnd(-260, -100), r: rnd(2, 5), life: 0, max: rnd(0.6, 1.0) });
+    for (let i = 0; i < 18; i++) this.pt('splash', u.x + rnd(-8, 8), WATER_Y, rnd(-60, 60), rnd(-260, -100), rnd(2, 5), rnd(0.6, 1.0));
     audio.play('sea_splash', { vol: 0.9 });
-    this.floaters.push({ x: u.x, y: WATER_Y - 10, text: tr('f.splash'), color: '#fff', t: 0 });
+    this.ft(u.x, WATER_Y - 10, tr('f.splash'), '#fff');
   }
 
   // 경기 기록: 팀 1이 잃은 HP = 준 피해, 팀 0이 잃은 HP = 받은 피해
@@ -394,11 +422,11 @@ export class Game {
     if (!u.alive || dmg <= 0) return;
     this.countLoss(u, Math.min(u.hp, dmg));
     u.hp -= dmg; u.hurt = HURT_T;
-    this.floaters.push({ x: u.x + rnd(-8, 8), y: Math.max(26, u.y - 92), text: '-' + dmg, color: '#ff3b30', t: 0, dmg: true });
+    this.ft(u.x + rnd(-8, 8), Math.max(26, u.y - 92), '-' + dmg, '#ff3b30', true);
     if (u.hp <= 0) {
       u.hp = 0; u.alive = false;
-      this.particles.push({ type: 'poof', x: u.x, y: u.y - 24, vx: 0, vy: -14, r: 17, life: 0, max: 0.55 });
-      for (let i = 0; i < 6; i++) this.particles.push({ type: 'smoke', x: u.x + rnd(-8, 8), y: u.y - rnd(5, 30), vx: rnd(-40, 40), vy: rnd(-70, -10), r: rnd(5, 9), life: 0, max: rnd(0.6, 1.0), color: '255,255,255' });
+      this.pt('poof', u.x, u.y - 24, 0, -14, 17, 0.55);
+      for (let i = 0; i < 6; i++) this.pt('smoke', u.x + rnd(-8, 8), u.y - rnd(5, 30), rnd(-40, 40), rnd(-70, -10), rnd(5, 9), rnd(0.6, 1.0), '255,255,255');
     }
   }
 
@@ -479,41 +507,66 @@ export class Game {
 
   emitExplosion(x, y, r) {
     const P = this.particles;
-    P.push({ type: 'flash', x, y, r, life: 0, max: 0.22 });
+    this.pt('flash', x, y, 0, 0, r, 0.22);
     const q = this.lowFx ? 0.5 : 1, nf = (18 + (r / 2) | 0) * q | 0; // 느린 기기(lowFx)에서는 파티클을 절반만
     for (let i = 0; i < nf; i++) {
       const a = rnd(0, 6.283), s = rnd(40, 240);
-      P.push({ type: 'fire', x: x + Math.cos(a) * r * 0.2, y: y + Math.sin(a) * r * 0.2, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 40, r: rnd(r * 0.2, r * 0.45), life: 0, max: rnd(0.35, 0.8) });
+      this.pt('fire', x + Math.cos(a) * r * 0.2, y + Math.sin(a) * r * 0.2, Math.cos(a) * s, Math.sin(a) * s - 40, rnd(r * 0.2, r * 0.45), rnd(0.35, 0.8));
     }
     for (let i = 0, ns = 14 * q | 0; i < ns; i++) {
       const a = rnd(0, 6.283), s = rnd(10, 90);
-      P.push({ type: 'smoke', x: x + Math.cos(a) * r * 0.4, y: y + Math.sin(a) * r * 0.4, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 50, r: rnd(r * 0.2, r * 0.4), life: 0, max: rnd(1.0, 1.9), color: '70,70,70' });
+      this.pt('smoke', x + Math.cos(a) * r * 0.4, y + Math.sin(a) * r * 0.4, Math.cos(a) * s, Math.sin(a) * s - 50, rnd(r * 0.2, r * 0.4), rnd(1.0, 1.9), '70,70,70');
     }
     for (let i = 0, nd = 16 * q | 0; i < nd; i++) {
       const a = rnd(-3.0, -0.15), s = rnd(120, 320);
-      P.push({ type: 'debris', x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, r: rnd(1.5, 3.5), life: 0, max: rnd(0.8, 1.4) });
+      this.pt('debris', x, y, Math.cos(a) * s, Math.sin(a) * s, rnd(1.5, 3.5), rnd(0.8, 1.4));
     }
   }
 
+  // 파티클·떠오르는 글자는 객체 풀에서 꺼내 쓰고, 수명이 끝나면 풀로 돌려보낸다 (폭발마다 수십 개를 새로 만들면 느린 폰에서 가비지 수거로 프레임이 끊긴다)
+  pt(type, x, y, vx, vy, r, max, color = '', green = false) {
+    const p = this.ppool.pop() || { type: '', x: 0, y: 0, vx: 0, vy: 0, r: 0, life: 0, max: 0, color: '', green: false };
+    p.type = type; p.x = x; p.y = y; p.vx = vx; p.vy = vy; p.r = r; p.life = 0; p.max = max; p.color = color; p.green = green;
+    this.particles.push(p);
+    return p;
+  }
+  ft(x, y, text, color, dmg = false) {
+    const f = this.fpool.pop() || { x: 0, y: 0, text: '', color: '', t: 0, dmg: false };
+    f.x = x; f.y = y; f.text = text; f.color = color; f.t = 0; f.dmg = dmg;
+    this.floaters.push(f);
+    return f;
+  }
   updateParticles(dt) {
-    for (const p of this.particles) {
-      p.life += dt;
-      p.x += (p.vx || 0) * dt; p.y += (p.vy || 0) * dt;
-      if (p.type === 'debris' || p.type === 'splash') p.vy += 700 * dt;
-      if (p.type === 'smoke') { p.r += dt * 8; p.vx *= 0.97; p.vy -= 12 * dt; }
-      if (p.type === 'fire') { p.vx *= 0.94; p.vy = p.vy * 0.94 - 20 * dt; }
-    }
-    // 수명이 끝난 것을 제자리에서 제거 (매 프레임 새 배열을 만들지 않음) + 상한을 넘으면 가장 오래된 것부터 버림
     const P = this.particles;
+    for (let i = 0; i < P.length; i++) {
+      const p = P[i];
+      p.life += dt;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      if (p.type === 'debris' || p.type === 'splash') p.vy += 700 * dt;
+      else if (p.type === 'smoke') { p.r += dt * 8; p.vx *= 0.97; p.vy -= 12 * dt; }
+      else if (p.type === 'fire') { p.vx *= 0.94; p.vy = p.vy * 0.94 - 20 * dt; }
+    }
+    // 수명이 끝난 것을 제자리에서 제거해 풀로 돌려보냄 (매 프레임 새 배열을 만들지 않음) + 상한을 넘으면 가장 오래된 것부터 버림
+    const pool = this.ppool;
     let n = 0;
-    for (let i = 0; i < P.length; i++) if (P[i].life < P[i].max) P[n++] = P[i];
+    for (let i = 0; i < P.length; i++) { const p = P[i]; if (p.life < p.max) P[n++] = p; else if (pool.length < MAX_PARTICLES) pool.push(p); }
     P.length = n;
-    if (n > MAX_PARTICLES) P.splice(0, n - MAX_PARTICLES);
-    const F = this.floaters;
+    if (n > MAX_PARTICLES) {
+      const cut = n - MAX_PARTICLES;
+      for (let i = 0; i < cut && pool.length < MAX_PARTICLES; i++) pool.push(P[i]);
+      for (let i = cut; i < n; i++) P[i - cut] = P[i];
+      P.length = MAX_PARTICLES;
+    }
+    const F = this.floaters, fp = this.fpool;
     n = 0;
-    for (let i = 0; i < F.length; i++) { F[i].t += dt; if (F[i].t < 1.2) F[n++] = F[i]; }
+    for (let i = 0; i < F.length; i++) { const f = F[i]; f.t += dt; if (f.t < 1.2) F[n++] = f; else if (fp.length < MAX_FLOATERS) fp.push(f); }
     F.length = n;
-    if (n > MAX_FLOATERS) F.splice(0, n - MAX_FLOATERS);
+    if (n > MAX_FLOATERS) {
+      const cut = n - MAX_FLOATERS;
+      for (let i = 0; i < cut && fp.length < MAX_FLOATERS; i++) fp.push(F[i]);
+      for (let i = cut; i < n; i++) F[i - cut] = F[i];
+      F.length = MAX_FLOATERS;
+    }
   }
 
   // ---------- 턴 ----------
@@ -551,7 +604,7 @@ export class Game {
       if (!r || !u.alive || u.team !== t || u.hp >= u.maxHp) continue;
       const h = Math.min(r, u.maxHp - u.hp);
       u.hp += h;
-      this.floaters.push({ x: u.x, y: Math.max(26, u.y - 92), text: '+' + h, color: '#5dff6e', t: 0 });
+      this.ft(u.x, Math.max(26, u.y - 92), '+' + h, '#5dff6e');
     }
   }
 
@@ -567,7 +620,7 @@ export class Game {
     }
     if (x === null) return;
     this.crates.push({ x, y: -30, landed: false, seed: Math.random() * 10 });
-    this.floaters.push({ x, y: 70, text: tr('f.crate'), color: '#7dff8a', t: 0 });
+    this.ft(x, 70, tr('f.crate'), '#7dff8a');
   }
 
   crateSupported(c) {
@@ -591,8 +644,8 @@ export class Game {
         if (!u.alive || Math.abs(u.x - c.x) > CRATE_W / 2 + HALF_W) continue;
         if (u.y < c.y - CRATE_H || u.y - UNIT_H > c.y) continue;
         u.hp = Math.min(u.maxHp, u.hp + CRATE_HEAL);
-        this.floaters.push({ x: u.x, y: u.y - 60, text: '+' + CRATE_HEAL, color: '#5dff6e', t: 0 });
-        for (let k = 0; k < 10; k++) this.particles.push({ type: 'spark', x: c.x + rnd(-8, 8), y: c.y - rnd(0, 20), vx: rnd(-40, 40), vy: rnd(-120, -40), r: rnd(2, 3.5), life: 0, max: rnd(0.4, 0.8), green: true });
+        this.ft(u.x, u.y - 60, '+' + CRATE_HEAL, '#5dff6e');
+        for (let k = 0; k < 10; k++) this.pt('spark', c.x + rnd(-8, 8), c.y - rnd(0, 20), rnd(-40, 40), rnd(-120, -40), rnd(2, 3.5), rnd(0.4, 0.8), '', true);
         audio.playSynth('heal');
         c.dead = true; break;
       }
@@ -605,8 +658,8 @@ export class Game {
     for (const c of this.crates) {
       if (Math.hypot(c.x - x, (c.y - CRATE_H / 2) - y) >= r + 14) continue;
       c.dead = true;
-      for (let i = 0; i < 10; i++) this.particles.push({ type: 'debris', x: c.x, y: c.y - 10, vx: rnd(-160, 160), vy: rnd(-220, -60), r: rnd(1.5, 3), life: 0, max: rnd(0.6, 1.1) });
-      this.floaters.push({ x: c.x, y: c.y - 24, text: tr('f.crateBreak'), color: '#ddd', t: 0 });
+      for (let i = 0; i < 10; i++) this.pt('debris', c.x, c.y - 10, rnd(-160, 160), rnd(-220, -60), rnd(1.5, 3), rnd(0.6, 1.1));
+      this.ft(c.x, c.y - 24, tr('f.crateBreak'), '#ddd');
     }
     this.crates = this.crates.filter((c) => !c.dead);
   }
@@ -672,7 +725,7 @@ export class Game {
     if (!w) return;
     if (w.disabled || this.ammo[0][i] <= 0) {
       const locked = w.airstrike && !this.airOk;
-      this.floaters.push({ x: u.x, y: u.y - 70, text: w.disabled ? tr('f.soon') : locked ? tr(this.mode === 'endless' ? 'f.unlockWave' : 'f.unlockStage') : tr('f.noAmmo'), color: '#ffe27a', t: 0 });
+      this.ft(u.x, u.y - 70, w.disabled ? tr('f.soon') : locked ? tr(this.mode === 'endless' ? 'f.unlockWave' : 'f.unlockStage') : tr('f.noAmmo'), '#ffe27a');
       return;
     }
     this.weapon = i; audio.play('switch', { vol: 0.7 });
@@ -789,12 +842,12 @@ export class Game {
       if (b.done || a.t < AIR_WARN + b.delay) continue;
       if (!b.p) { b.p = { x: b.x, y: -24, vx: 0, vy: 240, w: a.w, owner: null, age: 0 }; audio.playSynth('whistle', { vol: 0.5, dur: rnd(0.65, 0.85), pitch: rnd(0.9, 1.12) }); } // 폭탄마다 하강 휘파람
       const r = stepProj(b.p, dt, 0, this.terrain, this.units);
-      this.particles.push({ type: 'smoke', x: b.p.x, y: b.p.y - 8, vx: 0, vy: 0, r: 2, life: 0, max: 0.3, color: '230,230,230' });
+      this.pt('smoke', b.p.x, b.p.y - 8, 0, 0, 2, 0.3, '230,230,230');
       if (!r) continue;
       b.done = true;
       if (r === 'terrain' || r === 'unit') this.explode(b.p.x, b.p.y, a.w);
       else if (r === 'water') {
-        for (let i = 0; i < 10; i++) this.particles.push({ type: 'splash', x: b.p.x, y: WATER_Y, vx: rnd(-60, 60), vy: rnd(-220, -80), r: rnd(2, 4), life: 0, max: rnd(0.5, 0.9) });
+        for (let i = 0; i < 10; i++) this.pt('splash', b.p.x, WATER_Y, rnd(-60, 60), rnd(-220, -80), rnd(2, 4), rnd(0.5, 0.9));
         audio.play('sea_splash', { vol: 0.6, rate: 1.2 });
       }
     }
@@ -833,11 +886,11 @@ export class Game {
     audio.playSynth('lightning'); // 합성: 하이패스 스윕 노이즈 지지직
     audio.play('explosion', { rate: 1.9, vol: 0.3 });
     u.squash = -0.2; u.shootT = 0.4;
-    for (let i = 0; i < 8; i++) this.particles.push({ type: 'spark', x: ox, y: oy, vx: rnd(-90, 90), vy: rnd(-90, 90), r: rnd(1.5, 3), life: 0, max: rnd(0.2, 0.4) });
+    for (let i = 0; i < 8; i++) this.pt('spark', ox, oy, rnd(-90, 90), rnd(-90, 90), rnd(1.5, 3), rnd(0.2, 0.4));
     if (target) {
       this.damage(target, w.damage, '#9fd0ff');
-      this.particles.push({ type: 'flash', x: ex, y: ey, r: 34, life: 0, max: 0.25 });
-      for (let i = 0; i < 16; i++) this.particles.push({ type: 'spark', x: ex, y: ey, vx: rnd(-220, 220), vy: rnd(-220, 160), r: rnd(1.5, 3.5), life: 0, max: rnd(0.25, 0.55) });
+      this.pt('flash', ex, ey, 0, 0, 34, 0.25);
+      for (let i = 0; i < 16; i++) this.pt('spark', ex, ey, rnd(-220, 220), rnd(-220, 160), rnd(1.5, 3.5), rnd(0.25, 0.55));
       audio.play('hit', { vol: 0.8 });
       if (target.alive) {
         target.grounded = false; target.y -= 2; target.fallStart = target.y;
@@ -848,24 +901,31 @@ export class Game {
   }
 
   // ---------- AI ----------
+  // 궤적 계산용 임시 투사체·결과 객체 (후보마다 새 객체를 만들지 않도록 재사용; 결과는 호출 즉시 읽는다)
   simulate(u, weapon, angle, power, facing) {
     const w = WEAPONS[weapon], a = rad(angle), v = launchSpeed(w, power);
-    const p = { x: u.x + facing * Math.cos(a) * 18, y: u.y - 20 - Math.sin(a) * 18, vx: facing * Math.cos(a) * v, vy: -Math.sin(a) * v, w, owner: u, age: 0 };
+    const p = this._sp || (this._sp = {}), out = this._so || (this._so = { x: 0, y: 0, kind: '' });
+    p.x = u.x + facing * Math.cos(a) * 18; p.y = u.y - 20 - Math.sin(a) * 18; p.vx = facing * Math.cos(a) * v; p.vy = -Math.sin(a) * v; p.w = w; p.owner = u; p.age = 0;
+    out.kind = 'out';
     for (let i = 0; i < 1500; i++) {
       const r = stepProj(p, 1 / 60, this.wind, this.terrain, null);
-      if (r) return { x: p.x, y: p.y, kind: r };
+      if (r) { out.kind = r; break; }
     }
-    return { x: p.x, y: p.y, kind: 'out' };
+    out.x = p.x; out.y = p.y;
+    return out;
   }
 
   simulateGrenade(u, angle, power, facing) {
     const w = WEAPONS[2], a = rad(angle), v = launchSpeed(w, power);
-    const p = { x: u.x + facing * Math.cos(a) * 18, y: u.y - 20 - Math.sin(a) * 18, vx: facing * Math.cos(a) * v, vy: -Math.sin(a) * v, w, owner: u, age: 0, fuse: w.fuse };
+    const p = this._sg || (this._sg = {}), out = this._so || (this._so = { x: 0, y: 0, kind: '' });
+    p.x = u.x + facing * Math.cos(a) * 18; p.y = u.y - 20 - Math.sin(a) * 18; p.vx = facing * Math.cos(a) * v; p.vy = -Math.sin(a) * v; p.w = w; p.owner = u; p.age = 0; p.fuse = w.fuse;
+    out.kind = 'out';
     for (let i = 0; i < 420; i++) {
       const r = this.stepGrenade(p, 1 / 60, true);
-      if (r) return { x: p.x, y: p.y, kind: r };
+      if (r) { out.kind = r; break; }
     }
-    return { x: p.x, y: p.y, kind: 'out' };
+    out.x = p.x; out.y = p.y;
+    return out;
   }
 
   // AI 오차 계수 (스테이지/웨이브 단계가 있으면 단계별, 없으면 난이도별)
@@ -884,7 +944,8 @@ export class Game {
   }
 
   // 목표점 pt({x,y}=몸통 중심)에 무기 weapon(0 대포,1 로켓,2 수류탄,4 화염탄)을 가장 가깝게 떨어뜨리는 (각도, 파워) 탐색
-  aiPlan(weapon, pt) {
+  // 후보가 많아(약 1000회 궤적 계산) 한 프레임에 돌리면 느린 폰에서 프레임이 크게 끊긴다 -> 제너레이터로 만들어 aiRun이 프레임당 몇 ms씩 나눠 돌린다
+  *aiPlan(weapon, pt) {
     const u = this.activeUnit;
     const facing = pt.x >= u.x ? 1 : -1;
     const grenade = weapon === 2, step = grenade ? 5 : 2.5;
@@ -893,6 +954,7 @@ export class Game {
     let best = null;
     const cands = [];
     for (let angle = 12; angle <= 85; angle += step) {
+      if (performance.now() > this._aiDeadline) yield; // 이번 프레임의 계산 시간을 다 썼으면 다음 프레임에 이어서
       for (let power = 15; power <= 100; power += step) {
         const r = grenade ? this.simulateGrenade(u, angle, power, facing) : this.simulate(u, weapon, angle, power, facing);
         let score = r.kind === 'water' || r.kind === 'out' ? 9999 : Math.hypot(r.x - pt.x, r.y - pt.y);
@@ -940,7 +1002,7 @@ export class Game {
 
   // 이번 사격의 무기·목표·각도·파워 결정
   // 번개(직선 사선 확보) > 화염탄(적 2명 이상이 60px 이내) > 수류탄(구덩이/지형 뒤 목표) > 대포/로켓
-  aiDecide() {
+  *aiDecide() {
     const u = this.activeUnit, ai = this.ai, me = u.team, am = this.ammo[me], sk = this.sim && this.sim.skill[me];
     const enemies = this.units.filter((o) => o.alive && o.team !== me);
     const pt = (e) => ({ x: e.x, y: e.y - BODY_CY });
@@ -975,19 +1037,28 @@ export class Game {
         if (d <= 60 && (!pair || d < pair.d)) pair = { d, a: enemies[i], b: enemies[j] };
       }
       if (pair) {
-        const plan = this.aiPlan(4, { x: (pair.a.x + pair.b.x) / 2, y: (pair.a.y + pair.b.y) / 2 - BODY_CY });
+        const plan = yield* this.aiPlan(4, { x: (pair.a.x + pair.b.x) / 2, y: (pair.a.y + pair.b.y) / 2 - BODY_CY });
         if (plan.min <= 40) return { ...plan, target: pair.a };
       }
     }
     if (can(2) && hidden.length) {
       for (const e of hidden.sort((p, q) => Math.abs(p.x - u.x) - Math.abs(q.x - u.x))) {
-        const plan = this.aiPlan(2, pt(e));
+        const plan = yield* this.aiPlan(2, pt(e));
         if (plan.min <= 45) return { ...plan, target: e };
       }
     }
     if (!ai.target || !ai.target.alive) ai.target = enemies[Math.floor(Math.random() * enemies.length)];
     if (ai.weapon === undefined) ai.weapon = Math.random() < 0.35 ? 1 : 0;
-    return { ...this.aiPlan(ai.weapon, pt(ai.target)), target: ai.target };
+    return { ...(yield* this.aiPlan(ai.weapon, pt(ai.target))), target: ai.target };
+  }
+
+  // 제너레이터 job을 이번 프레임 예산(AI_SLICE_MS) 안에서만 진행. 끝났으면 { done: true, value }. 헤드리스(시뮬레이션)는 제한 없이 한 번에 끝까지
+  aiRun(job) {
+    const dl = this._aiDeadline = this.headless ? Infinity : performance.now() + AI_SLICE_MS;
+    for (;;) {
+      const r = job.next();
+      if (r.done || performance.now() >= dl) return r;
+    }
   }
 
   // 한 걸음 앞(10px)에 디딜 땅이 있는지 / 새 화염 지대로 걸어 들어가지 않는지
@@ -1020,7 +1091,7 @@ export class Game {
     const a = this.ai;
     if (!a || a.phase === 'skip') return;
     a.phase = 'skip'; a.t = 0; this.charging = false; this.power = 0;
-    if (this.activeUnit) this.floaters.push({ x: this.activeUnit.x, y: this.activeUnit.y - 70, text: tr('f.think'), color: '#fff', t: 0 });
+    if (this.activeUnit) this.ft(this.activeUnit.x, this.activeUnit.y - 70, tr('f.think'), '#fff');
   }
 
   aiUpdate(dt) {
@@ -1034,7 +1105,7 @@ export class Game {
     if (a.phase === 'think') {
       if (a.t < 0.9) return;
       // 1) 화염 지대 안이면 밖으로 이동 (다음 턴 시작 때 또 화상을 입지 않도록)
-      if (a.fled < 2 && this.aiFireAt(u.x, u.y)) {
+      if (!a.job && a.fled < 2 && this.aiFireAt(u.x, u.y)) {
         const f = this.fires.find((q) => Math.hypot(u.x - q.x, (u.y - 14) - q.y) < q.r);
         const first = u.x >= f.x ? 1 : -1;
         const dir = this.aiSafeAhead(u, first) ? first : this.aiSafeAhead(u, -first) ? -first : 0;
@@ -1042,7 +1113,7 @@ export class Game {
         if (dir) { a.phase = 'walk'; a.t = 0; a.goal = 'fire'; a.dir = dir; a.dur = 3; return; }
       }
       // 2) 체력 70 미만이고 150px 안에 보급 상자가 있으면 상자 쪽으로 이동
-      const crate = u.hp < 70 && a.crateWalks < 3 ? this.aiNearCrate(u) : null;
+      const crate = !a.job && u.hp < 70 && a.crateWalks < 3 ? this.aiNearCrate(u) : null;
       if (crate && Math.abs(crate.x - u.x) > 8) {
         const dir = crate.x >= u.x ? 1 : -1;
         if (this.aiSafeAhead(u, dir)) {
@@ -1051,8 +1122,12 @@ export class Game {
           return;
         }
       }
-      // 3) 사격 계획 (무기 선택 포함). 대포/로켓 계획이 빗나가면 목표 쪽으로 걸어가 다시 계산
-      const plan = this.aiDecide();
+      // 3) 사격 계획 (무기 선택 포함). 대포/로켓 계획이 빗나가면 목표 쪽으로 걸어가 다시 계산. 계산은 여러 프레임에 나눠서 한다
+      if (!a.job) a.job = this.aiDecide();
+      const jr = this.aiRun(a.job);
+      if (!jr.done) return;
+      a.job = null;
+      const plan = jr.value;
       if (!plan || !plan.target) { this.aiSkip(); return; }
       a.target = plan.target;
       // 유효한 착탄이 하나도 없음(모든 후보가 물/화면 밖): 목표 쪽으로 걸어가 다시 계산하되 AI_MAX_TRIES번을 넘기면 포기
@@ -1095,7 +1170,7 @@ export class Game {
     for (const f of this.fires) {
       if (Math.random() < dt * 24) {
         const x = f.x + rnd(-f.r, f.r), gy = this.fireGround(f, x);
-        if (gy !== null) this.particles.push({ type: 'fire', x, y: gy - 2, vx: rnd(-10, 10), vy: rnd(-90, -40), r: rnd(2, 4), life: 0, max: rnd(0.4, 0.8) });
+        if (gy !== null) this.pt('fire', x, gy - 2, rnd(-10, 10), rnd(-90, -40), rnd(2, 4), rnd(0.4, 0.8));
       }
     }
     this.shake = Math.max(0, this.shake - dt * 24);
@@ -1128,7 +1203,7 @@ export class Game {
       }
       if (this.timer <= 0 && this.state === 'aim') {
         this.charging = false; this.timer = 0;
-        this.floaters.push({ x: hu.x, y: hu.y - 70, text: tr('f.timeout'), color: '#fff', t: 0 });
+        this.ft(hu.x, hu.y - 70, tr('f.timeout'), '#fff');
         this.state = 'settle'; this.settleT = 0; this.settleTotal = 0;
       }
     } else if (this.state === 'flying') {
@@ -1143,14 +1218,14 @@ export class Game {
       if (grenade) {
         const sec = Math.ceil(p.fuse);
         if (sec < p.tickN && sec > 0) { p.tickN = sec; audio.playSynth('grenadeTick', { stage: Math.min(2, Math.round(p.w.fuse - sec)) }); }
-        this.particles.push({ type: 'fire', x: p.x + 2, y: p.y - 6, vx: rnd(-15, 15), vy: rnd(-40, -15), r: rnd(1.5, 2.5), life: 0, max: 0.25 });
+        this.pt('fire', p.x + 2, p.y - 6, rnd(-15, 15), rnd(-40, -15), rnd(1.5, 2.5), 0.25);
       } else if (p.w.id === 'fire') {
-        this.particles.push({ type: 'fire', x: p.x, y: p.y, vx: rnd(-25, 25), vy: rnd(-25, 25), r: rnd(3, 6), life: 0, max: 0.4 });
+        this.pt('fire', p.x, p.y, rnd(-25, 25), rnd(-25, 25), rnd(3, 6), 0.4);
       } else if (p.w.id === 'rocket') {
-        this.particles.push({ type: 'fire', x: p.x, y: p.y, vx: rnd(-20, 20), vy: rnd(-20, 20), r: rnd(3, 5), life: 0, max: 0.3 });
-        this.particles.push({ type: 'smoke', x: p.x, y: p.y, vx: rnd(-10, 10), vy: rnd(-10, 10), r: rnd(3, 5), life: 0, max: 0.8, color: '120,120,120' });
+        this.pt('fire', p.x, p.y, rnd(-20, 20), rnd(-20, 20), rnd(3, 5), 0.3);
+        this.pt('smoke', p.x, p.y, rnd(-10, 10), rnd(-10, 10), rnd(3, 5), 0.8, '120,120,120');
       } else {
-        this.particles.push({ type: 'smoke', x: p.x, y: p.y, vx: 0, vy: 0, r: 2, life: 0, max: 0.35, color: '230,230,230' });
+        this.pt('smoke', p.x, p.y, 0, 0, 2, 0.35, '230,230,230');
       }
       if (r) {
         this.proj = null;
@@ -1159,7 +1234,7 @@ export class Game {
           if (p.w.fireR) this.igniteAt(p.x, p.y, p.w);
         }
         else if (r === 'water') {
-          for (let i = 0; i < 14; i++) this.particles.push({ type: 'splash', x: p.x, y: WATER_Y, vx: rnd(-70, 70), vy: rnd(-250, -90), r: rnd(2, 4), life: 0, max: rnd(0.5, 0.9) });
+          for (let i = 0; i < 14; i++) this.pt('splash', p.x, WATER_Y, rnd(-70, 70), rnd(-250, -90), rnd(2, 4), rnd(0.5, 0.9));
           audio.play('sea_splash', { vol: 0.8, rate: 1.1 });
         }
         this.state = 'settle'; this.settleT = 0; this.settleTotal = 0;
@@ -1193,21 +1268,10 @@ export class Game {
   // this.sc: 지금 캔버스에 걸린 확대 배율(HUD 배율 hs, 이름표 배율 ts). 그 배율로 구워 두므로 확대해도 또렷하다. 캐시는 TEXT_CACHE_MAX개를 넘으면 오래된 것부터 버린다.
   text(g, str, x, y, size, color = '#fff', align = 'center', weight = '700') {
     if (this.headless || typeof document === 'undefined') return this.textRaw(g, str, x, y, size, color, align, weight);
-    const sc = this.sc || 1, key = `${weight}|${size}|${color}|${sc}|${str}`;
-    let e = TEXT_CACHE.get(key);
-    if (!e) {
-      const font = `${weight} ${size}px ${FONT}`, k = measureCtx();
-      k.font = font;
-      const tw = k.measureText(str).width, pad = Math.ceil(Math.max(2, size / 5)) + 2, wl = tw + pad * 2, hl = Math.ceil(size * 1.5) + pad * 2;
-      const c = document.createElement('canvas'); c.width = Math.ceil(wl * sc); c.height = Math.ceil(hl * sc);
-      const q = c.getContext('2d');
-      q.scale(sc, sc); q.font = font; q.textAlign = 'left'; q.textBaseline = 'middle';
-      q.lineWidth = Math.max(2, size / 5); q.strokeStyle = 'rgba(0,0,0,0.6)'; q.lineJoin = 'round';
-      q.strokeText(str, pad, hl / 2); q.fillStyle = color; q.fillText(str, pad, hl / 2);
-      e = { c, tw, pad, wl: c.width / sc, hl: c.height / sc };
-      if (TEXT_CACHE.size >= TEXT_CACHE_MAX) { let n = 0; for (const kk of TEXT_CACHE.keys()) { TEXT_CACHE.delete(kk); if (++n > TEXT_CACHE_MAX / 4) break; } }
-      TEXT_CACHE.set(key, e);
-    }
+    const sc = this.sc || 1;
+    let list = TEXT_CACHE.get(str), e = null;
+    if (list) for (let i = 0; i < list.length; i++) { const c = list[i]; if (c.size === size && c.sc === sc && c.color === color && c.weight === weight) { e = c; break; } }
+    if (!e) e = bakeText(str, size, color, weight, sc);
     let dx = align === 'center' ? -e.tw / 2 : align === 'right' ? -e.tw : 0;
     let dy = -e.hl / 2;
     dx -= e.pad; // 글자 시작이 x가 되도록 여백만큼 당김
@@ -1391,13 +1455,12 @@ export class Game {
 
   // 피격 번쩍임용 흰 실루엣 (이미지마다 한 번만 만들어 재사용)
   flashSprite(img) {
-    this._flash = this._flash || new WeakMap();
-    let c = this._flash.get(img);
+    let c = FLASH.get(img);
     if (!c) {
       c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
       const k = c.getContext('2d');
       k.drawImage(img, 0, 0); k.globalCompositeOperation = 'source-atop'; k.fillStyle = '#fff'; k.fillRect(0, 0, c.width, c.height);
-      this._flash.set(img, c);
+      FLASH.set(img, c);
     }
     return c;
   }
@@ -1425,11 +1488,20 @@ export class Game {
   drawTags(g) {
     let ts = Math.min(1.7, Math.max(1, 0.8 / this.viewScale)); // 작은 화면에서는 이름표를 키움
     if (this.bigHud) ts = Math.min(2.1, ts * 1.25);   // 큰 HUD 글씨: 이름표도 25% 키움
-    const tags = this.units.filter((u) => u.alive).map((u) => ({
-      u, w: Math.max(46, Math.ceil(this.textW(u.name, 700, 10)) + 10 + (this.teamMarks ? 14 : 0)), x: u.x, y: u.y - TAG_TOP,
-    }));
+    // 이름표 블록 객체는 유닛마다 하나를 계속 재사용 (프레임마다 배열·객체를 새로 만들지 않음). 폭은 이름·팀 표시가 바뀔 때만 다시 잰다
+    const tags = this._tags || (this._tags = []);
+    let nt = 0;
+    for (let i = 0; i < this.units.length; i++) {
+      const u = this.units[i];
+      if (!u.alive) continue;
+      const t = u.tag || (u.tag = { u, w: 0, x: 0, y: 0, nm: '', tm: false }), nm = u.name;
+      if (t.nm !== nm || t.tm !== this.teamMarks) { t.nm = nm; t.tm = this.teamMarks; t.w = Math.max(46, Math.ceil(this.textW(nm, 700, 10)) + 10 + (this.teamMarks ? 14 : 0)); }
+      t.x = u.x; t.y = u.y - TAG_TOP;
+      tags[nt++] = t;
+    }
+    tags.length = nt;
     // 가로로 겹치는(세로 범위도 겹치는) 블록 쌍을 서로 밀어낸다
-    tags.sort((p, q) => p.u.x - q.u.x);
+    tags.sort(byUnitX);
     for (let it = 0; it < 10; it++) {
       let moved = false;
       for (let i = 0; i < tags.length; i++) {
@@ -1483,29 +1555,29 @@ export class Game {
   drawAim(g) {
     const u = this.activeUnit; if (!u) return;
     const a = rad(this.angle), f = u.facing, ox = u.x, oy = u.y - 20;
-    const dx = f * Math.cos(a), dy = -Math.sin(a);
+    const dx = f * Math.cos(a), dy = -Math.sin(a), pw = this.power, pcol = powerColor(pw);
     g.save();
-    g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 2; g.setLineDash([4, 5]);
+    g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 2; g.setLineDash(DASH_AIM);
     const reach = WEAPONS[this.weapon].instant ? 220 : 62;
     g.beginPath(); g.moveTo(ox + dx * 20, oy + dy * 20); g.lineTo(ox + dx * reach, oy + dy * reach); g.stroke();
-    g.setLineDash([]);
+    g.setLineDash(DASH_NONE);
     g.strokeStyle = '#ff4d3d'; g.lineWidth = 2.5;
     const cx = ox + dx * 74, cy = oy + dy * 74;
     g.beginPath(); g.arc(cx, cy, 8, 0, 7); g.moveTo(cx - 12, cy); g.lineTo(cx + 12, cy); g.moveTo(cx, cy - 12); g.lineTo(cx, cy + 12); g.stroke();
     if (this.drag) { // 터치 드래그: 누른 지점 -> 손가락 위치 선과 파워 표시
       const d = this.drag;
-      g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 3; g.setLineDash([]); g.lineCap = 'round';
+      g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 3; g.lineCap = 'round';
       g.beginPath(); g.moveTo(d.sx, d.sy); g.lineTo(d.x, d.y); g.stroke();
       g.fillStyle = 'rgba(255,255,255,0.35)';
       g.beginPath(); g.arc(d.sx, d.sy, 12, 0, 7); g.fill();
       g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.arc(d.sx, d.sy, 12, 0, 7); g.stroke();
-      g.fillStyle = `hsl(${120 - this.power * 1.2},90%,55%)`;
+      g.fillStyle = pcol;
       g.beginPath(); g.arc(d.x, d.y, 9, 0, 7); g.fill();
-      this.text(g, tr('hud.power', { p: Math.round(this.power) }), d.x, d.y - 24, 20, '#fff');
+      this.text(g, powerLabel(pw), d.x, d.y - 24, 20, '#fff');
     }
-    if (this.charging || this.power > 0) {
-      const len = 20 + this.power * 0.6;
-      g.strokeStyle = `hsl(${120 - this.power * 1.2},90%,55%)`; g.lineWidth = 5; g.lineCap = 'round';
+    if (this.charging || pw > 0) {
+      const len = 20 + pw * 0.6;
+      g.strokeStyle = pcol; g.lineWidth = 5; g.lineCap = 'round';
       g.beginPath(); g.moveTo(ox + dx * 20, oy + dy * 20); g.lineTo(ox + dx * len, oy + dy * len); g.stroke();
     }
     g.restore();
@@ -1668,10 +1740,10 @@ export class Game {
   // 무기 바는 선택·탄약·해금·언어가 바뀔 때만 오프스크린에 다시 그리고 평소에는 한 번 찍는다
   drawWeaponBar(g) {
     const key = `${this.weapon}|${this.ammo ? this.ammo[0].join() : ''}|${this.airOk}|${this.bigHud}|${getLang()}`;
-    let c = this._wbar;
+    let c = HUDC.wbar;
     if (!c) {
       const cv = document.createElement('canvas'); cv.width = W; cv.height = WBAR_H;
-      c = this._wbar = { cv, q: cv.getContext('2d'), key: '' };
+      c = HUDC.wbar = { cv, q: cv.getContext('2d'), key: '' };
     }
     if (c.key !== key) {
       c.key = key;
@@ -1754,10 +1826,10 @@ export class Game {
     }
     const iu = this.infoUnit, urgent = this.timer <= 5 && this.state === 'aim';
     const key = `${hs}|${this.bigHud}|${this.teamMarks}|${getLang()}|${tot0}/${cap0}/${n0}|${tot1}/${cap1}/${n1}|${Math.max(0, Math.ceil(this.timer))}|${urgent}|${this.wind}|${iu ? `${iu.team}:${iu.idx}:${iu.hp}/${iu.maxHp}` : ''}|${this.modeLabel}|${this.theme.id}|${this.seed}`;
-    let c = this._topHud;
+    let c = HUDC.top;
     if (!c) {
       const cv = document.createElement('canvas'); cv.width = W; cv.height = TOP_HUD_H;
-      c = this._topHud = { cv, q: cv.getContext('2d'), key: '' };
+      c = HUDC.top = { cv, q: cv.getContext('2d'), key: '' };
     }
     if (c.key !== key) {
       c.key = key;
@@ -1851,4 +1923,52 @@ export class Game {
   get modeLabel() {
     return this.mode === 'stage' ? tr('mode.stage', { n: this.stage }) : this.mode === 'endless' ? tr('mode.endless', { n: this.wave }) : DIFF[this.difficulty]?.label || '';
   }
+}
+
+// ---------- 로딩 화면 예열 ----------
+// 첫 경기에서 처음 쓰는 순간 생기는 프레임 끊김을 없애기 위해 로딩 화면에서 미리 해 두는 작업들:
+// 글자 그림 캐시(HP 숫자·피해 숫자·타이머), 그라디언트, 피격 흰 실루엣, 무기 바·상단 HUD 오프스크린 캔버스, 모든 무기·폭발·화염·상자·번개·공습 그리기 경로(JIT)를
+// 화면 밖 캔버스에 한 번씩 돌려 본다. 버려지는 임시 Game을 쓰고 캐시는 모듈 전역이라 진짜 경기가 그대로 이어받는다.
+// 반환: 순서대로 실행할 작업(함수) 배열 — main.js가 하나씩 실행하며 진행 막대를 채운다
+export function warmupSteps(sprites, { viewScale = 1, bigHud = false, teamMarks = false, domHud = false, touchUI = false } = {}) {
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  const w = new Game(sprites);
+  Object.assign(w, { viewScale, bigHud, teamMarks, domHud, touchUI });
+  const tick = (n = 1) => { for (let i = 0; i < n; i++) { w.update(1 / 60); w.draw(g); } };
+  const u0 = () => w.units.find((u) => u.team === 0 && u.alive) || w.units[0];
+  const ts = Math.min(1.7, Math.max(1, 0.8 / viewScale)) * (bigHud ? 1.25 : 1), hs = w.hudScale;
+  const bake = (sc, size, color, weight, strs) => { w.sc = sc; for (const t of strs) w.text(g, t, 0, 0, size, color, 'center', weight); w.sc = 1; };
+  const nums = (a, b, f = String) => Array.from({ length: b - a + 1 }, (_, i) => f(a + i));
+  const fs = Math.min(34, Math.max(18, 15 / viewScale));
+  return [
+    () => { w.newMatch('normal', stageConfig(7)); tick(3); },                       // 눈 내리는 스테이지 7: 배경·지형·유닛·이름표·HUD·턴 배너·눈 날씨
+    () => { for (const th of THEMES) { const wt = makeWeather(th); if (wt) { stepWeather(wt, 1 / 60, 3); drawWeather(g, wt); } } }, // 네 가지 날씨 그리기 경로
+    () => { // 터치 드래그 조준
+      w.power = 60; w.drag = { sx: 600, sy: 300, x: 540, y: 340, max: 170 }; w.weapon = 0; tick(2);
+      w.drag = null; w.power = 0;
+    },
+    () => { // 무기별 투사체·공습 조준 마커
+      for (let i = 0; i < WEAPONS.length; i++) {
+        const wp = WEAPONS[i]; w.weapon = i; if (wp.airstrike) w.airX = 450;
+        if (!wp.instant && !wp.airstrike) { w.proj = { x: 300, y: 200, vx: 100, vy: -50, w: wp, owner: u0(), age: 0.5, fuse: 2 }; w.state = 'flying'; w.draw(g); w.proj = null; w.state = 'aim'; }
+        w.draw(g);
+      }
+      w.weapon = 0; w.state = 'aim';
+    },
+    () => { w.explode(u0().x + 20, u0().y - 20, WEAPONS[1]); tick(40); },            // 폭발: 크레이터·파티클·피격 번쩍임·피해 숫자
+    () => { w.igniteAt(400, 300, WEAPONS[4]); w.dropCrate(); tick(25); },              // 화염 지대·보급 상자
+    () => { w.weapon = 3; w.state = 'aim'; w.turnTeam = 0; w.fireLightning(u0(), WEAPONS[3]); tick(20); w.state = 'aim'; }, // 번개
+    () => { w.weapon = 5; w.state = 'aim'; w.turnTeam = 0; w.airX = 420; w.fireAirstrike(u0(), WEAPONS[5]); tick(100); }, // 공습
+    () => { w.floaters.length = 0; bake(1, fs, '#ff3b30', '800', nums(1, 60, (n) => '-' + n)); },              // 피해 숫자
+    () => { bake(1, fs, '#ff3b30', '800', nums(61, 120, (n) => '-' + n)); bake(1, fs, '#5dff6e', '800', ['+5', '+10', '+30']); },
+    () => bake(ts, 9, '#fff', '700', nums(0, 115)),                                        // 이름표 HP 숫자
+    () => { bake(hs, 24, '#fff', '700', nums(0, 30)); bake(hs, 24, '#ff6b5a', '700', nums(0, 5)); bake(hs, 12, '#fff', '700', nums(0, 14)); }, // 타이머·바람 숫자
+    () => { for (const k of new Set(Object.keys(sprites))) warmFlash(sprites, [k]); },     // 피격 흰 실루엣
+  ];
+}
+// 피격 번쩍임용 흰 실루엣을 미리 만든다 (keys: 캐릭터 키). 뒤에서 받은 캐릭터도 받은 뒤에 한 번 불러 준다
+export function warmFlash(sprites, keys) {
+  const g = Game.prototype;
+  for (const k of keys) for (const pose of ['hit', 'down']) { const im = sprites[k] && sprites[k][pose]; if (im && im.naturalWidth) g.flashSprite(im); }
 }

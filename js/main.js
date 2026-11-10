@@ -1,13 +1,13 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111041';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig } from './game.js?v=2026111041';
-import * as audio from './audio.js?v=2026111041';
-import * as progress from './progress.js?v=2026111041';
-import { MenuBg } from './menubg.js?v=2026111041';
-import * as store from './storage.js?v=2026111041';
-import * as loader from './loader.js?v=2026111041';
-import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111041';
+const VERSION = '2026111042';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig, warmupSteps, warmFlash } from './game.js?v=2026111042';
+import * as audio from './audio.js?v=2026111042';
+import * as progress from './progress.js?v=2026111042';
+import { MenuBg } from './menubg.js?v=2026111042';
+import * as store from './storage.js?v=2026111042';
+import * as loader from './loader.js?v=2026111042';
+import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111042';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -28,7 +28,7 @@ canvas.width = W; canvas.height = H;
 // 로딩 화면에서 받는 캐릭터: 우리 팀 3명과 첫 두 적(빠른 대전 쉬움·스테이지 1~3에 필요). 세 번째 적부터(보통 이상·스테이지 4~)는 뒤에서 받다가 그 경기를 시작할 때 기다린다
 const CORE_KEYS = [...CHARACTERS[0].map(([k]) => k), ...CHARACTERS[1].slice(0, 2).map(([k]) => k)];
 const LAZY_KEYS = [...new Set(CHAR_KEYS)].filter((k) => !CORE_KEYS.includes(k));
-const BOOT_TIMEOUT = 8000, MIN_SHOW = 500; // 로딩이 이 시간 넘게 걸리면 있는 것만으로 시작 / 로딩 화면 최소 표시 시간(ms)
+const BOOT_TIMEOUT = 8000, MIN_SHOW = 500, WARM_CAP = 6000; // 로딩이 이 시간 넘게 걸리면 있는 것만으로 시작 / 로딩 화면 최소 표시 시간(ms)
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // 브라우저 정책상 소리는 사용자 동작 뒤에만 가능 — iOS Safari는 touchstart/pointerdown이 아니라 touchend·click·keydown(제스처 완료)부터 인정한다.
@@ -211,9 +211,9 @@ function showResult(winner) {
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
 window.__audio = audio; // 디버깅/테스트용: __audio.musicInfo()
-window.__sim = (n, opts) => import('./sim.js?v=2026111041').then((m) => m.sim(n, opts));
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111041').then((m) => m.table(n, stages, skills));
-window.__sim.soak = (n, opts) => import('./sim.js?v=2026111041').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
+window.__sim = (n, opts) => import('./sim.js?v=2026111042').then((m) => m.sim(n, opts));
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111042').then((m) => m.table(n, stages, skills));
+window.__sim.soak = (n, opts) => import('./sim.js?v=2026111042').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
 
 // 이 경기에 뒤에서 받는 캐릭터가 필요한가: 적이 3마리 이상(보통 이상·스테이지 4~)이거나 무한 모드(웨이브가 오르면 적이 4마리)
 function needsLazy(cfg) {
@@ -729,6 +729,7 @@ async function boot() {
   if (snd < sndTotal) bad.push(tr('load.sounds'));
   if (img < imgTotal) bad.push(tr('load.images'));
   if (bad.length) { note.textContent = bad.join(' · '); note.classList.remove('hidden'); }
+  await warmUp(sprites, fill, count);
   await wait(Math.max(bad.length ? 900 : 0, MIN_SHOW - (performance.now() - t0)));
   try { setup(sprites); } catch (err) {
     console.error(err);
@@ -739,6 +740,28 @@ async function boot() {
   document.body.classList.remove('booting');
   ld.classList.add('fade'); // 부드럽게 사라진 뒤 숨김
   setTimeout(() => ld.classList.add('hidden'), 450);
-  setTimeout(() => loader.loadChars(sprites, LAZY_KEYS, POSES), 300); // 나머지 캐릭터는 뒤에서
+  setTimeout(() => loader.loadChars(sprites, LAZY_KEYS, POSES).then(() => warmFlash(sprites, LAZY_KEYS)).catch(() => {}), 300); // 나머지 캐릭터는 뒤에서 (피격 실루엣도 받은 뒤 미리 만든다)
+}
+
+// 로딩 화면 예열: 첫 경기에서 처음 쓰는 순간 생기는 프레임 끊김(글자 캐시·그라디언트·피격 실루엣·날씨·폭발 그리기 경로·소리 노이즈 버퍼)을 미리 치른다.
+// 작업을 하나씩 실행하고 사이마다 화면에 양보해 진행 막대가 움직이며, WARM_CAP을 넘기면 남은 작업은 건너뛴다. 실패해도 게임은 그대로 시작한다
+async function warmUp(sprites, fill, count) {
+  const body = document.body.classList;
+  try {
+    $('loadText').textContent = tr('load.prep');
+    fill.style.width = '0%'; $('loadBar').setAttribute('aria-valuenow', '0');
+    audio.prewarm();
+    audio.setHold(true); // 임시 경기가 소리를 내지 않도록
+    const steps = warmupSteps(sprites, { viewScale: Math.max(0.2, canvas.clientWidth / W), bigHud: prefs.bigHud, teamMarks: prefs.contrast, touchUI: body.contains('touch') });
+    const t0 = performance.now();
+    for (let i = 0; i < steps.length && performance.now() - t0 < WARM_CAP; i++) {
+      await wait(0);
+      try { steps[i](); } catch (err) { console.warn('warm-up', i, err); }
+      fill.style.width = `${Math.round((100 * (i + 1)) / steps.length)}%`;
+      $('loadBar').setAttribute('aria-valuenow', String(Math.round((100 * (i + 1)) / steps.length)));
+      count.textContent = `${i + 1} / ${steps.length}`;
+    }
+    window.__warmMs = Math.round(performance.now() - t0);
+  } catch (err) { console.warn('warm-up', err); } finally { audio.setHold(false); }
 }
 boot();

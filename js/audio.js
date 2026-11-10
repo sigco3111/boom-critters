@@ -5,7 +5,7 @@
 // 번개·공습·수류탄 카운트다운·치유 효과음은 파일 없이 Web Audio(노이즈·오실레이터)로 합성 — 모두 sfxGain을 거치므로 효과음 볼륨·음소거를 따른다
 // OGG를 디코드하지 못하는 기기(구형 iOS Safari 등): 음악은 원곡 MP3(assets/music/enchanted-festival.mp3)로 대체하고,
 // 효과음·결과 징글은 파일 없이 합성한 소리(FALLBACK)로 대체한다 — 효과음은 sfxGain, 징글은 musicGain을 거치므로 볼륨·음소거를 그대로 따른다
-import { local } from './storage.js?v=2026111041';
+import { local } from './storage.js?v=2026111042';
 const NAMES = ['explosion', 'fire', 'land', 'step', 'hit', 'select', 'win', 'lose', 'tick', 'switch',
   'sea_cannon', 'sea_boom', 'sea_boom_big', 'sea_boom_small', 'sea_splash'];
 const MUSIC_URL = 'assets/music/enchanted-festival-loop.ogg';
@@ -46,6 +46,8 @@ try {
 
 const synthStats = { calls: {}, errors: 0, lastError: '' }; // 합성 효과음 호출·오류 횟수 (musicInfo로 확인)
 let noiseBuf = null;
+let hold = false; // true인 동안(로딩 화면 예열 중) 모든 소리를 건너뜀
+export function setHold(b) { hold = !!b; }
 
 const applyGains = () => {
   if (!ctx) return;
@@ -134,6 +136,7 @@ export function initAudio() {
       duck.connect(musicGain); musicGain.connect(ctx.destination);
       duck.gain.value = MUSIC_LEVEL[music.mode];
       applyGains();
+      warmNodes();
       wake();
       ctx.onstatechange = () => { if (ctx && ctx.state === 'running' && music.want) startMusic(); }; // 깨어나면 대기 중이던 음악 시작
       document.addEventListener('visibilitychange', () => {
@@ -158,7 +161,7 @@ export function initAudio() {
 }
 
 export function play(name, { rate = 1, vol = 1 } = {}) {
-  if (!ctx || muted || ctx.state !== 'running') return; // 잠긴 동안 쌓인 소리가 한꺼번에 터지지 않도록 건너뜀
+  if (hold || !ctx || muted || ctx.state !== 'running') return; // 잠긴 동안 쌓인 소리가 한꺼번에 터지지 않도록 건너뜀
   if (!buffers[name]) { if (sfxFailed[name]) playFallback(name, rate, vol); return; } // 아직 받는 중이면 건너뛰고, 못 받았으면 합성음
   try {
   const src = ctx.createBufferSource();
@@ -176,10 +179,27 @@ export function play(name, { rate = 1, vol = 1 } = {}) {
 function noise() { // 1초짜리 화이트 노이즈 버퍼 (한 번만 만들어 재사용)
   if (!noiseBuf) {
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-    const d = noiseBuf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    fillNoise(noiseBuf.getChannelData(0));
   }
   return noiseBuf;
+}
+function fillNoise(d) { for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+// 로딩 화면 예열: AudioContext는 첫 터치/키 입력 전에는 만들 수 없지만(브라우저 자동재생 규칙), 노이즈 버퍼는 컨텍스트 없이 `new AudioBuffer`로 미리 만들어 둘 수 있다.
+// 번개·물보라·폭발 합성음이 처음 울릴 때 4만 개가 넘는 난수를 만드느라 프레임이 끊기지 않게 한다. 지원하지 않는 브라우저는 예전처럼 처음 쓸 때 만든다
+export function prewarm() {
+  if (noiseBuf) return;
+  try { const b = new AudioBuffer({ numberOfChannels: 1, length: 44100, sampleRate: 44100 }); fillNoise(b.getChannelData(0)); noiseBuf = b; } catch (e) { /* 처음 쓸 때 만든다 */ }
+}
+// 컨텍스트가 만들어지면 소리 없는 그래프(오실레이터·노이즈 → 필터 → 게인 0)를 한 번 돌려 노드 종류별 첫 생성 비용을 미리 치른다 (경기 중 첫 효과음에서 끊기지 않도록)
+function warmNodes() {
+  try {
+    const t = ctx.currentTime, mute = ctx.createGain();
+    mute.gain.value = 0; mute.connect(ctx.destination);
+    const f = ctx.createBiquadFilter(); f.connect(mute);
+    const n = ctx.createBufferSource(); n.buffer = noise(); n.loop = true; n.connect(f); n.start(t); n.stop(t + 0.03);
+    tone('square', 440, 220, t, 0.02, 0.1, 0.005, mute);
+    tone('sine', 440, 440, t, 0.02, 0.1, 0.005, f);
+  } catch (e) { /* 소리 없이 진행 */ }
 }
 // 엔벨로프 게인 노드: 0 -> peak(att초) -> 0(dur초에 지수 감쇠)
 function env(t, peak, att, dur, out = sfxGain) {
@@ -313,7 +333,7 @@ function synthJingle(kind, t, out) {
 }
 
 export function playSynth(name, opts = {}) {
-  if (!ctx || muted || !sfxGain || !SYNTH[name] || ctx.state !== 'running') return;
+  if (hold || !ctx || muted || !sfxGain || !SYNTH[name] || ctx.state !== 'running') return;
   try {
     SYNTH[name](ctx.currentTime + (opts.delay || 0), opts);
     synthStats.calls[name] = (synthStats.calls[name] || 0) + 1;
@@ -346,7 +366,7 @@ export function setMusicMode(mode) {
 export function playJingle(kind) {
   stopJingle();
   const j = JINGLES[kind], buf = jingleBufs[kind];
-  if (!ctx || !musicGain || muted || !j || ctx.state !== 'running') return false;
+  if (hold || !ctx || !musicGain || muted || !j || ctx.state !== 'running') return false;
   if (!buf) return jingleFailed[kind] ? playSynthJingle(kind, j) : false; // 파일을 못 읽었을 때만 합성 징글
   try {
     const src = ctx.createBufferSource();

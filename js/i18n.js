@@ -1,14 +1,14 @@
 // 언어(한국어/영어) 사전과 도우미. 기본값은 navigator.language(ko*이면 한국어, 아니면 영어)이고 선택은 localStorage('boom-lang')에 저장한다
 // (저장소가 막힌 환경에서는 storage.js가 메모리에만 보관). index.html의 한국어 문구는 그대로 두고, data-i18n 속성이 붙은 요소만 영어일 때 사전 값으로 바꾼다
 // 사용법: t('키', { 값 }) — JS에서 쓰는 문구. applyDom() — data-i18n(텍스트) · data-i18n-html(서식 포함) · data-i18n-aria · data-i18n-title 속성을 가진 요소를 바꾼다
-import { local } from './storage.js?v=2026111041';
+import { local } from './storage.js?v=2026111042';
 
 const KEY = 'boom-lang';
 export const LANGS = ['ko', 'en'];
 
 // ---------- 한국어: JS가 만드는 문구만 (정적 문구는 index.html 원문이 한국어 원본) ----------
 const KO = {
-  'load.text': '불러오는 중...', 'load.count': '{a} / {b}', 'load.sounds': '일부 소리를 불러오지 못했어요', 'load.images': '일부 그림을 불러오지 못했어요',
+  'load.text': '불러오는 중...', 'load.prep': '첫 경기 준비 중...', 'load.count': '{a} / {b}', 'load.sounds': '일부 소리를 불러오지 못했어요', 'load.images': '일부 그림을 불러오지 못했어요',
   'load.fail': '에셋을 불러오지 못했습니다: {msg}', 'load.chars': '캐릭터를 불러오는 중...',
   'ver.stale': '{v} (페이지 {h}와 다름 - 새로고침하세요)', 'ver.none': '없음',
   'team.0': '파랑 팀', 'team.1': '빨강 팀', 'team.short.0': '파랑', 'team.short.1': '빨강', 'who.me': '나', 'who.ai': 'AI',
@@ -56,7 +56,7 @@ const KO = {
 // ---------- English: 정적 문구(data-i18n 키)와 JS 문구 모두 ----------
 const EN = {
   // 로딩·공통
-  'load.text': 'Loading...', 'load.count': '{a} / {b}', 'load.sounds': 'Some sounds are unavailable', 'load.images': 'Some images are unavailable',
+  'load.text': 'Loading...', 'load.prep': 'Warming up the first match...', 'load.count': '{a} / {b}', 'load.sounds': 'Some sounds are unavailable', 'load.images': 'Some images are unavailable',
   'load.fail': 'Could not load assets: {msg}', 'load.chars': 'Loading characters...',
   'ver.stale': '{v} (differs from page {h} - please reload)', 'ver.none': 'none',
   'team.0': 'Blue Team', 'team.1': 'Red Team', 'team.short.0': 'Blue', 'team.short.1': 'Red', 'who.me': 'You', 'who.ai': 'AI',
