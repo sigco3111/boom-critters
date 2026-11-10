@@ -5,18 +5,22 @@ const NAMES = ['explosion', 'fire', 'land', 'step', 'hit', 'select', 'win', 'los
   'sea_cannon', 'sea_boom', 'sea_boom_big', 'sea_boom_small', 'sea_splash'];
 const MUSIC_URL = 'assets/music/enchanted-festival-loop.ogg';
 const MUSIC_LEVEL = { menu: 0.7, match: 1, result: 0.3 }; // 화면별 음악 배율
-const MUSIC_VOL = 0.45, SFX_VOL = 0.7;
 
 let ctx = null, sfxGain = null, musicGain = null, duck = null, loading = null;
 const buffers = {};
 let music = { buf: null, src: null, want: false, mode: 'menu' };
 let muted = false;
-try { muted = localStorage.getItem('boom-muted') === '1'; } catch (e) { /* ignore */ }
+const vols = { music: 0.5, sfx: 0.7 }; // 0~1, localStorage('boom-volumes')에 저장
+try {
+  muted = localStorage.getItem('boom-muted') === '1';
+  const v = JSON.parse(localStorage.getItem('boom-volumes') || '{}');
+  for (const k of ['music', 'sfx']) if (Number.isFinite(v[k])) vols[k] = Math.min(1, Math.max(0, v[k]));
+} catch (e) { /* ignore */ }
 
 const applyGains = () => {
   if (!ctx) return;
-  sfxGain.gain.value = muted ? 0 : SFX_VOL;
-  musicGain.gain.value = muted ? 0 : MUSIC_VOL;
+  sfxGain.gain.value = muted ? 0 : vols.sfx;
+  musicGain.gain.value = muted ? 0 : vols.music;
 };
 
 async function loadBuffer(url) {
@@ -79,6 +83,14 @@ export function setMusicMode(mode) {
 }
 export function musicInfo() {
   return { ctx: ctx && ctx.state, sfxLoaded: Object.keys(buffers).length, loaded: !!music.buf, playing: !!music.src, mode: music.mode, duck: duck && duck.gain.value, music: musicGain && musicGain.gain.value, sfx: sfxGain && sfxGain.gain.value, muted };
+}
+
+export function getVolumes() { return { ...vols }; }
+// kind: 'music' | 'sfx', v: 0~1
+export function setVolume(kind, v) {
+  vols[kind] = Math.min(1, Math.max(0, v));
+  try { localStorage.setItem('boom-volumes', JSON.stringify(vols)); } catch (e) { /* ignore */ }
+  applyGains();
 }
 
 export function setMuted(m) {

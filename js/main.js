@@ -36,6 +36,9 @@ let current = { mode: 'quick' };   // 현재/마지막 매치: { mode: 'quick'|'
 const weaponBtns = [1, 2, 3, 4, 5].map((n) => $('bW' + n));
 const stars = (n) => '★'.repeat(n) + '☆'.repeat(3 - n);
 const show = (id, on = true) => $(id).classList.toggle('hidden', !on);
+// 설정·크레딧·도움말 같은 모달이 열려 있으면 경기를 멈추고 게임 키 입력을 막음
+let modalOpen = false;
+const MODALS = ['settingsScreen'];
 
 function showResult(winner) {
   setTimeout(() => {
@@ -138,16 +141,39 @@ function setup(sprites) {
   game.onWave = (n) => { if (progress.recordEndless(n)) endlessRecord = true; };
   goStart();
 
-  // 음소거
+  // 음소거 + 설정 패널(음악/효과음 볼륨, localStorage 저장)
   const muteBtn = $('muteBtn');
-  const refreshMute = () => { muteBtn.textContent = audio.isMuted() ? '🔇 소리 꺼짐' : '🔊 소리 켜짐'; };
+  const refreshMute = () => {
+    muteBtn.textContent = audio.isMuted() ? '🔇 소리 꺼짐' : '🔊 소리 켜짐';
+    $('muteToggle').textContent = audio.isMuted() ? '꺼짐 (누르면 켜기)' : '켜짐 (누르면 끄기)';
+  };
   muteBtn.addEventListener('click', () => { audio.initAudio(); audio.setMuted(!audio.isMuted()); refreshMute(); });
+  $('muteToggle').addEventListener('click', () => muteBtn.click());
+  const vols = audio.getVolumes();
+  for (const [kind, id] of [['music', 'musicVol'], ['sfx', 'sfxVol']]) {
+    const input = $(id), out = $(id + 'Out');
+    input.value = Math.round(vols[kind] * 100); out.textContent = input.value + '%';
+    input.addEventListener('input', () => { audio.initAudio(); audio.setVolume(kind, input.value / 100); out.textContent = input.value + '%'; });
+    if (kind === 'sfx') input.addEventListener('change', () => audio.play('sea_boom_small', { vol: 0.8 })); // 조절 후 미리 듣기
+  }
   refreshMute();
+  const openModal = (id) => {
+    modalOpen = true; show(id); $('controls').inert = true;
+    for (const n in k) k[n] = false; game.releaseCharge();
+  };
+  const closeModal = (id) => { show(id, false); modalOpen = MODALS.some((m) => !$(m).classList.contains('hidden')); $('controls').inert = modalOpen; };
+  $('gearBtn').addEventListener('click', () => { audio.play('select'); openModal('settingsScreen'); });
+  $('settingsCloseBtn').addEventListener('click', () => { audio.play('select'); closeModal('settingsScreen'); });
 
   // 키보드
   const map = { KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
   window.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (modalOpen) { // 모달이 열려 있으면 게임 키 대신 M(음소거)·Esc(닫기)만 처리
+      if (e.code === 'KeyM' && !e.repeat) muteBtn.click();
+      else if (e.code === 'Escape') MODALS.forEach((m) => !$(m).classList.contains('hidden') && closeModal(m));
+      return;
+    }
     if (map[e.code]) { k[map[e.code]] = true; e.preventDefault(); return; }
     if (e.repeat) { if (['Space', 'KeyW'].includes(e.code)) e.preventDefault(); return; }
     if (e.code === 'KeyW') { game.playerJump(); e.preventDefault(); }
@@ -156,6 +182,7 @@ function setup(sprites) {
     else if (e.code === 'KeyM') muteBtn.click();
   });
   window.addEventListener('keyup', (e) => {
+    if (modalOpen) return; // 모달 안의 버튼/슬라이더는 Space·방향키를 기본 동작대로 처리
     if (map[e.code]) { k[map[e.code]] = false; e.preventDefault(); }
     else if (e.code === 'Space') { game.releaseCharge(); e.preventDefault(); }
   });
@@ -192,7 +219,7 @@ function setup(sprites) {
     const dt = Math.min(0.033, (now - last) / 1000);
     last = now;
     try {
-      game.update(dt);
+      if (!modalOpen) game.update(dt);
       game.draw(g);
     } catch (err) { console.error(err); }
     // 무기 버튼 상태 표시
