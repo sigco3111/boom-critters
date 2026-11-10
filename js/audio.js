@@ -3,10 +3,13 @@
 // 음악: Enchanted Festival by Matthew Pablo (CC-BY 3.0) — CREDITS.md 참고
 // 결과 화면 징글: Kenney Music Jingles (CC0) — 음악 볼륨·음소거를 따르고, 재생하는 동안 배경음악을 낮춘다
 // 번개·공습·수류탄 카운트다운·치유 효과음은 파일 없이 Web Audio(노이즈·오실레이터)로 합성 — 모두 sfxGain을 거치므로 효과음 볼륨·음소거를 따른다
-import { local } from './storage.js?v=2026111035';
+// OGG를 디코드하지 못하는 기기(구형 iOS Safari 등): 음악은 원곡 MP3(assets/music/enchanted-festival.mp3)로 대체하고,
+// 효과음·결과 징글은 파일 없이 합성한 소리(FALLBACK)로 대체한다 — 효과음은 sfxGain, 징글은 musicGain을 거치므로 볼륨·음소거를 그대로 따른다
+import { local } from './storage.js?v=2026111036';
 const NAMES = ['explosion', 'fire', 'land', 'step', 'hit', 'select', 'win', 'lose', 'tick', 'switch',
   'sea_cannon', 'sea_boom', 'sea_boom_big', 'sea_boom_small', 'sea_splash'];
 const MUSIC_URL = 'assets/music/enchanted-festival-loop.ogg';
+const MUSIC_URL_MP3 = 'assets/music/enchanted-festival.mp3'; // 원곡 전체(약 2분 6초) — OGG를 못 읽을 때만 받는다
 const MUSIC_LEVEL = { menu: 0.7, match: 1, result: 0.3 }; // 화면별 음악 배율
 // 결과 화면 징글 (승리: 스틸 드럼이 올라가는 밝은 음 / 패배: 피치카토가 반음씩 내려오는 낮은 음). gain은 파일 음량 차이를 맞추는 값
 const JINGLES = { win: { url: 'assets/music/jingle-win.ogg', gain: 1.0 }, lose: { url: 'assets/music/jingle-lose.ogg', gain: 1.5 } };
@@ -16,7 +19,23 @@ let ctx = null, sfxGain = null, musicGain = null, duck = null, loading = null;
 const buffers = {}, jingleBufs = {};
 let jingle = { src: null, gain: null, timer: 0 };
 const jingleStats = { played: {}, errors: 0, lastError: '' };
-let music = { buf: null, src: null, want: false, mode: 'menu' };
+let music = { buf: null, src: null, want: false, mode: 'menu', format: '' };
+const sfxFailed = {}, jingleFailed = {}; // 파일을 못 받았거나 디코드에 실패한 이름 -> 합성 대체음을 쓴다
+const fallbackStats = { sfx: {}, jingle: {}, errors: 0, lastError: '' };
+// 형식 지원 여부 (canPlayType: '' 이면 미지원). 최종 판단은 decodeAudioData 성공 여부
+function detectFormats() {
+  const f = { ogg: false, mp3: false, wav: false };
+  try {
+    const a = document.createElement('audio');
+    if (a && a.canPlayType) {
+      f.ogg = !!a.canPlayType('audio/ogg; codecs="vorbis"');
+      f.mp3 = !!a.canPlayType('audio/mpeg');
+      f.wav = !!a.canPlayType('audio/wav');
+    }
+  } catch (e) { f.ogg = f.mp3 = f.wav = false; }
+  return f;
+}
+let formats = { ogg: true, mp3: true, wav: true }; // initAudio에서 실제 값으로 갱신
 let muted = false;
 const vols = { music: 0.5, sfx: 0.7 }; // 0~1, localStorage('boom-volumes')에 저장
 try {
@@ -71,6 +90,19 @@ export function unlock() {
   if (ctx && ctx.state === 'running') startMusic(); else music.want = true;
 }
 
+// 배경음악: OGG 지원이면 OGG(루프 편집본), 아니면 MP3(원곡)를 먼저 시도하고 하나가 실패하면 다른 쪽으로. 둘 다 안 되면 음악 없이 진행
+async function loadMusic() {
+  const order = formats.ogg ? [MUSIC_URL, MUSIC_URL_MP3] : [MUSIC_URL_MP3, MUSIC_URL];
+  for (const url of order) {
+    try {
+      music.buf = await loadBuffer(url);
+      music.format = url.endsWith('.mp3') ? 'mp3' : 'ogg';
+      if (music.want) startMusic();
+      return;
+    } catch (e) { /* 다음 형식으로 */ }
+  }
+}
+
 export function initAudio() {
   if (loading) { wake(); return loading; }
   loading = (async () => {
@@ -89,10 +121,15 @@ export function initAudio() {
           if (document.hidden) { const p = ctx.suspend(); if (p && p.catch) p.catch(() => {}); } else wake();
         } catch (e) { /* 무시 */ }
       });
-      loadBuffer(MUSIC_URL).then((b) => { music.buf = b; if (music.want) startMusic(); }).catch(() => { /* 음악 없이 진행 */ });
-      for (const k of Object.keys(JINGLES)) loadBuffer(JINGLES[k].url).then((b) => { jingleBufs[k] = b; }).catch(() => { /* 징글 없이 진행 */ });
+      formats = detectFormats();
+      loadMusic();
+      for (const k of Object.keys(JINGLES)) {
+        const fail = () => { jingleFailed[k] = true; }; // 징글 파일 없음 -> 합성 징글
+        if (!formats.ogg) fail(); else loadBuffer(JINGLES[k].url).then((b) => { jingleBufs[k] = b; }).catch(fail);
+      }
       await Promise.all(NAMES.map(async (n) => {
-        try { buffers[n] = await loadBuffer(`assets/sfx/${n}.ogg`); } catch (e) { /* 디코드 실패는 무시 (소리 없이 진행) */ }
+        if (!formats.ogg) { sfxFailed[n] = true; return; } // OGG 미지원: 받지 않고 바로 합성음 사용
+        try { buffers[n] = await loadBuffer(`assets/sfx/${n}.ogg`); } catch (e) { sfxFailed[n] = true; } // 디코드 실패 -> 합성음
       }));
     } catch (e) { ctx = null; }
   })();
@@ -100,7 +137,8 @@ export function initAudio() {
 }
 
 export function play(name, { rate = 1, vol = 1 } = {}) {
-  if (!ctx || muted || !buffers[name] || ctx.state !== 'running') return; // 잠긴 동안 쌓인 소리가 한꺼번에 터지지 않도록 건너뜀
+  if (!ctx || muted || ctx.state !== 'running') return; // 잠긴 동안 쌓인 소리가 한꺼번에 터지지 않도록 건너뜀
+  if (!buffers[name]) { if (sfxFailed[name]) playFallback(name, rate, vol); return; } // 아직 받는 중이면 건너뛰고, 못 받았으면 합성음
   try {
   const src = ctx.createBufferSource();
   src.buffer = buffers[name];
@@ -123,20 +161,20 @@ function noise() { // 1초짜리 화이트 노이즈 버퍼 (한 번만 만들�
   return noiseBuf;
 }
 // 엔벨로프 게인 노드: 0 -> peak(att초) -> 0(dur초에 지수 감쇠)
-function env(t, peak, att, dur) {
+function env(t, peak, att, dur, out = sfxGain) {
   const g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + att);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  g.connect(sfxGain);
+  g.connect(out);
   return g;
 }
-function tone(type, f0, f1, t, dur, peak, att = 0.01) {
+function tone(type, f0, f1, t, dur, peak, att = 0.01, out = sfxGain) {
   const o = ctx.createOscillator();
   o.type = type;
   o.frequency.setValueAtTime(f0, t);
   if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
-  o.connect(env(t, peak, att, dur));
+  o.connect(env(t, peak, att, dur, out));
   o.start(t); o.stop(t + dur + 0.05);
 }
 const SYNTH = {
@@ -181,6 +219,78 @@ const SYNTH = {
     });
   },
 };
+// ---------- OGG를 못 읽을 때 쓰는 합성 대체음 ----------
+// 필터 엔벨로프 노이즈 버스트: 필터 주파수가 f0 -> f1로 지수 변화하고 진폭은 att초에 peak까지 올랐다가 dur초에 걸쳐 사라진다
+function burst(t, { dur, f0, f1 = f0, type = 'lowpass', q = 1, peak, att = 0.005, out = sfxGain }) {
+  const src = ctx.createBufferSource(); src.buffer = noise(); src.loop = true;
+  const f = ctx.createBiquadFilter(); f.type = type; f.Q.value = q;
+  f.frequency.setValueAtTime(f0, t);
+  if (f1 !== f0) f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  src.connect(f); f.connect(env(t, peak, att, dur, out));
+  src.start(t, Math.random() * 0.4); src.stop(t + dur + 0.05);
+}
+// 아르페지오: 음을 step초 간격으로 쌓는다 (마지막 음은 lastDur초). 사인 + 한 옥타브 위 삼각파 배음
+function arp(t, notes, step, dur, lastDur, peak, type, out) {
+  notes.forEach((f, i) => {
+    const s = t + i * step, d = i === notes.length - 1 ? lastDur : dur;
+    tone(type, f, f, s, d, peak, 0.01, out);
+    tone('sine', f * 2, f * 2, s, d * 0.6, peak * 0.2, 0.01, out);
+  });
+}
+const WIN_NOTES = [523.25, 659.25, 783.99, 1046.5, 1318.5];    // 도-미-솔-도-미 (올라감)
+const LOSE_NOTES = [392, 369.99, 349.23, 329.63, 261.63];      // 솔-파#-파-미-도 (내려감)
+// 폭발 계열: 필터가 닫히는 노이즈 + 아래로 떨어지는 저음. size는 길이 배율
+const boom = (size, low) => (t, { vol, rate }) => {
+  const d = 0.55 * size / rate;
+  burst(t, { dur: d, f0: 2200 * rate, f1: 110 * rate, q: 0.9, peak: 0.9 * vol });
+  tone('sine', low * rate, 32 * rate, t, d * 0.8, 0.8 * vol, 0.004);
+};
+const FALLBACK = {
+  explosion: boom(1.1, 120),
+  sea_boom: boom(1.3, 100),
+  sea_boom_big: boom(1.9, 80),
+  sea_boom_small: boom(0.8, 140),
+  sea_cannon(t, { vol, rate }) { // 대포 발사: 짧고 센 노이즈 + 낮은 쿵
+    burst(t, { dur: 0.32 / rate, f0: 3000 * rate, f1: 200 * rate, q: 1.2, peak: 0.7 * vol });
+    tone('sine', 170 * rate, 45 * rate, t, 0.3 / rate, 0.9 * vol, 0.003);
+  },
+  fire(t, { vol, rate }) { // 발사 휙: 밴드패스가 올라가는 노이즈 + 톱니파 하강
+    burst(t, { dur: 0.25 / rate, f0: 500 * rate, f1: 2400 * rate, type: 'bandpass', q: 1.5, peak: 0.4 * vol, att: 0.03 });
+    tone('sawtooth', 320 * rate, 90 * rate, t, 0.16 / rate, 0.14 * vol, 0.003);
+  },
+  sea_splash(t, { vol, rate }) { // 물보라: 밴드패스 노이즈가 서서히 커졌다 사라짐 + 위쪽 쉬익
+    burst(t, { dur: 0.55 / rate, f0: 450 * rate, f1: 1900 * rate, type: 'bandpass', q: 0.8, peak: 0.6 * vol, att: 0.07 });
+    burst(t, { dur: 0.35 / rate, f0: 3500, type: 'highpass', peak: 0.15 * vol, att: 0.05 });
+  },
+  land(t, { vol, rate }) {
+    tone('sine', 95 * rate, 50 * rate, t, 0.13, 0.55 * vol, 0.003);
+    burst(t, { dur: 0.08, f0: 700, f1: 250, peak: 0.3 * vol, att: 0.002 });
+  },
+  step(t, { vol, rate }) { burst(t, { dur: 0.05, f0: 900 * rate, f1: 400 * rate, peak: 0.22 * vol, att: 0.002 }); },
+  hit(t, { vol, rate }) {
+    burst(t, { dur: 0.1, f0: 1300 * rate, f1: 500 * rate, type: 'bandpass', q: 1.2, peak: 0.5 * vol, att: 0.002 });
+    tone('square', 230 * rate, 110 * rate, t, 0.09, 0.12 * vol, 0.002);
+  },
+  select(t, { vol, rate }) { tone('triangle', 660 * rate, 880 * rate, t, 0.09, 0.28 * vol, 0.005); },
+  switch(t, { vol, rate }) { tone('square', 520 * rate, 390 * rate, t, 0.05, 0.12 * vol, 0.002); tone('square', 390 * rate, 520 * rate, t + 0.06, 0.05, 0.1 * vol, 0.002); },
+  tick(t, { vol, rate }) { tone('square', 1500 * rate, 1200 * rate, t, 0.035, 0.12 * vol, 0.002); },
+  win(t, { vol }) { arp(t, WIN_NOTES.slice(0, 4), 0.08, 0.2, 0.4, 0.22 * vol, 'triangle', sfxGain); },
+  lose(t, { vol }) { arp(t, LOSE_NOTES.slice(0, 4), 0.13, 0.25, 0.5, 0.22 * vol, 'triangle', sfxGain); },
+};
+function playFallback(name, rate, vol) {
+  const fx = FALLBACK[name];
+  if (!fx) return;
+  try {
+    fx(ctx.currentTime, { rate: Math.min(4, Math.max(0.25, rate || 1)), vol });
+    fallbackStats.sfx[name] = (fallbackStats.sfx[name] || 0) + 1;
+  } catch (e) { fallbackStats.errors++; fallbackStats.lastError = `${name}: ${e && e.message}`; }
+}
+// 합성 결과 징글 (musicGain 연결): 승리는 올라가는 아르페지오, 패배는 내려가는 아르페지오. 반환: 길이(초)
+function synthJingle(kind, t, out) {
+  if (kind === 'win') { arp(t, WIN_NOTES, 0.1, 0.35, 0.8, 0.3, 'triangle', out); return 0.4 + 0.8; }
+  arp(t, LOSE_NOTES, 0.2, 0.45, 1.0, 0.3, 'triangle', out); return 0.8 + 1.0;
+}
+
 export function playSynth(name, opts = {}) {
   if (!ctx || muted || !sfxGain || !SYNTH[name] || ctx.state !== 'running') return;
   try {
@@ -215,7 +325,8 @@ export function setMusicMode(mode) {
 export function playJingle(kind) {
   stopJingle();
   const j = JINGLES[kind], buf = jingleBufs[kind];
-  if (!ctx || !musicGain || muted || !j || !buf || ctx.state !== 'running') return false;
+  if (!ctx || !musicGain || muted || !j || ctx.state !== 'running') return false;
+  if (!buf) return jingleFailed[kind] ? playSynthJingle(kind, j) : false; // 파일을 못 읽었을 때만 합성 징글
   try {
     const src = ctx.createBufferSource();
     src.buffer = buf;
@@ -232,6 +343,21 @@ export function playJingle(kind) {
     return true;
   } catch (e) { jingleStats.errors++; jingleStats.lastError = `${kind}: ${e && e.message}`; jingle = { src: null, gain: null, timer: 0 }; return false; }
 }
+function playSynthJingle(kind, j) {
+  try {
+    const g = ctx.createGain();
+    g.gain.value = j.gain;
+    g.connect(musicGain);
+    const t = ctx.currentTime;
+    duck.gain.cancelScheduledValues(t);
+    duck.gain.setTargetAtTime(JINGLE_DUCK, t, 0.08);
+    const len = synthJingle(kind, t + 0.05, g);
+    const src = { stop() { /* 노트는 스스로 끝남 */ }, onended: null };
+    jingle = { src, gain: g, timer: setTimeout(() => stopJingle(), (len + 0.5) * 1000) };
+    fallbackStats.jingle[kind] = (fallbackStats.jingle[kind] || 0) + 1;
+    return true;
+  } catch (e) { fallbackStats.errors++; fallbackStats.lastError = `jingle ${kind}: ${e && e.message}`; jingle = { src: null, gain: null, timer: 0 }; return false; }
+}
 // 진행 중인 징글을 멈추고 배경음악 배율을 현재 화면 모드로 되돌림
 export function stopJingle() {
   const { src, gain, timer } = jingle;
@@ -242,7 +368,7 @@ export function stopJingle() {
   try { if (duck) duck.gain.setTargetAtTime(MUSIC_LEVEL[music.mode], ctx.currentTime, 0.4); } catch (e) { /* 무시 */ }
 }
 export function musicInfo() {
-  return { ctx: ctx && ctx.state, sfxLoaded: Object.keys(buffers).length, loaded: !!music.buf, playing: !!music.src, mode: music.mode, duck: duck && duck.gain.value, music: musicGain && musicGain.gain.value, sfx: sfxGain && sfxGain.gain.value, muted, synth: synthStats, jingles: { loaded: Object.keys(jingleBufs), playing: !!jingle.src, ...jingleStats } };
+  return { ctx: ctx && ctx.state, sfxLoaded: Object.keys(buffers).length, loaded: !!music.buf, format: music.format, formats, fallback: { failedSfx: Object.keys(sfxFailed), failedJingles: Object.keys(jingleFailed), ...fallbackStats }, playing: !!music.src, mode: music.mode, duck: duck && duck.gain.value, music: musicGain && musicGain.gain.value, sfx: sfxGain && sfxGain.gain.value, muted, synth: synthStats, jingles: { loaded: Object.keys(jingleBufs), playing: !!jingle.src, ...jingleStats } };
 }
 
 export function getVolumes() { return { ...vols }; }
