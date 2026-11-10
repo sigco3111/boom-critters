@@ -302,5 +302,17 @@ body.touch.menu #controls { visibility: hidden; }
   body.touch #tutorialScreen button { font-size: 16px; padding: 8px 14px; }
 }
 
-/* ---------- 캐릭터 특성 정보 줄(세로 폰 HUD) ---------- */
+/* ---------- 캐릭터 특성 정보 줄(세로 폰 HUD) / 결과 화면 통계 ---------- */
 #hudUnit { grid-area: un; text-align: center; color: #ffe27a; min-height: 18px; font-size: 13px; }
+.rstats { display: flex; flex-wrap: wrap; justify-content: center; gap: calc(1 * var(--cq)); width: 92%; }
+.rstats .rs { flex: 0 1 calc(14 * var(--cq)); min-width: calc(11 * var(--cq)); padding: calc(0.6 * var(--cq)) calc(1 * var(--cq)); background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 10px; }
+.rstats .rs:nth-child(4) { flex-basis: calc(25 * var(--cq)); }
+.rstats .rk { display: block; font-size: calc(1.5 * var(--cq)); color: #9fb8d0; }
+.rstats .rv { display: block; font-size: calc(2.9 * var(--cq)); line-height: 1.2; font-variant-numeric: tabular-nums; }
+.rstats small { display: block; min-height: 1.3em; font-size: calc(1.4 * var(--cq)); color: #cfe3f7; }
+.rstats small.newbest { color: #ffd24a; font-weight: 800; }
+body.touch .rstats .rs { flex-basis: 96px; min-width: 88px; padding: 6px 8px; }
+body.touch .rstats .rs:nth-child(4) { flex-basis: 180px; }
+body.touch .rstats .rk { font-size: 12px; }
+body.touch .rstats .rv { font-size: 20px; }
+body.touch .rstats small { font-size: 12px; }

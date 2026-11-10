@@ -6,7 +6,7 @@
   <title>붐 크리터스 - 포격 웹게임</title>
   <meta name="description" content="웜즈·포트리스 스타일 싱글플레이 포격 웹게임">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=2026111025">
+  <link rel="stylesheet" href="style.css?v=2026111026">
 </head>
 <body>
   <div id="app">
@@ -61,6 +61,7 @@
         <h1 id="resultTitle"></h1>
         <p id="resultStars" class="stars hidden"></p>
         <p id="resultSub" class="sub"></p>
+        <div id="resultStats" class="rstats hidden"></div>
         <div class="row">
           <button type="button" id="nextBtn" class="hidden">다음 스테이지</button>
           <button type="button" id="againBtn">다시 하기</button>
@@ -122,6 +123,7 @@
             <table>
               <tr><th>빠른 대전</th><td>난이도(쉬움·보통·어려움)를 골라 3 vs 3 단판 승부</td></tr>
               <tr><th>스테이지</th><td>10개 스테이지, 승리하면 다음이 열림. 생존 수에 따라 별 1~3개. 스테이지 7부터는 적이 4마리라서 우리 팀에게 수류탄 +1(4발)·번개 +1(3발)이 주어짐</td></tr>
+              <tr><th>결과 화면</th><td>발사 횟수 · 준 피해 · 받은 피해 · 사용한 무기 · 우리 턴 수를 보여 줍니다. 스테이지는 항목별 최고 기록을 저장하고 갱신하면 '신기록!'이 뜹니다</td></tr>
               <tr><th>무한</th><td>웨이브가 이어지며 적이 늘어남. 전멸하면 종료, 최고 웨이브 기록 저장</td></tr>
             </table>
           </section>
@@ -159,7 +161,7 @@
           </ul>
           <p class="note">CC0 에셋은 표기 의무가 없지만 감사의 뜻으로 적습니다. 게임 코드는 MIT 라이선스입니다. 지형·스테이지 테마 배경(초원·사막·설원·밤)·이펙트·무기 아이콘은 외부 이미지 없이 캔버스 코드로 직접 그렸습니다.</p>
         </div>
-        <p class="ver">버전 <span id="verHtml">2026111025</span> · 스크립트 <span id="verJs">-</span></p>
+        <p class="ver">버전 <span id="verHtml">2026111026</span> · 스크립트 <span id="verJs">-</span></p>
         <button type="button" id="creditsCloseBtn">닫기</button>
       </div>
 
@@ -216,6 +218,6 @@
       </div>
     </div>
   </div>
-  <script type="module" src="js/main.js?v=2026111025"></script>
+  <script type="module" src="js/main.js?v=2026111026"></script>
 </body>
 </html>
