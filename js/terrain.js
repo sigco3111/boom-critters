@@ -37,12 +37,16 @@ function makeDirtTile(rnd, tile) {
 }
 
 export class Terrain {
-  constructor(seed, theme) {
+  // headless=true: 캔버스 없이 높이맵만으로 충돌 배열을 만든다 (window.__sim 시뮬레이션용, 렌더링 불가)
+  constructor(seed, theme, headless = false) {
     this.theme = theme || DEFAULT_THEME;
-    this.canvas = document.createElement('canvas');
-    this.canvas.width = W; this.canvas.height = H;
-    this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+    this.headless = headless;
     this.alpha = new Uint8Array(W * H);
+    if (!headless) {
+      this.canvas = document.createElement('canvas');
+      this.canvas.width = W; this.canvas.height = H;
+      this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+    }
     this.generate(seed);
   }
 
@@ -61,6 +65,10 @@ export class Terrain {
       h[x] = Math.max(215, Math.min(458, y)); // 최고점 215: 이름표가 상단 HUD(바람·시드 표시) 아래에 머문다
     }
     this.heights = h;
+    if (this.headless) {
+      for (let x = 0; x < W; x++) for (let y = Math.ceil(h[x]); y < H; y++) this.alpha[y * W + x] = 255;
+      return;
+    }
     const g = this.ctx;
     g.clearRect(0, 0, W, H);
     g.globalCompositeOperation = 'source-over';
@@ -119,6 +127,12 @@ export class Terrain {
   }
 
   crater(x, y, r) {
+    if (this.headless) {
+      const x0 = Math.max(0, Math.floor(x - r)), x1 = Math.min(W - 1, Math.ceil(x + r));
+      const y0 = Math.max(0, Math.floor(y - r)), y1 = Math.min(H - 1, Math.ceil(y + r));
+      for (let j = y0; j <= y1; j++) for (let i = x0; i <= x1; i++) if ((i - x) * (i - x) + (j - y) * (j - y) <= r * r) this.alpha[j * W + i] = 0;
+      return;
+    }
     const g = this.ctx;
     g.save();
     g.globalCompositeOperation = 'source-atop';

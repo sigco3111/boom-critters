@@ -1,7 +1,7 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111023';
-import * as audio from './audio.js?v=2026111023';
-import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111023';
+import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111024';
+import * as audio from './audio.js?v=2026111024';
+import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx } from './themes.js?v=2026111024';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -62,6 +62,10 @@ export const STAGE_COUNT = 10;
 const ERR_A = [9, 1], ERR_P = [18, 2];
 // AI가 쓸 수 있는 특수 무기(무기 번호 -> 최소 level): 수류탄 2, 번개 3, 화염탄 4, 공습 4. level이 없는 빠른 대전은 모두 사용
 const AI_UNLOCK = { 2: 2, 3: 3, 4: 4, 5: 4 };
+const BONUS_LEVEL = 7, BONUS_GRENADE = 1, BONUS_BOLT = 1; // 우리 팀 보너스 탄약: 적 4마리 구간(level 7+)에서 수류탄 +1, 번개 +1
+// 스테이지 모드 AI 오차 [각도 오차 °, 파워 오차]: window.__sim 승률 측정으로 정한 값 (README "밸런스" 표). 스테이지 1은 AI가 거의 못 맞히고, 10은 어렵지만 숙련자는 이길 수 있다.
+// 지형마다 난이도가 달라 단순 선형이 아니다. 스테이지 1~3은 상위 6개 후보 중 무작위로 고르는(pick) 부정확한 조준
+const STAGE_AI = [null, [30, 60], [22, 44], [16, 32], [10, 20], [6.5, 13], [6, 12], [4.5, 9], [4, 8], [3.8, 7.6], [4.5, 9]];
 // 스테이지 s(1~10): 고정 시드, 적 수 2→4(1~3: 2마리, 4~6: 3마리, 7~10: 4마리), 바람 범위 ±(3+s), AI level = s
 export function stageConfig(s) {
   return { mode: 'stage', stage: s, seed: 20240 + s * 7919, enemies: s <= 3 ? 2 : s <= 6 ? 3 : 4, windMax: 3 + s, level: s };
@@ -142,7 +146,12 @@ export class Game {
     this.airX = W / 2;          // 공습 목표 x (조준 마커)
     this.ammo = freshAmmo();    // 매치 시작 전에도 버튼 표시가 올바르도록
     this.stepTimer = 0;
+    this.headless = false;      // true면 렌더링 없이 계산만 (window.__sim)
+    this.sim = null;            // 시뮬레이션 설정: { skill: [팀0 AI 프로필 | null, ...] } — 있으면 해당 팀을 AI가 조작
   }
+
+  // 팀 t를 AI가 조작하는지 (기본: 팀 1만. 시뮬레이션에서는 팀 0도 AI 프로필로 조작)
+  isAI(t) { return t === 1 || !!(this.sim && this.sim.skill[t]); }
 
   // ---------- 매치 ----------
   // opts: { mode: 'quick'|'stage'|'endless', seed, enemies, windMax, level, stage, wave }
@@ -163,18 +172,25 @@ export class Game {
     this.angle = 45; this.power = 0; this.lastPower = 0; this.weapon = 0;
     // 팀별 무기 탄약 (무한 = Infinity, 비활성 무기는 0)
     this.airOk = this.level == null || this.level >= AI_UNLOCK[AIR_IDX];
-    this.ammo = freshAmmo(this.airOk);
+    this.ammo = this.initAmmo();
     this.charging = false; this.ai = null;
     this.banner = null;
     this.startTurn();
+  }
+
+  // 팀별 시작 탄약. 적이 4마리가 되는 level 7 이상(스테이지 7~10, 웨이브 5~)에서는 우리 팀(팀 0)에게 수류탄 +1, 번개 +1
+  initAmmo() {
+    const a = freshAmmo(this.airOk);
+    if (this.level != null && this.level >= BONUS_LEVEL) { a[0][2] += BONUS_GRENADE; a[0][3] += BONUS_BOLT; }
+    return a;
   }
 
   // 지형·배경·유닛을 새로 배치. carry가 있으면 그 팀0 유닛의 체력/생존을 이어받는다 (무한 모드 웨이브 전환)
   buildField(seed, enemies, carry, theme = themeForSeed(seed)) {
     this.seed = seed;
     this.theme = theme;
-    this.terrain = new Terrain(seed, theme);
-    this.bg = makeBackground(theme, seed);
+    this.terrain = new Terrain(seed, theme, this.headless);
+    this.bg = this.headless ? null : makeBackground(theme, seed);
     this.units = []; this.particles = []; this.floaters = []; this.proj = null;
     this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.turnNo = 0; this.air = null;
     const rng = mulberry32(seed ^ 0x5bd1e995), jit = () => (rng() * 2 - 1) * 25;
@@ -210,7 +226,7 @@ export class Game {
     this.wave = w; this.windMax = cfg.windMax; this.level = cfg.level;
     this.buildField((Math.random() * 1e9) | 0, cfg.enemies, carry);
     this.airOk = this.level == null || this.level >= AI_UNLOCK[AIR_IDX];
-    this.ammo = freshAmmo(this.airOk);
+    this.ammo = this.initAmmo();
     this.nextIdx = [0, 0]; this.turnTeam = 0; this.winner = null;
     this.angle = 45; this.power = 0; this.weapon = 0; this.charging = false; this.ai = null;
     this.startTurn();
@@ -449,7 +465,7 @@ export class Game {
     this.angle = 45;
     this.banner = { text: t === 0 ? `내 차례 - ${u.name}` : `상대 차례 - ${u.name}`, color: TEAMS[t].color, t: 0 };
     this.lastTick = 99;
-    this.ai = t === 1 ? { phase: 'think', t: 0, walks: 0, crateWalks: 0, fled: 0, tries: 0, total: 0, target: null } : null;
+    this.ai = this.isAI(t) ? { phase: 'think', t: 0, walks: 0, crateWalks: 0, fled: 0, tries: 0, total: 0, target: null } : null;
   }
 
   // ---------- 보급 상자 ----------
@@ -560,7 +576,7 @@ export class Game {
     return true;
   }
 
-  get isPlayerTurn() { return this.state === 'aim' && this.turnTeam === 0; }
+  get isPlayerTurn() { return this.state === 'aim' && !this.isAI(this.turnTeam); }
 
   // ---------- 플레이어 조작 ----------
   setWeapon(i) {
@@ -766,6 +782,10 @@ export class Game {
 
   // AI 오차 계수 (스테이지/웨이브 단계가 있으면 단계별, 없으면 난이도별)
   aiErr() {
+    const sk = this.sim && this.sim.skill[this.turnTeam]; // 시뮬레이션에서 AI가 조작하는 우리 팀의 숙련도 프로필
+    if (sk) return { a: sk.a, p: sk.p, pick: !!sk.pick };
+    if (this.sim && this.sim.err) return { ...this.sim.err }; // 시뮬레이션: 적 AI 오차를 직접 지정해 보는 실험용
+    if (this.mode === 'stage' && STAGE_AI[this.stage]) { const [a, p] = STAGE_AI[this.stage]; return { a, p, pick: this.stage <= 3 }; }
     if (this.level != null) return levelErr(this.level);
     const d = DIFF[this.difficulty] || DIFF.normal;
     return { a: d.a, p: d.p, pick: this.difficulty === 'easy' };
@@ -776,7 +796,7 @@ export class Game {
     const u = this.activeUnit;
     const facing = pt.x >= u.x ? 1 : -1;
     const grenade = weapon === 2, step = grenade ? 5 : 2.5;
-    const friends = this.units.filter((o) => o.alive && o.team === 1);
+    const friends = this.units.filter((o) => o.alive && o.team === u.team);
     const rad2 = WEAPONS[weapon].radius * 1.1;
     let best = null;
     const cands = [];
@@ -821,7 +841,7 @@ export class Game {
       }
       if (ang < 5 || ang > 88) continue;
       const tr = this.traceBolt(u, ang, f);
-      if (tr.target && tr.target.team === 0) out.push({ target: tr.target, angle: ang, facing: f });
+      if (tr.target && tr.target.team !== u.team) out.push({ target: tr.target, angle: ang, facing: f });
     }
     return out;
   }
@@ -829,12 +849,13 @@ export class Game {
   // 이번 사격의 무기·목표·각도·파워 결정
   // 번개(직선 사선 확보) > 화염탄(적 2명 이상이 60px 이내) > 수류탄(구덩이/지형 뒤 목표) > 대포/로켓
   aiDecide() {
-    const u = this.activeUnit, ai = this.ai, am = this.ammo[1];
-    const enemies = this.units.filter((o) => o.alive && o.team === 0);
+    const u = this.activeUnit, ai = this.ai, me = u.team, am = this.ammo[me], sk = this.sim && this.sim.skill[me];
+    const enemies = this.units.filter((o) => o.alive && o.team !== me);
     const pt = (e) => ({ x: e.x, y: e.y - BODY_CY });
     if (!enemies.length) return null;
     const hidden = enemies.filter((e) => this.aiHidden(u, e));
-    const can = (i) => am[i] > 0 && (this.level == null || this.level >= AI_UNLOCK[i]); // 낮은 스테이지/웨이브에서는 특수 무기 제한
+    // 낮은 스테이지/웨이브에서는 AI의 특수 무기 제한. 시뮬레이션 속 우리 팀은 level과 무관하게 탄약이 있으면 사용(basic이면 대포탄·로켓만)
+    const can = (i) => am[i] > 0 && (sk ? !sk.basic : this.level == null || this.level >= AI_UNLOCK[i]);
     if (can(AIR_IDX) && Math.random() < 0.85) { // 공습: 상대 유닛 2마리 이상이 가로 120px 안에 모여 있고 아군이 구역 근처에 없을 때
       let grp = null;
       for (const a of enemies) {
@@ -843,7 +864,7 @@ export class Game {
       }
       if (grp) {
         const e = this.aiErr(), cx = clamp((Math.min(...grp.map((o) => o.x)) + Math.max(...grp.map((o) => o.x))) / 2 + gauss() * e.a * 2, 20, W - 20);
-        const friendly = this.units.some((o) => o.alive && o.team === 1 && Math.abs(o.x - cx) < AIR_W / 2 + 10);
+        const friendly = this.units.some((o) => o.alive && o.team === me && Math.abs(o.x - cx) < AIR_W / 2 + 10);
         if (!friendly) return { weapon: AIR_IDX, facing: cx >= u.x ? 1 : -1, dist: 0, min: 0, target: grp[0], angle: this.angle, power: 0, x: cx };
       }
     }
@@ -993,11 +1014,12 @@ export class Game {
       this.timer -= dt;
       const sec = Math.ceil(this.timer);
       if (sec <= 5 && sec > 0 && sec !== this.lastTick) { this.lastTick = sec; audio.play('tick', { vol: 0.6 }); }
-      if (this.turnTeam === 0 && this.airMode) {
+      const human = !this.isAI(this.turnTeam);
+      if (human && this.airMode) {
         // 공습: 이동·각도 키(←→/AD, ↑↓와 화면 ◀▶·각도 버튼)가 목표 마커를 좌우로 움직인다
         const d = (this.keys.right || this.keys.up ? 1 : 0) - (this.keys.left || this.keys.down ? 1 : 0);
         if (d) this.airX = clamp(this.airX + d * 200 * dt, 20, W - 20);
-      } else if (this.turnTeam === 0) {
+      } else if (human) {
         if (this.charging) {
           this.power = Math.min(100, this.power + 100 * dt / 1.6);
         } else if (hu.grounded) {
