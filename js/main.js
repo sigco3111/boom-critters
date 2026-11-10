@@ -445,6 +445,46 @@ function setup(sprites) {
   $('gearBtn').addEventListener('click', () => { audio.play('select'); openModal('settingsScreen'); });
   $('settingsCloseBtn').addEventListener('click', () => { audio.play('select'); closeModal('settingsScreen'); });
 
+  // 작은 가로 화면(폭 700px 이하): 일시정지·설정·소리 버튼 3개가 이름표를 가리므로 메뉴 버튼 하나(#compactBtn)로 합치고, 누르면 작은 팝오버(#menuPop)에 세 항목을 보여 준다
+  // (CSS가 이 크기에서만 #compactBtn을 보여 주고 기존 3개 버튼을 숨김. 마크업이 없는 구버전 HTML이면 아무것도 하지 않음)
+  const compactBtn = $('compactBtn'), pop = $('menuPop');
+  const compactMQ = window.matchMedia('(orientation: landscape) and (max-width: 700px)');
+  const popItems = pop ? { pause: $('popPause'), settings: $('popSettings'), sound: $('popSound') } : null;
+  const popOpen = () => !!pop && !pop.classList.contains('hidden');
+  const closePop = (refocus = false) => {
+    if (!popOpen()) return;
+    pop.classList.add('hidden'); compactBtn.setAttribute('aria-expanded', 'false');
+    if (refocus) compactBtn.focus({ preventScroll: true });
+  };
+  const openPop = () => {
+    if (!pop || modalOpen) return;
+    pop.classList.remove('hidden'); compactBtn.setAttribute('aria-expanded', 'true');
+    const first = [popItems.pause, popItems.settings, popItems.sound].find((b) => !b.disabled);
+    if (first && document.body.classList.contains('kbd')) first.focus({ preventScroll: true });
+  };
+  if (compactBtn && pop) {
+    compactBtn.addEventListener('click', () => { audio.play('select'); if (popOpen()) closePop(); else openPop(); });
+    popItems.pause.addEventListener('click', () => { closePop(); pauseGame(); });
+    popItems.settings.addEventListener('click', () => { closePop(); $('gearBtn').click(); });
+    popItems.sound.addEventListener('click', () => { muteBtn.click(); closePop(); });
+    // 바깥을 누르면 닫힘, Esc로도 닫힘 (게임의 Esc=일시정지보다 먼저 처리)
+    document.addEventListener('pointerdown', (e) => { if (popOpen() && !pop.contains(e.target) && e.target !== compactBtn && !compactBtn.contains(e.target)) closePop(); }, true);
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Tab' || e.code === 'ArrowDown' || e.code === 'ArrowUp') document.body.classList.add('kbd');
+      if (e.code === 'Escape' && popOpen()) { closePop(true); e.stopImmediatePropagation(); e.preventDefault(); }
+    }, true);
+    window.addEventListener('pointerdown', () => document.body.classList.remove('kbd'), true);
+    compactMQ.addEventListener?.('change', () => closePop());
+  }
+  let popSoundLabel = '';
+  const compactTick = () => { // 매 프레임: 항목 상태 갱신, 메뉴 화면·모달이 뜨면 팝오버 닫기
+    if (!popItems) return;
+    popItems.pause.disabled = !canPause();
+    const t = audio.isMuted() ? '🔇 소리 켜기' : '🔊 소리 끄기';
+    if (t !== popSoundLabel) { popSoundLabel = t; popItems.sound.textContent = t; }
+    if (popOpen() && (modalOpen || !compactMQ.matches)) closePop();
+  };
+
   // 키보드
   const map = { KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
   window.addEventListener('keydown', (e) => {
@@ -565,6 +605,7 @@ function setup(sprites) {
       const pw = mine ? Math.round(game.power) + '%' : '0%';
       if (fireBtn.dataset.pw !== pw) { fireBtn.dataset.pw = pw; fireBtn.style.setProperty('--pw', pw); }
       pauseBtn.disabled = !canPause();
+      compactTick();
       const fl = game.airMode ? '공습 호출' : '발사 (꾹)';
       if (fireLabel.textContent !== fl) fireLabel.textContent = fl;
     }
