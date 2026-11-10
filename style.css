@@ -252,3 +252,6 @@ body.touch #pauseScreen > :first-child, body.touch #pauseScreen > :last-child { 
 /* ---------- 버전 표시 (크레딧 화면): 오래된 캐시를 쉽게 알아보도록 ---------- */
 .overlay .ver { margin: 0; font-size: max(12px, calc(1.4 * var(--cq))); color: #8fa8c0; text-align: center; font-variant-numeric: tabular-nums; }
 .overlay .ver .stale { color: #ff9c9c; font-weight: 700; }
+
+/* ---------- 결과·메뉴 화면: 세로 폰에서도 아래 터치 컨트롤이 비쳐 보이지 않게 숨김 ---------- */
+body.touch.menu #controls { visibility: hidden; }
