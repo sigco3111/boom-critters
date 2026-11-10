@@ -622,7 +622,7 @@ export class Game {
         g.beginPath(); g.ellipse(e.x, y0, rx, rx * 0.26, 0, 0, 6.283); g.stroke();
       }
       if (t < 0.4) { // 솟았다 가라앉는 물기둥
-        const u = t / 0.4, hgt = Math.sin(u * Math.PI) * 34 * k, wd = (7 + 5 * u) * k;
+        const u = t / 0.4, hgt = Math.sin(u * Math.PI) * 58 * k, wd = (8 + 6 * u) * k;
         g.globalAlpha = (1 - u * 0.7) * 0.85; g.fillStyle = 'rgba(235,246,255,1)';
         g.beginPath(); g.moveTo(e.x - wd, y0); g.quadraticCurveTo(e.x - wd * 0.5, y0 - hgt * 0.8, e.x, y0 - hgt); g.quadraticCurveTo(e.x + wd * 0.5, y0 - hgt * 0.8, e.x + wd, y0); g.closePath(); g.fill();
       }
@@ -630,11 +630,11 @@ export class Game {
       g.fillStyle = '#fff';
       for (let d = 0, nd = low ? 5 : 10; d < nd; d++) {
         const h1 = Math.sin(e.s + d * 91.7) * 43758.5453, h2 = Math.sin(e.s * 1.7 + d * 12.3) * 24634.634;
-        const vx = ((h1 - Math.floor(h1)) * 2 - 1) * 85 * k, vy = -(150 + (h2 - Math.floor(h2)) * 170) * Math.sqrt(k);
+        const vx = ((h1 - Math.floor(h1)) * 2 - 1) * 85 * k, vy = -(210 + (h2 - Math.floor(h2)) * 200) * Math.sqrt(k);
         const dy = vy * t + 350 * t * t; // 중력 700의 절반
         if (dy > 0) continue;
         g.globalAlpha = Math.min(1, (1 - t / 1.1) * 1.6);
-        g.beginPath(); g.arc(e.x + vx * t, y0 + dy, (1.6 + (d % 3) * 0.5) * Math.sqrt(k), 0, 6.283); g.fill();
+        g.beginPath(); g.arc(e.x + vx * t, y0 + dy, (2 + (d % 3) * 0.6) * Math.sqrt(k), 0, 6.283); g.fill();
       }
     }
     g.restore();
