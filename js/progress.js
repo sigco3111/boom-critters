@@ -1,6 +1,6 @@
 // 진행 상황 저장 (localStorage): 해금된 스테이지, 스테이지별 최고 별, 무한 모드 최고 기록
 // 저장소는 storage.js를 거치므로 localStorage가 막힌 환경에서도 이번 접속 동안은 메모리에 유지된다
-import { local } from './storage.js?v=2026111042';
+import { local } from './storage.js?v=2026111043';
 const KEY = 'boom-critters-progress-v1';
 export const STAGES = 10;
 
@@ -73,12 +73,14 @@ export function bestOf(stage) { return load().best[stage] || null; }
 const PREF_KEY = 'boom-prefs-v1';
 export const DIFFS = ['easy', 'normal', 'hard'];
 export function loadPrefs() {
-  const p = { difficulty: 'normal', bigHud: false, contrast: false };
+  const p = { difficulty: 'normal', bigHud: false, contrast: false, vibration: true, hint: null };
   try {
     const d = JSON.parse(local.get(PREF_KEY));
     if (d && typeof d === 'object') {
       if (DIFFS.includes(d.difficulty)) p.difficulty = d.difficulty;
       p.bigHud = d.bigHud === true; p.contrast = d.contrast === true;
+      p.vibration = d.vibration !== false; // 저장값이 없으면 켬
+      p.hint = typeof d.hint === 'boolean' ? d.hint : null; // null = 기기 기본값(터치 켬 / 데스크톱 끔)
     }
   } catch (e) { /* 기본값 */ }
   return p;

@@ -1,8 +1,8 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111042';
-import * as audio from './audio.js?v=2026111042';
-import { t as tr, getLang } from './i18n.js?v=2026111042';
-import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111042';
+import { Terrain, W, H, mulberry32 } from './terrain.js?v=2026111043';
+import * as audio from './audio.js?v=2026111043';
+import { t as tr, getLang } from './i18n.js?v=2026111043';
+import { THEMES, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111043';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -39,6 +39,7 @@ const TOP_HUD_H = 176; // 상단 HUD 오프스크린 높이 (hs 최대 1.5배일
 const TEXT_CACHE = new Map(), TEXT_CACHE_MAX = 900, WIDTH_CACHE = new Map(); // TEXT_CACHE: 글자 -> [{ size, color, weight, sc, c, ... }] (같은 글자의 크기·색 변형들)
 let textCount = 0;
 const DASH_AIM = [4, 5], DASH_NONE = [];
+const HINT_T = 0.6, HINT_EVERY = 3; // 궤적 힌트: 길이(초)와 점 간격(프레임)
 const PW_COL = Array.from({ length: 101 }, (_, i) => `hsl(${120 - i * 1.2},90%,55%)`); // 파워 0~100의 색 (프레임마다 색 문자열을 만들지 않음)
 const powerColor = (p) => PW_COL[p <= 0 ? 0 : p >= 100 ? 100 : Math.round(p)];
 let pwLabelN = -1, pwLabel = '', pwLabelLang = '';
@@ -220,6 +221,9 @@ export class Game {
     this.stepTimer = 0;
     this.stats = blankStats();  // 우리 팀(팀 0) 경기 기록: 결과 화면에 표시
     this.hover = null;          // 마우스를 올려 둔 유닛 (유닛 정보 줄에 표시)
+    this.trajHint = false;      // 설정 '궤적 힌트': 드래그·충전 중 첫 0.6초 궤적을 점선으로 (main.js가 설정과 터치 여부에 따라 켬)
+    this.hintDots = 0;          // 마지막 프레임에 그린 힌트 점 수 (검증용)
+    this.haptic = null;         // 진동 콜백 (kind: 'fire'|'blast'|'hit') — main.js가 설정에 맞춰 연결
     this.lowFx = false;         // 프레임이 느린 기기에서 main.js가 켬: 날씨 파티클·폭발 파티클을 줄임
     this.sc = 1;                // 글자 캐시용: 지금 캔버스에 걸린 확대 배율
     this.headless = false;      // true면 렌더링 없이 계산만 (window.__sim)
@@ -422,6 +426,7 @@ export class Game {
     if (!u.alive || dmg <= 0) return;
     this.countLoss(u, Math.min(u.hp, dmg));
     u.hp -= dmg; u.hurt = HURT_T;
+    if (u.team === 0) { this.hitMine = true; this.buzz('hit'); }
     this.ft(u.x + rnd(-8, 8), Math.max(26, u.y - 92), '-' + dmg, '#ff3b30', true);
     if (u.hp <= 0) {
       u.hp = 0; u.alive = false;
@@ -484,11 +489,13 @@ export class Game {
     this.blastCrates(x, y, r);
     if (r >= 50) this.kick(r >= 58 ? 3.5 : 3); // 로켓·수류탄 같은 큰 폭발만 아주 짧게 흔든다
     audio.play(w.id === 'rocket' ? 'sea_boom_big' : w.id === 'cannon' ? 'sea_boom' : 'sea_boom_small', { rate: w.id === 'rocket' ? 0.95 : 1, vol: 1 });
-    let hit = false;
+    let hit = false, near = false;
+    this.hitMine = false;
     for (const u of this.units) {
       if (!u.alive) continue;
       const cx = u.x, cy = u.y - BODY_CY;
       const d = Math.hypot(cx - x, cy - y);
+      if (u.team === 0 && d < r + 90) near = true; // 우리 유닛 근처(반경+90px)에서 터진 폭발
       const reach = r + 12;
       if (d >= reach) continue;
       const f = 1 - d / reach;
@@ -501,8 +508,11 @@ export class Game {
       }
     }
     if (hit) audio.play('hit', { vol: 0.8 });
+    if (near && !this.hitMine) this.buzz('blast');
   }
 
+  // 진동 알림: 우리 팀 관련 사건만 (발사 'fire' 짧게, 폭발이 가까이서 'blast', 우리 유닛이 피해를 입으면 'hit' 더 길게). 콜백은 main.js가 설정(진동 켬/끔)·기기 지원을 확인해 처리
+  buzz(kind) { if (this.haptic) this.haptic(kind); }
   kick(a) { if (!this.reduceMotion) this.shake = Math.max(this.shake, a); }
 
   emitExplosion(x, y, r) {
@@ -731,6 +741,16 @@ export class Game {
     this.weapon = i; audio.play('switch', { vol: 0.7 });
     if (w.airstrike) this.airX = this.defaultAirX();
   }
+  // 무기 바 더블탭: 지금 무기 다음으로 쓸 수 있는(탄약이 있고 해금된) 무기로 넘긴다. 바꿨으면 true
+  cycleWeapon() {
+    if (!this.isPlayerTurn || this.charging) return false;
+    const n = WEAPONS.length;
+    for (let k = 1; k < n; k++) {
+      const i = (this.weapon + k) % n, w = WEAPONS[i];
+      if (!w.disabled && this.ammo[0][i] > 0) { this.setWeapon(i); return true; }
+    }
+    return false;
+  }
   // 공습 목표 마커 초기 위치: 활성 유닛에서 가장 가까운 상대 유닛의 x
   defaultAirX() {
     const u = this.activeUnit;
@@ -798,7 +818,7 @@ export class Game {
 
   fire(power) {
     const u = this.activeUnit, w = WEAPONS[this.weapon];
-    if (this.turnTeam === 0) { this.stats.shots++; this.stats.wpn[w.id] = (this.stats.wpn[w.id] || 0) + 1; }
+    if (this.turnTeam === 0) { this.stats.shots++; this.stats.wpn[w.id] = (this.stats.wpn[w.id] || 0) + 1; this.buzz('fire'); }
     if (w.instant) return this.fireLightning(u, w);
     if (w.airstrike) return this.fireAirstrike(u, w);
     const a = rad(this.angle), v = launchSpeed(w, power), f = u.facing;
@@ -1564,6 +1584,8 @@ export class Game {
     g.strokeStyle = '#ff4d3d'; g.lineWidth = 2.5;
     const cx = ox + dx * 74, cy = oy + dy * 74;
     g.beginPath(); g.arc(cx, cy, 8, 0, 7); g.moveTo(cx - 12, cy); g.lineTo(cx + 12, cy); g.moveTo(cx, cy - 12); g.lineTo(cx, cy + 12); g.stroke();
+    this.hintDots = 0;
+    if (this.trajHint && (this.drag || (this.charging && pw > 0))) this.drawHint(g, u);
     if (this.drag) { // 터치 드래그: 누른 지점 -> 손가락 위치 선과 파워 표시
       const d = this.drag;
       g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 3; g.lineCap = 'round';
@@ -1581,6 +1603,29 @@ export class Game {
       g.beginPath(); g.moveTo(ox + dx * 20, oy + dy * 20); g.lineTo(ox + dx * len, oy + dy * len); g.stroke();
     }
     g.restore();
+  }
+
+  // 궤적 힌트(설정 '궤적 힌트'): 지금 각도·파워로 쏘았을 때 첫 HINT_T초(약 0.6초) 동안의 포물선을 옅은 점선으로 보여 준다.
+  // 실제 발사와 같은 물리(stepProj: 중력·바람 가속)로 같은 1/60초 스텝을 쓰고, 지형에 닿으면 거기서 멈춘다. 바람은 이 0.6초 동안만 반영되므로 그 뒤의 바람 영향은 보이지 않는다(실제 비행은 더 달라질 수 있음).
+  // 번개·공습은 포물선이 아니므로 그리지 않는다. 임시 투사체 객체는 재사용한다
+  drawHint(g, u) {
+    const w = WEAPONS[this.weapon];
+    if (!w || w.instant || w.airstrike) return;
+    const a = rad(this.angle), v = launchSpeed(w, Math.max(8, this.power)), f = u.facing;
+    const p = this._hp || (this._hp = { x: 0, y: 0, vx: 0, vy: 0, w: null, owner: null, age: 0 });
+    p.x = u.x + f * Math.cos(a) * 18; p.y = u.y - 20 - Math.sin(a) * 18; p.vx = f * Math.cos(a) * v; p.vy = -Math.sin(a) * v; p.w = w; p.owner = u; p.age = 0;
+    const steps = Math.round(HINT_T * 60);
+    g.fillStyle = '#fff';
+    let n = 0;
+    for (let i = 1; i <= steps; i++) {
+      if (stepProj(p, 1 / 60, this.wind, this.terrain, null)) break;
+      if (i % HINT_EVERY) continue;
+      g.globalAlpha = 0.75 - 0.5 * (i / steps); // 멀어질수록 옅게
+      g.beginPath(); g.arc(p.x, p.y, 2.4 - 0.8 * (i / steps), 0, 7); g.fill();
+      n++;
+    }
+    g.globalAlpha = 1;
+    this.hintDots = n;
   }
 
   // 공습: 조준 중에는 목표 구역(폭 120px) 마커, 호출 뒤에는 1초 경고 마커(깜빡임)와 떨어지는 폭탄
@@ -1944,9 +1989,9 @@ export function warmupSteps(sprites, { viewScale = 1, bigHud = false, teamMarks 
   return [
     () => { w.newMatch('normal', stageConfig(7)); tick(3); },                       // 눈 내리는 스테이지 7: 배경·지형·유닛·이름표·HUD·턴 배너·눈 날씨
     () => { for (const th of THEMES) { const wt = makeWeather(th); if (wt) { stepWeather(wt, 1 / 60, 3); drawWeather(g, wt); } } }, // 네 가지 날씨 그리기 경로
-    () => { // 터치 드래그 조준
-      w.power = 60; w.drag = { sx: 600, sy: 300, x: 540, y: 340, max: 170 }; w.weapon = 0; tick(2);
-      w.drag = null; w.power = 0;
+    () => { // 터치 드래그 조준 + 궤적 힌트
+      w.trajHint = true; w.power = 60; w.drag = { sx: 600, sy: 300, x: 540, y: 340, max: 170 }; w.weapon = 0; tick(2);
+      w.drag = null; w.power = 0; w.trajHint = false;
     },
     () => { // 무기별 투사체·공습 조준 마커
       for (let i = 0; i < WEAPONS.length; i++) {

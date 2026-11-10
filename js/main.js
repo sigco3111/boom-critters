@@ -1,13 +1,13 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111042';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig, warmupSteps, warmFlash } from './game.js?v=2026111042';
-import * as audio from './audio.js?v=2026111042';
-import * as progress from './progress.js?v=2026111042';
-import { MenuBg } from './menubg.js?v=2026111042';
-import * as store from './storage.js?v=2026111042';
-import * as loader from './loader.js?v=2026111042';
-import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111042';
+const VERSION = '2026111043';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig, warmupSteps, warmFlash } from './game.js?v=2026111043';
+import * as audio from './audio.js?v=2026111043';
+import * as progress from './progress.js?v=2026111043';
+import { MenuBg } from './menubg.js?v=2026111043';
+import * as store from './storage.js?v=2026111043';
+import * as loader from './loader.js?v=2026111043';
+import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111043';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -47,6 +47,9 @@ $('rotateHintClose').addEventListener('click', () => {
 
 const prefs = progress.loadPrefs();   // 저장된 설정: 난이도·큰 HUD 글씨·고대비 팀 표시
 let game = null, difficulty = prefs.difficulty, touchSticky = false;
+// 터치 보조 설정: 진동(기본 켬)과 궤적 힌트(저장한 값이 없으면 터치 기기는 켬, 데스크톱은 끔)
+const hintOn = () => (prefs.hint === null ? document.body.classList.contains('touch') : prefs.hint);
+let syncPrefUI = () => {};
 const coarseMQ = window.matchMedia('(pointer: coarse)');
 const portraitMQ = window.matchMedia('(orientation: portrait)');
 const motionMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -59,7 +62,7 @@ function setTouchUI(forceOn) {
   // 세로 폰이면 상단 HUD를 캔버스 대신 DOM HUD(#hud)로 표시해 글자를 14px 이상으로 유지
   const dom = on && portraitMQ.matches;
   document.body.classList.toggle('domhud', dom);
-  if (game) { game.touchUI = on; game.domHud = dom; }
+  if (game) { game.touchUI = on; game.domHud = dom; game.trajHint = hintOn(); syncPrefUI(); }
 }
 setTouchUI();
 // 크기·방향 변경: 회전 중에는 resize가 연달아 오고 iOS는 orientationchange 직후 innerWidth가 아직 옛 값이므로 잠깐 모아서(디바운스) 처리한다.
@@ -211,9 +214,9 @@ function showResult(winner) {
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
 window.__audio = audio; // 디버깅/테스트용: __audio.musicInfo()
-window.__sim = (n, opts) => import('./sim.js?v=2026111042').then((m) => m.sim(n, opts));
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111042').then((m) => m.table(n, stages, skills));
-window.__sim.soak = (n, opts) => import('./sim.js?v=2026111042').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
+window.__sim = (n, opts) => import('./sim.js?v=2026111043').then((m) => m.sim(n, opts));
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111043').then((m) => m.table(n, stages, skills));
+window.__sim.soak = (n, opts) => import('./sim.js?v=2026111043').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
 
 // 이 경기에 뒤에서 받는 캐릭터가 필요한가: 적이 3마리 이상(보통 이상·스테이지 4~)이거나 무한 모드(웨이브가 오르면 적이 4마리)
 function needsLazy(cfg) {
@@ -373,6 +376,25 @@ function setup(sprites) {
   $('bigHudToggle')?.addEventListener('click', () => { audio.play('select'); prefs.bigHud = !prefs.bigHud; progress.savePrefs({ bigHud: prefs.bigHud }); applyA11y(); });
   $('contrastToggle')?.addEventListener('click', () => { audio.play('select'); prefs.contrast = !prefs.contrast; progress.savePrefs({ contrast: prefs.contrast }); applyA11y(); });
   applyA11y();
+  // 터치 보조: 진동(발사·폭발·피격, 기본 켬)과 궤적 힌트. Vibration API가 없는 기기(iOS·데스크톱)에서는 아무 일도 하지 않고 '미지원'으로 표시
+  const canVibrate = typeof navigator.vibrate === 'function';
+  const BUZZ = { fire: 20, blast: 60, hit: [100, 30, 100] };
+  const buzz = (p) => { // 사용자가 한 번도 누르지 않은 상태의 호출은 브라우저가 막고 콘솔에 경고를 남기므로 보내지 않는다
+    if (!canVibrate || document.hidden || (navigator.userActivation && !navigator.userActivation.hasBeenActive)) return;
+    try { navigator.vibrate(p); } catch (e) { /* 무시 */ }
+  };
+  game.haptic = (kind) => { if (prefs.vibration) buzz(BUZZ[kind]); };
+  syncPrefUI = () => {
+    game.trajHint = hintOn();
+    for (const [id, on] of [['vibToggle', prefs.vibration], ['hintToggle', hintOn()]]) {
+      const b = $(id); if (!b) continue;
+      b.textContent = tr(on ? 'on' : 'off') + (id === 'vibToggle' && !canVibrate ? ' ' + tr('set.vib.na') : '');
+      b.setAttribute('aria-checked', String(on)); b.classList.toggle('on', on);
+    }
+  };
+  $('vibToggle')?.addEventListener('click', () => { audio.play('select'); prefs.vibration = !prefs.vibration; progress.savePrefs({ vibration: prefs.vibration }); syncPrefUI(); if (prefs.vibration) buzz(30); });
+  $('hintToggle')?.addEventListener('click', () => { audio.play('select'); prefs.hint = !hintOn(); progress.savePrefs({ hint: prefs.hint }); syncPrefUI(); });
+  syncPrefUI();
   const refreshMute = () => {
     const m = audio.isMuted();
     muteBtn.innerHTML = `${m ? '🔇' : '🔊'}<span class="tx"> ${tr(m ? 'snd.off' : 'snd.on')}</span>`;
@@ -565,7 +587,15 @@ function setup(sprites) {
   bindHold($('bDown'), () => (k.down = true), () => (k.down = false));
   bindHold($('bJump'), () => game.playerJump(), () => {});
   bindHold($('bFire'), () => game.beginCharge(), () => game.releaseCharge());
-  weaponBtns.forEach((b, i) => b.addEventListener('click', () => game.setWeapon(i)));
+  // 무기 바를 같은 칸에서 빠르게 두 번 누르면(더블탭) 다음 무기로 넘어간다 (탄약 없는 칸은 건너뜀). 키보드로 누른 클릭(pointerType 없음)은 세지 않는다
+  let lastBar = { t: 0, i: -1 };
+  const barTap = (i, pointerType) => {
+    if (!pointerType || !game.isPlayerTurn) return;
+    const now = performance.now(), dbl = lastBar.i === i && now - lastBar.t < 350;
+    lastBar = dbl ? { t: 0, i: -1 } : { t: now, i };
+    if (dbl) game.cycleWeapon();
+  };
+  weaponBtns.forEach((b, i) => b.addEventListener('click', (e) => { game.setWeapon(i); barTap(i, e.pointerType); }));
 
   // 드래그 조준
   // 마우스: 클릭/드래그로 각도만 조절 (기존 동작). 터치: 오른쪽 절반을 드래그하면 각도(유닛→손가락 방향)와
@@ -580,7 +610,7 @@ function setup(sprites) {
     const finger = e.pointerType === 'touch' || e.pointerType === 'pen';
     if (finger) setTouchUI(true);
     const [px, py] = toGame(e);
-    if (!game.touchUI) { const slot = game.slotAt(px, py); if (slot >= 0) { game.setWeapon(slot); return; } } // 하단 HUD 무기 버튼
+    if (!game.touchUI) { const slot = game.slotAt(px, py); if (slot >= 0) { game.setWeapon(slot); barTap(slot, e.pointerType || 'mouse'); return; } } // 하단 HUD 무기 버튼
     if (game.airMode && game.isPlayerTurn) { // 공습: 누르면 목표 마커가 그 x로 가고, 끌어서 조정, 떼면 호출
       if (airPtr === null) { airPtr = e.pointerId; canvas.setPointerCapture(e.pointerId); game.setAirX(px); }
       return;
@@ -624,7 +654,7 @@ function setup(sprites) {
   langBtns.forEach((b) => b.addEventListener('click', () => { audio.play('select'); setLang(b.dataset.lang); }));
   syncLang();
   onLangChange(() => {
-    syncLang(); selectDiff(difficulty, false); refreshEndless(); refreshMute(); applyA11y(); updateVer(); popSoundLabel = '';
+    syncLang(); selectDiff(difficulty, false); refreshEndless(); refreshMute(); applyA11y(); syncPrefUI(); updateVer(); popSoundLabel = '';
     if (!$('stageScreen').classList.contains('hidden')) renderStages();
     if (resultView && !$('resultScreen').classList.contains('hidden')) resultView();
     tutorial.rerender();

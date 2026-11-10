@@ -1,7 +1,7 @@
 // 언어(한국어/영어) 사전과 도우미. 기본값은 navigator.language(ko*이면 한국어, 아니면 영어)이고 선택은 localStorage('boom-lang')에 저장한다
 // (저장소가 막힌 환경에서는 storage.js가 메모리에만 보관). index.html의 한국어 문구는 그대로 두고, data-i18n 속성이 붙은 요소만 영어일 때 사전 값으로 바꾼다
 // 사용법: t('키', { 값 }) — JS에서 쓰는 문구. applyDom() — data-i18n(텍스트) · data-i18n-html(서식 포함) · data-i18n-aria · data-i18n-title 속성을 가진 요소를 바꾼다
-import { local } from './storage.js?v=2026111042';
+import { local } from './storage.js?v=2026111043';
 
 const KEY = 'boom-lang';
 export const LANGS = ['ko', 'en'];
@@ -31,7 +31,7 @@ const KO = {
   'hud.foeAim': '상대가 조준 중...', 'hud.info': '{label} · {theme} · 시드 {seed}', 'hud.power': '파워 {p}', 'hud.unit': '{name} (HP {hp}/{max}) · {tn}: {td}',
   'st.mineAir': '내 차례 · 공습 목표 {x} · 화면을 눌러 호출', 'st.mineAim': '내 차례 · 각도 {a}° · 파워 {p}', 'st.foe': '상대가 조준 중...', 'st.strike': '공습 중!',
   'fire.label': '발사 (꾹)', 'fire.air': '공습 호출', 'fire.target': '목표 {x}', 'fire.foe': '상대 조준 중',
-  'on': '켜짐', 'off': '꺼짐', 'snd.on': '소리 켜짐', 'snd.off': '소리 꺼짐', 'snd.turnOn': '소리 켜기', 'snd.turnOff': '소리 끄기',
+  'on': '켜짐', 'off': '꺼짐', 'set.vib.na': '(미지원)', 'snd.on': '소리 켜짐', 'snd.off': '소리 꺼짐', 'snd.turnOn': '소리 켜기', 'snd.turnOff': '소리 끄기',
   'mute.on': '꺼짐 (누르면 켜기)', 'mute.off': '켜짐 (누르면 끄기)', 'pop.on': '🔇 소리 켜기', 'pop.off': '🔊 소리 끄기',
   'quick.desc': '3 vs {n} · AI 오차 {a}°/{p}', 'best.endless': '최고 기록: {n} 웨이브',
   'stage.enemies': '적 {n}마리', 'stage.locked': '스테이지 {n} 잠김', 'stage.stars': '스테이지 {n} 별 {s}개', 'stage.plain': '스테이지 {n}',
@@ -47,8 +47,8 @@ const KO = {
   'share.title': '붐 크리터스', 'share.copied': '결과를 클립보드에 복사했어요', 'share.fail': '복사하지 못했어요. 주소: {url}',
   'tut.next': '다음', 'tut.start': '시작하기',
   'tut.1.t': '이동과 점프', 'tut.1.a.k': '키보드', 'tut.1.a.v': 'A·D (또는 ←·→)로 걷고, W로 점프', 'tut.1.b.k': '터치', 'tut.1.b.v': '화면의 ◀ ▶ 와 점프 버튼', 'tut.1.c.k': '팁', 'tut.1.c.v': '턴마다 30초! 같은 팀 유닛이 차례로 움직여요',
-  'tut.2.t': '조준하고 힘을 모아 발사', 'tut.2.a.k': '키보드', 'tut.2.a.v': '↑·↓ 로 각도 → Space를 꾹 눌러 파워를 모았다가 떼면 발사', 'tut.2.b.k': '터치', 'tut.2.b.v': '오른쪽 화면을 끌어 각도·파워를 정하고 손을 떼면 발사 (발사 버튼 꾹도 가능)', 'tut.2.c.k': '팁', 'tut.2.c.v': '바람 화살표를 보고 보정하세요',
-  'tut.3.t': '무기 1~6', 'tut.3.a.k': '교체', 'tut.3.a.v': '숫자 1~6 키 또는 무기 버튼', 'tut.3.b.k': '종류', 'tut.3.b.v': '1 대포탄 · 2 로켓 · 3 수류탄(3초 뒤 폭발) · 4 번개(직선) · 5 화염탄(불길 3턴) · 6 공습(목표 지정 후 폭탄 5발)', 'tut.3.c.k': '탄약', 'tut.3.c.v': '3~6번은 개수가 제한돼요 (공습은 스테이지 4부터)',
+  'tut.2.t': '조준하고 힘을 모아 발사', 'tut.2.a.k': '키보드', 'tut.2.a.v': '↑·↓ 로 각도 → Space를 꾹 눌러 파워를 모았다가 떼면 발사', 'tut.2.b.k': '터치', 'tut.2.b.v': '오른쪽 화면을 끌어 각도·파워를 정하고 손을 떼면 발사 (발사 버튼 꾹도 가능). 끄는 동안 점선 궤적 힌트가 보여요', 'tut.2.c.k': '팁', 'tut.2.c.v': '바람 화살표를 보고 보정하세요',
+  'tut.3.t': '무기 1~6', 'tut.3.a.k': '교체', 'tut.3.a.v': '숫자 1~6 키 또는 무기 버튼 (무기 바를 빠르게 두 번 누르면 다음 무기로)', 'tut.3.b.k': '종류', 'tut.3.b.v': '1 대포탄 · 2 로켓 · 3 수류탄(3초 뒤 폭발) · 4 번개(직선) · 5 화염탄(불길 3턴) · 6 공습(목표 지정 후 폭탄 5발)', 'tut.3.c.k': '탄약', 'tut.3.c.v': '3~6번은 개수가 제한돼요 (공습은 스테이지 4부터)',
   'tut.4.t': '보급 상자와 화염 지대', 'tut.4.a.k': '상자', 'tut.4.a.v': '4턴마다 낙하산 상자가 떨어져요. 닿으면 HP +30', 'tut.4.b.k': '화염', 'tut.4.b.v': '불길 안에 서 있으면 턴 시작 때 8 피해 — 벗어나세요', 'tut.4.c.k': '주의', 'tut.4.c.v': '물에 빠지면 즉사! 섬 가장자리와 구덩이를 조심',
   'lang.name': '한국어', 'lang.btn': 'English로 전환',
 };
@@ -79,7 +79,7 @@ const EN = {
   'hud.foeAim': 'Enemy is aiming...', 'hud.info': '{label} · {theme} · Seed {seed}', 'hud.power': 'Power {p}', 'hud.unit': '{name} (HP {hp}/{max}) · {tn}: {td}',
   'st.mineAir': 'Your turn · Airstrike {x} · tap the screen to call', 'st.mineAim': 'Your turn · Angle {a}° · Power {p}', 'st.foe': 'Enemy is aiming...', 'st.strike': 'Airstrike!',
   'fire.label': 'Fire (hold)', 'fire.air': 'Call strike', 'fire.target': 'Target {x}', 'fire.foe': 'Enemy aiming',
-  'on': 'On', 'off': 'Off', 'snd.on': 'Sound on', 'snd.off': 'Sound off', 'snd.turnOn': 'Turn sound on', 'snd.turnOff': 'Turn sound off',
+  'on': 'On', 'off': 'Off', 'set.vib.na': '(unsupported)', 'snd.on': 'Sound on', 'snd.off': 'Sound off', 'snd.turnOn': 'Turn sound on', 'snd.turnOff': 'Turn sound off',
   'mute.on': 'Muted (tap to unmute)', 'mute.off': 'Sound on (tap to mute)', 'pop.on': '🔇 Sound on', 'pop.off': '🔊 Sound off',
   'quick.desc': '3 vs {n} · AI error {a}°/{p}', 'best.endless': 'Best: {n} waves',
   'stage.enemies': '{n} enemies', 'stage.locked': 'Stage {n} locked', 'stage.stars': 'Stage {n}, {s} stars', 'stage.plain': 'Stage {n}',
@@ -95,8 +95,8 @@ const EN = {
   'share.title': 'Boom Critters', 'share.copied': 'Result copied to clipboard', 'share.fail': 'Could not copy. Link: {url}',
   'tut.next': 'Next', 'tut.start': 'Start',
   'tut.1.t': 'Move and jump', 'tut.1.a.k': 'Keyboard', 'tut.1.a.v': 'A·D (or ←·→) to walk, W to jump', 'tut.1.b.k': 'Touch', 'tut.1.b.v': 'Use ◀ ▶ and the Jump button', 'tut.1.c.k': 'Tip', 'tut.1.c.v': '30 seconds per turn! Your units take turns',
-  'tut.2.t': 'Aim, charge and fire', 'tut.2.a.k': 'Keyboard', 'tut.2.a.v': '↑·↓ sets the angle. Hold Space to charge, release to fire', 'tut.2.b.k': 'Touch', 'tut.2.b.v': 'Drag on the right side to set angle and power, release to fire (or hold the Fire button)', 'tut.2.c.k': 'Tip', 'tut.2.c.v': 'Watch the wind arrow and adjust',
-  'tut.3.t': 'Weapons 1-6', 'tut.3.a.k': 'Switch', 'tut.3.a.v': 'Keys 1-6 or the weapon buttons', 'tut.3.b.k': 'Types', 'tut.3.b.v': '1 Cannon · 2 Rocket · 3 Grenade (explodes in 3s) · 4 Bolt (straight line) · 5 Fire (burns 3 turns) · 6 Airstrike (pick a target, 5 bombs)', 'tut.3.c.k': 'Ammo', 'tut.3.c.v': 'Weapons 3-6 are limited (Airstrike from stage 4)',
+  'tut.2.t': 'Aim, charge and fire', 'tut.2.a.k': 'Keyboard', 'tut.2.a.v': '↑·↓ sets the angle. Hold Space to charge, release to fire', 'tut.2.b.k': 'Touch', 'tut.2.b.v': 'Drag on the right side to set angle and power, release to fire (or hold the Fire button). A dotted trajectory hint shows while you drag', 'tut.2.c.k': 'Tip', 'tut.2.c.v': 'Watch the wind arrow and adjust',
+  'tut.3.t': 'Weapons 1-6', 'tut.3.a.k': 'Switch', 'tut.3.a.v': 'Keys 1-6 or the weapon buttons (double-tap the weapon bar to cycle to the next weapon)', 'tut.3.b.k': 'Types', 'tut.3.b.v': '1 Cannon · 2 Rocket · 3 Grenade (explodes in 3s) · 4 Bolt (straight line) · 5 Fire (burns 3 turns) · 6 Airstrike (pick a target, 5 bombs)', 'tut.3.c.k': 'Ammo', 'tut.3.c.v': 'Weapons 3-6 are limited (Airstrike from stage 4)',
   'tut.4.t': 'Supply crates and fire', 'tut.4.a.k': 'Crate', 'tut.4.a.v': 'A parachute crate drops every 4 turns. Touch it for HP +30', 'tut.4.b.k': 'Fire', 'tut.4.b.v': 'Standing in flames costs 8 HP at turn start - move away', 'tut.4.c.k': 'Careful', 'tut.4.c.v': 'Falling in water is instant defeat! Watch island edges and craters',
   'lang.name': 'English', 'lang.btn': '한국어로 전환',
 
@@ -120,12 +120,12 @@ const EN = {
   'hp.ctl.h': 'Controls',
   'hp.move.k': 'Move / Jump', 'hp.move.v': 'A·D or ←·→ / W (on-screen ◀ ▶ · Jump button)',
   'hp.angle.k': 'Angle', 'hp.angle.v': '↑·↓ or drag the screen (Angle ▲▼ buttons)',
-  'hp.touch.k': 'Touch aim', 'hp.touch.v': 'Drag on the right half to set angle and power, release to fire (longer drag = stronger)',
+  'hp.touch.k': 'Touch aim', 'hp.touch.v': 'Drag on the right half to set angle and power, release to fire (longer drag = stronger). While dragging, a short dotted <b>trajectory hint</b> (about 0.6 s of flight) shows where the shot starts; turn it on or off in ⚙ Settings (on by default for touch, off for desktop)',
   'hp.fire.k': 'Fire', 'hp.fire.v': 'Hold Space to charge power, release to fire (hold the Fire button)',
-  'hp.weapon.k': 'Change weapon', 'hp.weapon.v': 'Keys 1-6 or the bottom weapon buttons (6 Airstrike from stage 4)',
+  'hp.weapon.k': 'Change weapon', 'hp.weapon.v': 'Keys 1-6 or the bottom weapon buttons (6 Airstrike from stage 4). <b>Double-tap</b> the weapon bar to jump to the next weapon that still has ammo',
   'hp.pause.k': 'Pause', 'hp.pause.v': 'Esc or the ⏸ button (resume · restart match · back to menu)',
   'hp.sound.k': 'Sound', 'hp.sound.v': 'M to mute · ⚙ Settings (music/effects volume). Bolt, airstrike whistle, grenade tick and heal chime follow the effects volume and mute. The win/lose jingle follows the music volume and briefly lowers the music. On old devices that cannot play OGG (e.g. old iOS Safari), music falls back to MP3 and effects/jingles to synthesized sounds, with the same volume and mute',
-  'hp.a11y.k': 'Accessibility', 'hp.a11y.v': 'In ⚙ Settings you can turn on <b>Large HUD text</b> (HUD text and weapon buttons +25%) and <b>High-contrast teams</b> (blue ● circle for you, red ◆ diamond for the enemy on name tags, team HP boxes and turn banners). Blue and red stay distinguishable in red-green colour blindness simulations, but turn the marks on if you play in greyscale or still mix them up. Settings are saved',
+  'hp.a11y.k': 'Accessibility', 'hp.a11y.v': 'In ⚙ Settings you can turn on <b>Large HUD text</b> (HUD text and weapon buttons +25%) and <b>High-contrast teams</b> (blue ● circle for you, red ◆ diamond for the enemy on name tags, team HP boxes and turn banners). Blue and red stay distinguishable in red-green colour blindness simulations, but turn the marks on if you play in greyscale or still mix them up. Settings are saved. <b>Vibration</b> (on by default) buzzes briefly when you fire, near blasts and when your units are hit, on devices that support it (most Android phones; not iOS or desktop).',
   'hp.bg.k': 'Start screen background', 'hp.bg.v': 'Clouds and stars drift slowly across a night sky. With "reduce motion" on, it stays still, and animation stops while the tab is hidden to save battery',
   'hp.share.k': 'Share result', 'hp.share.v': 'The <b>Share result</b> button shares the stage (or mode), result, stars and the game link. Devices with a share sheet open it; otherwise the text is copied to the clipboard with a small notice',
   'hp.install.k': 'Install app', 'hp.install.v': 'Use "Install app" / "Add to Home screen" in your browser menu to make an icon and run it like a full-screen app. No service worker is used, so updates always load the latest files. Progress is saved in this browser',
@@ -162,7 +162,7 @@ const EN = {
   'cr.ver': 'Version', 'cr.script': 'Script',
   'pause.h': 'Paused', 'pause.resume': 'Resume', 'pause.restart': 'Restart match', 'pause.quit': 'Quit to menu', 'pause.help': 'You can also resume with Esc',
   'set.h': 'Settings', 'set.music': 'Music', 'set.music.aria': 'Music volume', 'set.sfx': 'Effects', 'set.sfx.aria': 'Effects volume', 'set.mute': 'Mute',
-  'set.bighud': 'Large HUD text (+25%)', 'set.contrast': 'High-contrast teams (● blue / ◆ red)', 'set.lang': 'Language',
+  'set.bighud': 'Large HUD text (+25%)', 'set.contrast': 'High-contrast teams (● blue / ◆ red)', 'set.vib': 'Vibration (fire / blast / hit)', 'set.hint': 'Trajectory hint while aiming', 'set.lang': 'Language',
   // HUD 라벨(세로 폰 DOM HUD)과 컨트롤
   'hud.windLabel': 'Wind',
   'ctl.left': 'Left', 'ctl.right': 'Right', 'ctl.jump': 'Jump', 'ctl.jump.t': 'Jump', 'ctl.up': 'Raise angle', 'ctl.down': 'Lower angle', 'ctl.up.t': 'Angle ▲', 'ctl.down.t': 'Angle ▼',
