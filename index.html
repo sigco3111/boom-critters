@@ -6,7 +6,7 @@
   <title>붐 크리터스 - 포격 웹게임</title>
   <meta name="description" content="웜즈·포트리스 스타일 싱글플레이 포격 웹게임">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=2026111029">
+  <link rel="stylesheet" href="style.css?v=2026111031">
 </head>
 <body>
   <div id="app">
@@ -88,7 +88,7 @@
               <tr><th>발사</th><td>Space 꾹 눌러 파워 충전 → 떼면 발사 (발사 버튼 꾹)</td></tr>
               <tr><th>무기 변경</th><td>숫자 1~6 또는 하단 무기 버튼 (6 공습은 스테이지 4부터)</td></tr>
               <tr><th>일시정지</th><td>Esc 또는 ⏸ 버튼 (계속하기 · 매치 다시 시작 · 메뉴로 나가기)</td></tr>
-              <tr><th>소리</th><td>M 음소거 · ⚙ 설정(음악/효과음 볼륨). 번개 지직, 공습 휘파람, 수류탄 똑딱, 치유 차임 효과음도 효과음 볼륨·음소거를 따릅니다</td></tr>
+              <tr><th>소리</th><td>M 음소거 · ⚙ 설정(음악/효과음 볼륨). 번개 지직, 공습 휘파람, 수류탄 똑딱, 치유 차임 효과음도 효과음 볼륨·음소거를 따릅니다. 결과 화면의 승리·패배 징글은 음악 볼륨·음소거를 따르고, 나오는 동안 배경음악이 잠깐 작아집니다</td></tr>
               <tr><th>접근성</th><td>⚙ 설정에서 <b>HUD 큰 글씨</b>(HUD 글자 +25%)와 <b>고대비 팀 표시</b>(우리 팀 파랑 ● 원, 상대 팀 빨강 ◆ 마름모를 이름표·팀 HP 박스·턴 배너에 표시)를 켤 수 있습니다. 설정은 저장됩니다</td></tr>
               <tr><th>튜토리얼</th><td>처음 실행하면 4단계 안내가 한 번 나옵니다. 아래 '튜토리얼 보기'로 언제든 다시 볼 수 있어요 (←/→ 이동, Esc 건너뛰기)</td></tr>
             </table>
@@ -159,12 +159,13 @@
             <li><b>Toon Characters 1</b> — Kenney (CC0)<br><a href="https://kenney.nl/assets/toon-characters-1" target="_blank" rel="noopener">https://kenney.nl/assets/toon-characters-1</a></li>
             <li><b>Impact Sounds</b> — Kenney (CC0)<br><a href="https://kenney.nl/assets/impact-sounds" target="_blank" rel="noopener">https://kenney.nl/assets/impact-sounds</a></li>
             <li><b>Interface Sounds</b> — Kenney (CC0)<br><a href="https://kenney.nl/assets/interface-sounds" target="_blank" rel="noopener">https://kenney.nl/assets/interface-sounds</a></li>
+            <li><b>Music Jingles</b> — Kenney (CC0)<br><a href="https://kenney.nl/assets/music-jingles" target="_blank" rel="noopener">https://kenney.nl/assets/music-jingles</a><br>결과 화면의 승리·패배 징글 (jingles_STEEL10, jingles_PIZZI07)</li>
             <li><b>Battle at sea</b> by Thimras (CC0)<br><a href="https://opengameart.org/content/battle-at-sea" target="_blank" rel="noopener">https://opengameart.org/content/battle-at-sea</a></li>
             <li class="must"><b>Enchanted Festival by Matthew Pablo, <a href="https://opengameart.org/content/enchanted-festival" target="_blank" rel="noopener">https://opengameart.org/content/enchanted-festival</a>, licensed <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener">CC-BY 3.0</a></b><br>배경음악 (원곡의 루프 버전을 OGG로 변환하고 루프 이음매에 0.4초 크로스페이드를 적용함)</li>
           </ul>
           <p class="note">CC0 에셋은 표기 의무가 없지만 감사의 뜻으로 적습니다. 게임 코드는 MIT 라이선스입니다. 지형·스테이지 테마 배경(초원·사막·설원·밤)·이펙트·무기 아이콘은 외부 이미지 없이 캔버스 코드로 직접 그렸습니다.</p>
         </div>
-        <p class="ver">버전 <span id="verHtml">2026111029</span> · 스크립트 <span id="verJs">-</span></p>
+        <p class="ver">버전 <span id="verHtml">2026111031</span> · 스크립트 <span id="verJs">-</span></p>
         <button type="button" id="creditsCloseBtn">닫기</button>
       </div>
 
@@ -223,6 +224,6 @@
       </div>
     </div>
   </div>
-  <script type="module" src="js/main.js?v=2026111029"></script>
+  <script type="module" src="js/main.js?v=2026111031"></script>
 </body>
 </html>
