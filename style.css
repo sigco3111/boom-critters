@@ -1,7 +1,7 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; height: 100%; background: #12202e; color: #fff; font-family: "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; overflow: hidden; }
-#app { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
-#stage { --cq: 1cqw; position: relative; width: min(100vw, calc((100vh - 84px) * 16 / 9)); aspect-ratio: 16 / 9; container-type: inline-size; background: #000; }
+html, body { margin: 0; height: 100%; height: 100dvh; background: #12202e; color: #fff; font-family: "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; overflow: hidden; }
+#app { height: 100%; height: 100dvh; padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+#stage { --cq: 1cqw; position: relative; width: min(100vw, calc((100vh - 84px) * 16 / 9)); width: min(calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right)), calc((100dvh - 84px) * 16 / 9)); aspect-ratio: 16 / 9; container-type: inline-size; background: #000; }
 canvas { width: 100%; height: 100%; display: block; touch-action: none; user-select: none; -webkit-user-select: none; }
 .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(2 * var(--cq)); background: rgba(10, 25, 45, 0.78); text-align: center; font-size: calc(2 * var(--cq)); padding: calc(2 * var(--cq)); }
 .overlay.hidden, .hidden { display: none; }
@@ -30,7 +30,7 @@ button.down, button:active { transform: translateY(2px); filter: brightness(1.15
 #controls button { min-width: 52px; min-height: 44px; font-size: 15px; }
 #controls button.sel { background: #d9a31b; border-color: #8f6a0d; }
 #controls .fire { background: #d33b2f; border-color: #8b1f17; min-width: 120px; font-weight: 700; }
-@media (max-height: 460px) { #controls button { min-height: 36px; padding: 4px 10px; font-size: 13px; } #stage { width: min(100vw, calc((100vh - 52px) * 16 / 9)); } }
+@media (max-height: 460px) { #controls button { min-height: 36px; padding: 4px 10px; font-size: 13px; } #stage { width: min(100vw, calc((100vh - 52px) * 16 / 9)); width: min(calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right)), calc((100dvh - 52px) * 16 / 9)); } }
 #controls button:disabled { opacity: 0.4; cursor: not-allowed; filter: grayscale(0.6); }
 .overlay h2 { margin: 0; font-size: calc(2.6 * var(--cq)); }
 .modes { display: flex; gap: calc(2 * var(--cq)); align-items: stretch; }
@@ -131,7 +131,7 @@ body.touch #topBtns .tx { display: none; }
 #controls .fire .fx { display: none; }
 
 /* ---------- 반응형 레이아웃 ---------- */
-#rotateHint { display: none; position: absolute; top: 4px; left: 6px; right: 112px; height: 44px; z-index: 4; align-items: center; gap: 4px; padding: 0 2px 0 10px; font-size: 12px; line-height: 1.3; color: #cfe3f7; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 10px; }
+#rotateHint { display: none; position: absolute; top: calc(4px + env(safe-area-inset-top)); left: 6px; right: 112px; height: 44px; z-index: 4; align-items: center; gap: 4px; padding: 0 2px 0 10px; font-size: 12px; line-height: 1.3; color: #cfe3f7; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 10px; }
 #rotateHint span { flex: 1; }
 #rotateHint button { min-width: 44px; min-height: 44px; padding: 0; background: transparent; border: 0; font-size: 18px; }
 #app { position: relative; }
@@ -146,7 +146,7 @@ body.touch .doc h2 { font-size: max(13px, calc(1.8 * var(--cq))); }
 body.touch .overlay.modal > .doc { flex: 0 1 auto; min-height: 0; }
 
 @media (orientation: landscape) {
-  body.touch #stage { width: min(100vw, calc(100vh * 16 / 9)); width: min(100vw, calc(100dvh * 16 / 9)); }
+  body.touch #stage { width: min(100vw, calc(100vh * 16 / 9)); width: min(calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right)), calc(100dvh * 16 / 9)); }
   /* 가로: 팀 HP 박스와 유닛 정보 줄 아래 가로 한 줄 (유닛·이름표는 이 높이 아래에 있음) */
   body.touch #topBtns { left: 1%; right: auto; top: 21%; bottom: auto; flex-direction: row; gap: 4px; }
   body.touch #topBtns button { width: 40px; height: 40px; min-width: 40px; min-height: 40px; padding: 0; }
@@ -154,11 +154,11 @@ body.touch .overlay.modal > .doc { flex: 0 1 auto; min-height: 0; }
 }
 
 @media (orientation: portrait) {
-  body.touch #app { justify-content: flex-start; gap: 0; padding-top: 52px; }
+  body.touch #app { justify-content: flex-start; gap: 0; padding-top: calc(52px + env(safe-area-inset-top)); }
   body.touch #stage { width: 100vw; container-type: normal; --cq: min(1.75vw, 10px); }
   body.touch #topBtns { top: -48px; right: 6px; bottom: auto; gap: 6px; }
   body.touch:not(.hint-off) #rotateHint { display: flex; }
-  body.touch .overlay { position: fixed; padding: 56px 12px 16px; gap: 12px; z-index: 3; background: rgba(10, 25, 45, 0.97); }
+  body.touch .overlay { position: fixed; padding: calc(56px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); gap: 12px; z-index: 3; background: rgba(10, 25, 45, 0.97); }
   body.touch #controls { margin-top: auto; }
   body.touch .overlay.modal { z-index: 10; background: #0c1a2c; }
   body.touch .overlay h1 { font-size: 40px; }
@@ -180,7 +180,7 @@ body.touch .overlay.modal > .doc { flex: 0 1 auto; min-height: 0; }
   body.touch #stageGrid .stars { font-size: 13px; min-height: 16px; }
   body.touch #stageGrid button small { font-size: 11px; }
   body.touch #resultStars { font-size: 40px; }
-  body.touch .overlay.modal { padding-top: 16px; }
+  body.touch .overlay.modal { padding-top: calc(16px + env(safe-area-inset-top)); }
   body.touch .overlay.modal > :first-child, body.touch .overlay.modal > :last-child { margin: 0; }
   body.touch .overlay.modal > .doc { flex: 1 1 auto; width: 100%; max-height: none; padding: 10px 12px; font-size: 14px; line-height: 1.5; }
   body.touch .overlay.modal > .doc h2 { font-size: 16px; margin: 12px 0 4px; }
@@ -195,7 +195,7 @@ body.touch .overlay.modal > .doc { flex: 0 1 auto; min-height: 0; }
 
 /* ---------- 세로 폰 DOM HUD: 캔버스 아래 줄에 팀 HP·타이머·바람·상태를 14px 이상 굵은 윤곽 글자로 표시 ---------- */
 #hud { display: none; }
-body.domhud #hud { display: grid; grid-template-columns: 1fr 58px 1fr; grid-template-areas: "me tm foe" "row row row" "st st st" "un un un"; align-items: center; gap: 6px 8px; width: 100%; padding: 8px 8px 2px; font-weight: 800; font-size: 14px; line-height: 1.2; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 3px #0008; }
+body.domhud #hud { display: grid; grid-template-columns: 1fr 58px 1fr; grid-template-areas: "me tm foe" "row row row" "st st st" "un un un"; align-items: center; gap: 6px 8px; width: 100%; padding: 8px max(8px, env(safe-area-inset-right)) 2px max(8px, env(safe-area-inset-left)); font-weight: 800; font-size: 14px; line-height: 1.2; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 3px #0008; }
 body.domhud.menu #hud { visibility: hidden; }
 .hud-team { padding: 5px 7px 6px; background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(255, 255, 255, 0.22); border-radius: 10px; min-width: 0; }
 .hud-team.me { grid-area: me; } .hud-team.foe { grid-area: foe; }
@@ -248,7 +248,7 @@ body.menu #pauseBtn { display: none; }
 body.touch #pauseScreen .col { min-width: min(260px, 70vw); gap: 10px; }
 body.touch #pauseScreen .col button { font-size: 18px; padding: 10px 18px; }
 @media (orientation: landscape) { body.touch #pauseScreen .col { gap: 6px; } body.touch #pauseScreen .col button { font-size: 16px; padding: 6px 16px; } }
-body.touch #pauseScreen { justify-content: center; padding: 16px; }
+body.touch #pauseScreen { justify-content: center; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
 body.touch #pauseScreen > :first-child, body.touch #pauseScreen > :last-child { margin: 0; }
 
 /* ---------- 버전 표시 (크레딧 화면): 오래된 캐시를 쉽게 알아보도록 ---------- */
@@ -279,7 +279,7 @@ body.touch.menu #controls { visibility: hidden; }
 @media (orientation: portrait) {
   /* 세로 폰: 가로로 돌리라는 안내가 오른쪽 위 버튼 3개(일시정지·설정·소리, 약 150px)와 겹치지 않도록 폭을 줄임 */
   body.touch #rotateHint { right: 158px; padding-left: 8px; font-size: 11px; line-height: 1.25; }
-  body.touch #tutorialScreen { justify-content: center; padding: 16px 12px; gap: 12px; }
+  body.touch #tutorialScreen { justify-content: center; padding: calc(16px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); gap: 12px; }
   body.touch #tutorialScreen > :first-child, body.touch #tutorialScreen > :last-child { margin: 0; }
   body.touch .tut-step { font-size: 14px; }
   body.touch .tut-card { width: 100%; padding: 14px 14px; }
@@ -365,5 +365,10 @@ body.touch.bighud #controls .weapons .wk { display: none; } /* 터치: 번호 �
 @media (orientation: landscape) { #resultScreen .row button { font-size: max(14px, calc(2.4 * var(--cq))); padding: calc(1 * var(--cq)) calc(2.2 * var(--cq)); } } /* 버튼이 5개까지 늘어도 한 줄에 */
 #resultScreen .row button.share { background: #2e9a4b; border-bottom-color: #1d6b32; }
 #resultScreen .row button.share:hover { background: #3aae5b; }
-#toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 30; max-width: 90vw; padding: 10px 18px; font-size: 16px; line-height: 1.4; text-align: center; color: #fff; background: rgba(0, 0, 0, 0.85); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 22px; pointer-events: none; word-break: keep-all; }
+#toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 30; max-width: 90vw; padding: 10px 18px; font-size: 16px; line-height: 1.4; text-align: center; color: #fff; background: rgba(0, 0, 0, 0.85); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 22px; pointer-events: none; word-break: keep-all; }
 #toast.hidden { display: none; }
+
+/* ---------- 실제 폰 대응: 선택·길게 누르기 메뉴·더블탭 확대 방지, 주소창 변화(dvh)와 노치(safe-area)에 맞춤 ---------- */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body, #stage, #controls, #topBtns, #hud, .overlay, button { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.doc, .doc *, input { -webkit-user-select: text; user-select: text; }
