@@ -38,8 +38,8 @@ export const CHARACTERS = [
   [['maleAdventurer', '남자 모험가'], ['femaleAdventurer', '여자 모험가'], ['malePerson', '남자']],
   [['robot', '로봇'], ['zombie', '좀비'], ['femalePerson', '여자']],
 ];
-// 4번째 적 유닛(스테이지 후반): 로봇 스프라이트를 색조만 바꿔 재사용
-const EXTRA_ENEMY = ['robot', '로봇 2', 'hue-rotate(150deg) saturate(1.4)'];
+// 4번째 적 유닛(스테이지 후반): 남자(malePerson) 스프라이트를 쓰고 이름표·HP 바 색을 주황으로 구분
+const EXTRA_ENEMY = ['malePerson', '남자 2', '#f59e0b'];
 export const WALK_FRAMES = 8;
 const STEP_LEN = 6;      // 걷기 프레임 하나당 이동 거리 (px)
 const SPRITE_H = 64;     // 포즈 이미지(96x128) 표시 높이 -> 캐릭터 키 약 52px
@@ -47,20 +47,24 @@ const FADE_START = 0.6, FADE_END = 1.6; // 사망 후 페이드 (초)
 const DIFF = { easy: { a: 7, p: 14, label: '쉬움' }, normal: { a: 3, p: 6, label: '보통' }, hard: { a: 1, p: 2, label: '어려움' } };
 const ENEMY_X = { 1: [760], 2: [650, 820], 3: [600, 730, 865], 4: [560, 670, 780, 885] };
 
-// ---------- 스테이지 / 무한 모드 설정 ----------
+// ---------- 스테이지 / 무한 모드 설정 (밸런스 숫자는 README "밸런스" 표 참고) ----------
 export const STAGE_COUNT = 10;
-// 스테이지 s(1~10): 고정 시드, 적 수 2→4, 바람 범위와 AI 정확도가 단계마다 증가
+// AI 오차 단계(level 1~10): 각도 오차(표준편차, °) 9 → 1, 파워 오차 18 → 2 로 선형 감소. level ≤ 3은 상위 6개 후보 중 무작위 선택
+const ERR_A = [9, 1], ERR_P = [18, 2];
+// AI가 쓸 수 있는 특수 무기(무기 번호 -> 최소 level): 수류탄 2, 번개 3, 화염탄 4. level이 없는 빠른 대전은 모두 사용
+const AI_UNLOCK = { 2: 2, 3: 3, 4: 4 };
+// 스테이지 s(1~10): 고정 시드, 적 수 2→4(1~3: 2마리, 4~6: 3마리, 7~10: 4마리), 바람 범위 ±(3+s), AI level = s
 export function stageConfig(s) {
   return { mode: 'stage', stage: s, seed: 20240 + s * 7919, enemies: s <= 3 ? 2 : s <= 6 ? 3 : 4, windMax: 3 + s, level: s };
 }
-// 무한 모드 웨이브 w(1~): 웨이브마다 적 수 2→4, 바람·AI 정확도 증가 (매번 새 지형)
+// 무한 모드 웨이브 w(1~): 적 수 2→4(1~2: 2마리, 3~4: 3마리, 5~: 4마리), 바람 ±(4+w, 최대 14), AI level = 1 + 1.5×(w-1) (최대 10, 웨이브 5 ≈ 스테이지 7)
 export function waveConfig(w) {
-  return { mode: 'endless', wave: w, enemies: Math.min(4, 2 + Math.floor((w - 1) / 2)), windMax: Math.min(14, 5 + w), level: Math.min(10, w + 1) };
+  return { mode: 'endless', wave: w, enemies: Math.min(4, 2 + Math.floor((w - 1) / 2)), windMax: Math.min(14, 4 + w), level: Math.min(10, 1 + Math.round(1.5 * (w - 1))) };
 }
-// AI 오차 단계(1~10) -> 각도·파워 오차 계수 (1: 쉬움 수준 → 10: 어려움 수준)
+// AI 오차 단계(1~10) -> 각도·파워 오차 계수 (1: 매우 쉬움 → 10: 어려움보다 정확)
 export function levelErr(level) {
-  const t = (clamp(level, 1, 10) - 1) / 9, e = DIFF.easy, h = DIFF.hard;
-  return { a: e.a + (h.a - e.a) * t, p: e.p + (h.p - e.p) * t, pick: level <= 3 };
+  const t = (clamp(level, 1, 10) - 1) / 9;
+  return { a: ERR_A[0] + (ERR_A[1] - ERR_A[0]) * t, p: ERR_P[0] + (ERR_P[1] - ERR_P[0]) * t, pick: level <= 3 };
 }
 
 const rad = (d) => (d * Math.PI) / 180;
@@ -103,7 +107,7 @@ class Unit {
     this.fallStart = y; this.moving = false; this.phase = Math.random() * 6;
     this.squash = 0; this.hurt = 0;
     this.walkDist = 0; this.shootT = 0; this.deadT = 0; this.drowned = false; this.cvy = 0;
-    this.tint = null;
+    this.tagColor = TEAMS[team].color; // 이름표·HP 바 색 (기본은 팀 색)
   }
 }
 
@@ -160,9 +164,9 @@ export class Game {
       for (let i = 0; i < baseX[t].length; i++) {
         const x = clamp(baseX[t][i] + jit(), 20, W - 20);
         const sy = this.terrain.surfaceY(x);
-        const [sp, nm, tint] = t === 1 && i >= 3 ? EXTRA_ENEMY : CHARACTERS[t][i];
+        const [sp, nm, tagColor] = t === 1 && i >= 3 ? EXTRA_ENEMY : CHARACTERS[t][i];
         const u = new Unit(t, i, sp, nm, x, sy - 1);
-        u.tint = tint || null;
+        u.tagColor = tagColor || TEAMS[t].color;
         for (let k = 0; k < 20 && this.blocked(u.x, u.y); k++) u.y--;
         u.fallStart = u.y;
         if (t === 0 && carry) {
@@ -766,7 +770,8 @@ export class Game {
     const enemies = this.units.filter((o) => o.alive && o.team === 0);
     const pt = (e) => ({ x: e.x, y: e.y - BODY_CY });
     const hidden = enemies.filter((e) => this.aiHidden(u, e));
-    if (am[3] > 0) {
+    const can = (i) => am[i] > 0 && (this.level == null || this.level >= AI_UNLOCK[i]); // 낮은 스테이지/웨이브에서는 특수 무기 제한
+    if (can(3)) {
       const opts = this.aiBoltOptions(u, enemies).sort((p, q) => p.target.hp - q.target.hp);
       const o = opts[0];
       if (o && (hidden.includes(o.target) || o.target.hp <= WEAPONS[3].damage || Math.random() < 0.6)) {
@@ -774,7 +779,7 @@ export class Game {
         return { weapon: 3, facing: o.facing, dist: 0, min: 0, target: o.target, angle: clamp(o.angle + gauss() * 2 * e.a * 0.5, 5, 88), power: 0 };
       }
     }
-    if (am[4] > 0) {
+    if (can(4)) {
       let pair = null;
       for (let i = 0; i < enemies.length; i++) for (let j = i + 1; j < enemies.length; j++) {
         const d = Math.hypot(enemies[i].x - enemies[j].x, enemies[i].y - enemies[j].y);
@@ -785,7 +790,7 @@ export class Game {
         if (plan.min <= 40) return { ...plan, target: pair.a };
       }
     }
-    if (am[2] > 0 && hidden.length) {
+    if (can(2) && hidden.length) {
       for (const e of hidden.sort((p, q) => Math.abs(p.x - u.x) - Math.abs(q.x - u.x))) {
         const plan = this.aiPlan(2, pt(e));
         if (plan.min <= 45) return { ...plan, target: e };
@@ -1105,7 +1110,6 @@ export class Game {
     if (!u.alive) g.globalAlpha = clamp(1 - (u.deadT - FADE_START) / (FADE_END - FADE_START), 0, 1);
     g.translate(u.x, u.y + 1); // 발(이미지 하단)이 지형 위 u.y
     g.scale(sx * (u.facing < 0 ? -1 : 1), sy);
-    if (u.tint) g.filter = u.tint;
     g.drawImage(img, -w / 2, -h, w, h);
     g.restore();
     if (u.hurt > 0 && u.alive) {
@@ -1141,7 +1145,7 @@ export class Game {
   }
 
   drawTag(g, { u, w, x, y }) {
-    const col = TEAMS[u.team].color, left = x - w / 2;
+    const col = u.tagColor, left = x - w / 2;
     // 이름표
     g.fillStyle = col; g.strokeStyle = '#fff'; g.lineWidth = 1.5;
     g.beginPath(); g.roundRect(left, y, w, 13, 4); g.fill(); g.stroke();
