@@ -611,30 +611,33 @@ export class Game {
     for (let i = 0; i < S.length; i++) {
       const e = S[i], t = e.t, k = e.k, y0 = WATER_Y + 1;
       if (rm) { // 모션 줄이기: 고리 하나가 0.14초 번쩍
-        g.globalAlpha = 1 - t / 0.14; g.strokeStyle = '#fff'; g.lineWidth = 2.5;
+        g.globalAlpha = 1 - t / 0.14; g.strokeStyle = '#8fc4f0'; g.lineWidth = 3;
         g.beginPath(); g.ellipse(e.x, y0, 26 * k, 7 * k, 0, 0, 6.283); g.stroke();
         continue;
       }
       for (let r = 0, nr = low ? 2 : 3; r < nr; r++) { // 퍼지는 물결 고리: 0.13초씩 어긋나게 시작
         const tt = t - r * 0.13; if (tt <= 0 || tt > 0.85) continue;
         const u = tt / 0.85, rx = (8 + 46 * u) * k;
-        g.globalAlpha = (1 - u) * 0.9; g.strokeStyle = r ? 'rgba(210,235,255,1)' : '#fff'; g.lineWidth = 2.6 * (1 - u * 0.6);
+        g.globalAlpha = (1 - u) * 0.9; g.lineWidth = 4 * (1 - u * 0.6); g.strokeStyle = '#3f86c8'; // 눈 배경처럼 밝은 곳에서도 보이도록 파란 밑선 위에 흰 선
+        g.beginPath(); g.ellipse(e.x, y0, rx, rx * 0.26, 0, 0, 6.283); g.stroke();
+        g.lineWidth = 2 * (1 - u * 0.6); g.strokeStyle = r ? 'rgba(220,240,255,1)' : '#fff';
         g.beginPath(); g.ellipse(e.x, y0, rx, rx * 0.26, 0, 0, 6.283); g.stroke();
       }
       if (t < 0.4) { // 솟았다 가라앉는 물기둥
         const u = t / 0.4, hgt = Math.sin(u * Math.PI) * 58 * k, wd = (8 + 6 * u) * k;
-        g.globalAlpha = (1 - u * 0.7) * 0.85; g.fillStyle = 'rgba(235,246,255,1)';
-        g.beginPath(); g.moveTo(e.x - wd, y0); g.quadraticCurveTo(e.x - wd * 0.5, y0 - hgt * 0.8, e.x, y0 - hgt); g.quadraticCurveTo(e.x + wd * 0.5, y0 - hgt * 0.8, e.x + wd, y0); g.closePath(); g.fill();
+        g.globalAlpha = (1 - u * 0.7) * 0.92; g.fillStyle = 'rgba(150,205,248,1)'; g.strokeStyle = 'rgba(40,110,185,0.9)'; g.lineWidth = 1.5;
+        g.beginPath(); g.moveTo(e.x - wd, y0); g.quadraticCurveTo(e.x - wd * 0.5, y0 - hgt * 0.8, e.x, y0 - hgt); g.quadraticCurveTo(e.x + wd * 0.5, y0 - hgt * 0.8, e.x + wd, y0); g.closePath(); g.fill(); g.stroke();
+        g.fillStyle = 'rgba(255,255,255,0.8)'; g.beginPath(); g.ellipse(e.x - wd * 0.2, y0 - hgt * 0.45, wd * 0.22, hgt * 0.3, 0, 0, 6.283); g.fill();
       }
       // 물방울: 시드로 속도를 정하고 포물선으로 날아 물에 닿으면 사라진다
-      g.fillStyle = '#fff';
+      g.fillStyle = '#d9efff'; g.strokeStyle = 'rgba(40,110,185,0.85)'; g.lineWidth = 1;
       for (let d = 0, nd = low ? 5 : 10; d < nd; d++) {
         const h1 = Math.sin(e.s + d * 91.7) * 43758.5453, h2 = Math.sin(e.s * 1.7 + d * 12.3) * 24634.634;
         const vx = ((h1 - Math.floor(h1)) * 2 - 1) * 85 * k, vy = -(210 + (h2 - Math.floor(h2)) * 200) * Math.sqrt(k);
         const dy = vy * t + 350 * t * t; // 중력 700의 절반
         if (dy > 0) continue;
         g.globalAlpha = Math.min(1, (1 - t / 1.1) * 1.6);
-        g.beginPath(); g.arc(e.x + vx * t, y0 + dy, (2 + (d % 3) * 0.6) * Math.sqrt(k), 0, 6.283); g.fill();
+        g.beginPath(); g.arc(e.x + vx * t, y0 + dy, (2.2 + (d % 3) * 0.6) * Math.sqrt(k), 0, 6.283); g.fill(); g.stroke();
       }
     }
     g.restore();
