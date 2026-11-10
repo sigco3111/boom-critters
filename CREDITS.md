@@ -11,13 +11,13 @@
 | Interface Sounds | Kenney | CC0 1.0 | https://kenney.nl/assets/interface-sounds (카탈로그: https://github.com/sigco3111/assets-audio) | `assets/sfx/select.ogg` (select_001), `win.ogg` (confirmation_001), `lose.ogg` (error_001), `tick.ogg` (tick_001), `switch.ogg` (switch_001) |
 | Music Jingles | Kenney | CC0 1.0 | https://kenney.nl/assets/music-jingles (카탈로그: https://github.com/sigco3111/assets-audio, `kenney_musicjingles.zip`) | `assets/music/jingle-win.ogg` (jingles_STEEL10 — 결과 화면 승리), `jingle-lose.ogg` (jingles_PIZZI07 — 결과 화면 패배). 원본 파일 그대로 사용, 합쳐서 약 35KB |
 | Battle at sea | Thimras | CC0 1.0 | https://opengameart.org/content/battle-at-sea (카탈로그: https://github.com/sigco3111/assets-audio) | `assets/sfx/sea_cannon.ogg` (cannon_fire — 대포탄·로켓 발사), `sea_boom.ogg` (cannon_hit_cannon — 대포탄 폭발), `sea_boom_big.ogg` (cannon_hit_ship_short — 로켓 폭발), `sea_boom_small.ogg` (cannon_hit_wall_no_splash — 수류탄·화염탄 폭발, 설정 화면 미리듣기), `sea_splash.ogg` (cannon_miss — 물에 빠질 때). 원본 파일 그대로 사용 |
-| Enchanted Festival | Matthew Pablo | **CC-BY 3.0 (표기 필수)** | https://opengameart.org/content/enchanted-festival (카탈로그: https://github.com/sigco3111/assets-audio) | `assets/music/enchanted-festival-loop.ogg` (원곡의 `Enchanted Festival Loop.wav`를 OGG Vorbis로 변환, 루프 이음매에 0.4초 크로스페이드 적용 — 편집본) |
+| Enchanted Festival | Matthew Pablo | **CC-BY 3.0 (표기 필수)** | https://opengameart.org/content/enchanted-festival (카탈로그: https://github.com/sigco3111/assets-audio) | `assets/music/enchanted-festival-loop.ogg` (원곡의 `Enchanted Festival Loop.wav`를 OGG Vorbis로 변환, 루프 이음매에 0.4초 크로스페이드 적용 — 편집본), `assets/music/enchanted-festival.mp3` (원곡 `Enchanted Festival.mp3` 그대로 — OGG를 재생하지 못하는 기기의 대체용, 수정 없음) |
 
 ### 필수 표기 (CC-BY 3.0)
 
 > Enchanted Festival by Matthew Pablo, https://opengameart.org/content/enchanted-festival, licensed CC-BY 3.0
 
-라이선스 원문: https://creativecommons.org/licenses/by/3.0/ — 이 곡은 OGG로 변환하고 루프 이음매를 편집한 것입니다(원곡의 변경 사실 고지).
+라이선스 원문: https://creativecommons.org/licenses/by/3.0/ — OGG 파일은 변환하고 루프 이음매를 편집한 것입니다(원곡의 변경 사실 고지). MP3 파일은 원곡 그대로입니다.
 
 ## 그 외
 
