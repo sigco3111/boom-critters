@@ -680,12 +680,12 @@ export class Game {
     this.text(g, String(Math.abs(this.wind)), W / 2 + 68, 73, 12, '#fff', 'right');
     // 무기
     for (let i = 0; i < 2; i++) {
-      const x = 14 + i * 100, y = H - 56, sel = this.weapon === i;
+      const x = 14 + i * 114, y = H - 56, sel = this.weapon === i;
       g.fillStyle = sel ? 'rgba(255,226,122,0.85)' : 'rgba(0,0,0,0.5)';
-      g.beginPath(); g.roundRect(x, y, 92, 42, 8); g.fill();
+      g.beginPath(); g.roundRect(x, y, 106, 42, 8); g.fill();
       this.drawWeaponIcon(g, WEAPONS[i].id, x + 22, y + 21, 1);
-      this.text(g, `[${i + 1}] ${WEAPONS[i].name}`, x + 40, y + 15, 11, sel ? '#222' : '#fff', 'left');
-      this.text(g, `반경 ${WEAPONS[i].radius}`, x + 40, y + 31, 10, sel ? '#333' : '#bcd', 'left', '400');
+      this.text(g, `[${i + 1}] ${WEAPONS[i].name}`, x + 38, y + 15, 11, sel ? '#222' : '#fff', 'left');
+      this.text(g, `반경 ${WEAPONS[i].radius}`, x + 38, y + 31, 10, sel ? '#333' : '#bcd', 'left', '400');
     }
     // 파워 바
     if (this.turnTeam === 0 && (this.state === 'aim' || this.state === 'flying')) {
@@ -707,6 +707,6 @@ export class Game {
       this.text(g, b.text, W / 2, 133, 20, b.color === TEAMS[0].color ? '#9cc4ff' : '#ff9c9c');
       g.restore();
     }
-    this.text(g, `${DIFF[this.difficulty]?.label || ''} · 시드 ${this.seed}`, W - 10, H - 10, 10, 'rgba(255,255,255,0.8)', 'right', '400');
+    this.text(g, `${DIFF[this.difficulty]?.label || ''} · 시드 ${this.seed}`, W - 16, 64, 10, 'rgba(255,255,255,0.85)', 'right', '400');
   }
 }
