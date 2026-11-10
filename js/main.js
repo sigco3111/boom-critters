@@ -1,5 +1,5 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
-import { Game, W, H, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, stageConfig, waveConfig } from './game.js';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, stageConfig, waveConfig } from './game.js';
 import * as audio from './audio.js';
 import * as progress from './progress.js';
 
@@ -40,17 +40,23 @@ $('rotateHintClose').addEventListener('click', () => {
 
 let game = null, difficulty = 'normal', touchSticky = false;
 const coarseMQ = window.matchMedia('(pointer: coarse)');
+const portraitMQ = window.matchMedia('(orientation: portrait)');
+const motionMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
 const looksTouch = () => touchSticky || coarseMQ.matches || innerWidth <= 820 || (innerHeight <= 500 && innerWidth <= 1000)
   || (('ontouchstart' in window || navigator.maxTouchPoints > 0) && !window.matchMedia('(any-pointer: fine)').matches);
 function setTouchUI(forceOn) {
   if (forceOn) touchSticky = true;
   const on = looksTouch();
   document.body.classList.toggle('touch', on);
-  if (game) game.touchUI = on;
+  // 세로 폰이면 상단 HUD를 캔버스 대신 DOM HUD(#hud)로 표시해 글자를 14px 이상으로 유지
+  const dom = on && portraitMQ.matches;
+  document.body.classList.toggle('domhud', dom);
+  if (game) { game.touchUI = on; game.domHud = dom; }
 }
 setTouchUI();
 window.addEventListener('resize', () => setTouchUI());
 coarseMQ.addEventListener?.('change', () => setTouchUI());
+portraitMQ.addEventListener?.('change', () => setTouchUI());
 let endlessRecord = false;
 let current = { mode: 'quick' };   // 현재/마지막 매치: { mode: 'quick'|'stage'|'endless', stage? }
 const weaponBtns = [1, 2, 3, 4, 5].map((n) => $('bW' + n));
@@ -121,7 +127,7 @@ function renderStages() {
     b.type = 'button'; b.dataset.stage = String(i);
     b.className = (locked ? 'locked ' : '') + (st ? 'done' : '');
     b.disabled = locked;
-    b.innerHTML = `<b>${i}</b><span class="stars">${locked ? '🔒' : st ? stars(st) : ''}</span><small>적 ${cfg.enemies}마리</small>`;
+    b.innerHTML = `<b>${i}</b><span class="stars">${locked ? '🔒' : stars(st)}</span><small>적 ${cfg.enemies}마리</small>`;
     b.setAttribute('aria-label', locked ? `스테이지 ${i} 잠김` : `스테이지 ${i}${st ? ` 별 ${st}개` : ''}`);
     b.addEventListener('click', () => launch({ mode: 'stage', stage: i }));
     grid.appendChild(b);
@@ -143,11 +149,50 @@ function bindHold(el, onDown, onUp) {
   el.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 
+// 세로 폰 DOM HUD: 값이 바뀔 때만 DOM을 갱신 (프레임당 비용 최소화)
+function makeHud() {
+  const q = (sel) => document.querySelector(sel), cache = {};
+  const set = (key, el, prop, val) => { if (cache[key] !== val) { cache[key] = val; el[prop] = val; } };
+  const teams = [q('#hudMe'), q('#hudFoe')].map((el) => ({ el, name: el.querySelector('.hud-name'), tot: el.querySelector('.hud-tot'), bar: el.querySelector('.hud-bar i'), units: el.querySelector('.hud-units') }));
+  const timer = $('hudTimer'), arrow = $('hudWindArrow'), num = $('hudWindNum'), mode = $('hudMode'), status = $('hudStatus');
+  const windSvg = (w) => {
+    if (!w) return '<span style="font-size:14px">없음</span>';
+    const len = 16 + Math.abs(w) * 7, h = 20, y = h / 2;
+    return `<svg width="${len + 4}" height="${h}" viewBox="0 0 ${len + 4} ${h}" style="${w < 0 ? 'transform:scaleX(-1)' : ''}"><path d="M2 ${y}H${len - 8}" stroke="#ffe27a" stroke-width="5" stroke-linecap="round"/><path d="M${len + 2} ${y}L${len - 10} 2V${h - 2}Z" fill="#ffe27a" stroke="#000" stroke-width="1" stroke-linejoin="round"/></svg>`;
+  };
+  return {
+    update(gm) {
+      for (let t = 0; t < 2; t++) {
+        const mem = gm.units.filter((u) => u.team === t), tot = mem.reduce((a, u) => a + u.hp, 0), cap = mem.length * 100, T = teams[t];
+        set('n' + t, T.name, 'textContent', TEAMS[t].name.replace(' 팀', '') + (t === 0 ? '(나)' : '(AI)'));
+        set('t' + t, T.tot, 'textContent', `${tot}/${cap}`);
+        set('b' + t, T.bar, 'style', `width:${cap ? (100 * tot) / cap : 0}%;--tc:${TEAMS[t].color}`);
+        const act = gm.state === 'aim' || gm.state === 'flying' ? gm.activeUnit : null;
+        set('u' + t, T.units, 'innerHTML', mem.map((u) => `<span class="${u.alive ? (u === act ? 'act' : '') : 'dead'}">${u.alive ? u.hp : '✕'}</span>`).join(''));
+      }
+      const tm = Math.max(0, Math.ceil(gm.timer || 0));
+      set('tm', timer, 'textContent', String(tm));
+      set('tl', timer, 'className', tm <= 5 && gm.state === 'aim' ? 'low' : '');
+      set('wa', arrow, 'innerHTML', windSvg(gm.wind || 0));
+      set('wn', num, 'textContent', String(Math.abs(gm.wind || 0)));
+      set('md', mode, 'textContent', gm.modeLabel);
+      let st = '';
+      if (gm.state === 'aim') st = gm.turnTeam === 0 ? `내 차례 · 각도 ${Math.round(gm.angle)}° · 파워 ${Math.round(gm.power)}` : '상대가 조준 중...';
+      set('st', status, 'textContent', st);
+    },
+  };
+}
+
 function setup(sprites) {
   game = new Game(sprites);
   window.__game = game; // 디버깅/테스트용
   game.onOver = showResult;
   setTouchUI();
+  const syncMotion = () => { game.reduceMotion = motionMQ.matches; };
+  syncMotion(); motionMQ.addEventListener?.('change', syncMotion);
+  const syncScale = () => { game.viewScale = Math.max(0.2, canvas.clientWidth / W); };
+  syncScale(); new ResizeObserver(syncScale).observe(canvas);
+  const hud = makeHud();
   const k = game.keys;
 
   // 시작 화면
@@ -266,6 +311,7 @@ function setup(sprites) {
       if (!modalOpen) game.update(dt);
       game.draw(g);
     } catch (err) { console.error(err); }
+    if (game.domHud) hud.update(game);
     // 메뉴/모달이 떠 있으면 가로 화면의 겹침 컨트롤을 숨김
     document.body.classList.toggle('menu', ['startScreen', 'stageScreen', 'resultScreen', ...MODALS].some((id) => !$(id).classList.contains('hidden')));
     // 무기 버튼 상태 표시
