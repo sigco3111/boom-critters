@@ -1,8 +1,9 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111046';
-import * as audio from './audio.js?v=2026111046';
-import { t as tr, getLang } from './i18n.js?v=2026111046';
-import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111046';
+import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111047';
+import * as audio from './audio.js?v=2026111047';
+import { t as tr, getLang } from './i18n.js?v=2026111047';
+import * as fx from './fx.js?v=2026111047';
+import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111047';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -21,6 +22,7 @@ const FALL_T = 80;       // 낙하 데미지 임계 높이
 const TURN_TIME = 30;
 const CHARGE_T = 1.6;    // 파워 0→100 충전 시간(초)
 const AIR_WARN = 1.0, AIR_W = 120, AIR_N = 5, AIR_IDX = 5; // 공습: 경고 마커 1초 → 폭탄 5발이 폭 120px 구역에 순서 없이 떨어짐 (무기 슬롯 6번)
+const MAX_SFX = 24;       // 동시에 재생하는 스프라이트 이펙트(폭발·타격·머즐 플래시) 상한: 넘치면 가장 오래된 것부터 버림
 const MAX_PARTICLES = 500, MAX_FLOATERS = 24; // 파티클·떠오르는 글자 상한 (넘치면 가장 오래된 것부터 재활용=제거)
 const AI_MAX_TRIES = 3;      // AI가 유효한 사격(물/화면 밖이 아닌 착탄)을 못 찾을 때 다시 계산해 보는 횟수. 넘으면 턴을 넘긴다
 const AI_SLICE_MS = 4;       // AI 사격 계산을 한 프레임에 쓰는 최대 시간(ms): 나머지는 다음 프레임에 이어서 (느린 폰의 프레임 끊김 방지)
@@ -204,6 +206,7 @@ export class Game {
     this.state = 'idle';
     this.units = []; this.particles = []; this.floaters = [];
     this.ppool = []; this.fpool = []; // 재사용할 파티클·떠오르는 글자 객체
+    this.sfx = []; this.sfxPool = []; // 스프라이트 이펙트(fx.js)와 재사용 객체
     this.proj = null; this.shake = 0;
     this.viewScale = 1;         // 캔버스 CSS 폭 / 논리 폭 (작은 화면일수록 글자를 키우는 데 사용)
     this.bigHud = false;        // 접근성: HUD 글자 +25% (설정)
@@ -244,7 +247,7 @@ export class Game {
     this.wave = opts.wave || 0; this.cleared = 0;
     this.windMax = opts.windMax ?? 10;
     this.level = opts.level ?? null;      // null이면 난이도(쉬움/보통/어려움)의 오차를 사용
-    this.units = []; this.particles = []; this.floaters = []; this.proj = null;
+    this.units = []; this.particles = []; this.floaters = []; this.proj = null; this.sfx.length = 0;
     this.stats = blankStats();
     const seed = opts.seed ?? ((Math.random() * 1e9) | 0);
     // 스테이지 1~3 초원 / 4~6 사막 / 7~8 설원 / 9~10 밤, 빠른 대전·무한은 시드로 결정
@@ -280,7 +283,7 @@ export class Game {
     this.terrain = new Terrain(seed, theme, this.headless, kind);
     this.bg = this.headless ? null : makeBackground(theme, seed);
     this.weather = this.headless ? null : makeWeather(theme);
-    this.units = []; this.particles = []; this.floaters = []; this.proj = null;
+    this.units = []; this.particles = []; this.floaters = []; this.proj = null; this.sfx.length = 0;
     this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.turnNo = 0; this.air = null;
     const rng = mulberry32(seed ^ 0x5bd1e995), jit = () => (rng() * 2 - 1) * 25;
     const baseX = [[95, 230, 360], ENEMY_X[enemies] || ENEMY_X[3]];
@@ -429,7 +432,7 @@ export class Game {
     if (u.team === 1) this.stats.dealt += n; else this.stats.taken += n;
   }
 
-  damage(u, dmg, color = '#fff') {
+  damage(u, dmg, color = '#fff', ix = u.x, iy = u.y - BODY_CY) {
     if (!u.alive || dmg <= 0) return;
     this.countLoss(u, Math.min(u.hp, dmg));
     u.hp -= dmg; u.hurt = HURT_T;
@@ -492,7 +495,7 @@ export class Game {
   explode(x, y, w) {
     const r = w.radius;
     this.terrain.crater(x, y, r);
-    this.emitExplosion(x, y, r);
+    this.emitExplosion(x, y, r, w.id);
     this.blastCrates(x, y, r);
     if (r >= 50) this.kick(r >= 58 ? 3.5 : 3); // 로켓·수류탄 같은 큰 폭발만 아주 짧게 흔든다
     audio.play(w.id === 'rocket' ? 'sea_boom_big' : w.id === 'cannon' ? 'sea_boom' : 'sea_boom_small', { rate: w.id === 'rocket' ? 0.95 : 1, vol: 1 });
@@ -508,7 +511,7 @@ export class Game {
       const f = 1 - d / reach;
       const dmg = Math.max(2, Math.round(w.damage * f * (u.trait.blastK || 1)));
       let nx = (cx - x) / (d || 1), ny = (cy - y) / (d || 1);
-      this.damage(u, dmg, '#ff6b5a'); hit = true;
+      this.damage(u, dmg, '#ff6b5a', cx - nx * BODY_R * 0.6, cy - ny * BODY_R * 0.6); hit = true; // 타격 번쩍임은 폭발 쪽 몸 가장자리에
       if (u.alive) {
         u.grounded = false; u.y -= 2; u.fallStart = u.y;
         u.vx = nx * w.knock * f; u.vy = ny * w.knock * f - 150 * f;
@@ -522,21 +525,61 @@ export class Game {
   buzz(kind) { if (this.haptic) this.haptic(kind); }
   kick(a) { if (!this.reduceMotion) this.shake = Math.max(this.shake, a); }
 
-  emitExplosion(x, y, r) {
-    const P = this.particles;
-    this.pt('flash', x, y, 0, 0, r, 0.22);
-    const q = this.lowFx ? 0.5 : 1, nf = (18 + (r / 2) | 0) * q | 0; // 느린 기기(lowFx)에서는 파티클을 절반만
-    for (let i = 0; i < nf; i++) {
-      const a = rnd(0, 6.283), s = rnd(40, 240);
-      this.pt('fire', x + Math.cos(a) * r * 0.2, y + Math.sin(a) * r * 0.2, Math.cos(a) * s, Math.sin(a) * s - 40, rnd(r * 0.2, r * 0.45), rnd(0.35, 0.8));
-    }
-    for (let i = 0, ns = 14 * q | 0; i < ns; i++) {
-      const a = rnd(0, 6.283), s = rnd(10, 90);
-      this.pt('smoke', x + Math.cos(a) * r * 0.4, y + Math.sin(a) * r * 0.4, Math.cos(a) * s, Math.sin(a) * s - 50, rnd(r * 0.2, r * 0.4), rnd(1.0, 1.9), '70,70,70');
+  emitExplosion(x, y, r, id = '') {
+    const q = this.lowFx ? 0.5 : 1;
+    // 스프라이트 폭발(fx.js): 로켓·수류탄은 큰 것, 대포·화염탄·공습은 작은 것. 블래스트 반경에 맞춰 크기를 정한다. 못 받았으면 예전 캔버스 불꽃·연기
+    const big = id === 'rocket' || id === 'grenade';
+    const sprite = this.sfxAdd(big ? 'boomL' : 'boomS', x, y, r * (big ? 2.5 : 2.8), 0);
+    if (!sprite) {
+      this.pt('flash', x, y, 0, 0, r, 0.22);
+      const nf = (18 + (r / 2) | 0) * q | 0; // 느린 기기(lowFx)에서는 파티클을 절반만
+      for (let i = 0; i < nf; i++) {
+        const a = rnd(0, 6.283), s = rnd(40, 240);
+        this.pt('fire', x + Math.cos(a) * r * 0.2, y + Math.sin(a) * r * 0.2, Math.cos(a) * s, Math.sin(a) * s - 40, rnd(r * 0.2, r * 0.45), rnd(0.35, 0.8));
+      }
+      for (let i = 0, ns = 14 * q | 0; i < ns; i++) {
+        const a = rnd(0, 6.283), s = rnd(10, 90);
+        this.pt('smoke', x + Math.cos(a) * r * 0.4, y + Math.sin(a) * r * 0.4, Math.cos(a) * s, Math.sin(a) * s - 50, rnd(r * 0.2, r * 0.4), rnd(1.0, 1.9), '70,70,70');
+      }
+    } else {
+      for (let i = 0, ns = 10 * q | 0; i < ns; i++) { // 스프라이트 둘레에 튀는 불똥
+        const a = rnd(0, 6.283), s = rnd(90, 260);
+        this.pt('spark', x + Math.cos(a) * r * 0.3, y + Math.sin(a) * r * 0.3, Math.cos(a) * s, Math.sin(a) * s - 60, rnd(1.2, 2.6), rnd(0.25, 0.55));
+      }
     }
     for (let i = 0, nd = 16 * q | 0; i < nd; i++) {
       const a = rnd(-3.0, -0.15), s = rnd(120, 320);
       this.pt('debris', x, y, Math.cos(a) * s, Math.sin(a) * s, rnd(1.5, 3.5), rnd(0.8, 1.4));
+    }
+  }
+
+  // ---------- 스프라이트 이펙트 (fx.js) ----------
+  // name 애니메이션을 (x, y)에서 한 번 재생. 크기 size(px), 회전 rot. 같은 시각 최대 MAX_SFX개. 시트가 없거나 헤드리스면 false(호출한 쪽이 예전 그림을 쓴다).
+  // 모션 줄이기: 애니메이션 대신 가장 밝은 프레임 한 장을 0.14초 번쩍이고 사라진다
+  sfxAdd(name, x, y, size, rot = 0) {
+    if (this.headless || !fx.ready(name)) return false;
+    const a = fx.ANIMS[name], S = this.sfx;
+    if (S.length >= MAX_SFX) this.sfxPool.push(S.shift());
+    const e = this.sfxPool.pop() || { a: null, x: 0, y: 0, size: 0, rot: 0, t: 0, dur: 1, still: -1 };
+    e.a = a; e.x = x; e.y = y; e.size = size; e.rot = rot; e.t = 0;
+    e.dur = this.reduceMotion ? 0.14 : a.n / a.fps;
+    e.still = this.reduceMotion ? a.still : -1;
+    S.push(e);
+    return true;
+  }
+  updateSfx(dt) {
+    const S = this.sfx; if (!S.length) return;
+    let n = 0;
+    for (let i = 0; i < S.length; i++) { const e = S[i]; e.t += dt; if (e.t < e.dur) S[n++] = e; else this.sfxPool.push(e); }
+    S.length = n;
+  }
+  drawSfx(g) {
+    const S = this.sfx; if (!S.length) return;
+    const glow = !this.lowFx; // 느린 기기에서는 더해 그리기(빛남) 생략
+    for (let i = 0; i < S.length; i++) {
+      const e = S[i], a = e.a, k = Math.min(1, e.t / e.dur);
+      const f = e.still >= 0 ? e.still : Math.min(a.n - 1, (k * a.n) | 0);
+      fx.drawFrame(g, a, f, e.x, e.y, e.size, e.rot, a.fade && k > 1 - a.fade ? (1 - k) / a.fade : 1, glow);
     }
   }
 
@@ -915,7 +958,7 @@ export class Game {
     u.squash = -0.2; u.shootT = 0.4;
     for (let i = 0; i < 8; i++) this.pt('spark', ox, oy, rnd(-90, 90), rnd(-90, 90), rnd(1.5, 3), rnd(0.2, 0.4));
     if (target) {
-      this.damage(target, w.damage, '#9fd0ff');
+      this.damage(target, w.damage, '#9fd0ff', ex, ey);
       this.pt('flash', ex, ey, 0, 0, 34, 0.25);
       for (let i = 0; i < 16; i++) this.pt('spark', ex, ey, rnd(-220, 220), rnd(-220, 160), rnd(1.5, 3.5), rnd(0.25, 0.55));
       audio.play('hit', { vol: 0.8 });
@@ -1190,6 +1233,7 @@ export class Game {
     this.time += dt;
     if (this.state === 'idle') return;
     this.updateParticles(dt);
+    this.updateSfx(dt);
     if (this.weather && !this.reduceMotion) { this.weather.active = this.lowFx ? Math.ceil(this.weather.parts.length * 0.4) : this.weather.parts.length; stepWeather(this.weather, dt, this.wind || 0); }
     if (this.bolt) { this.bolt.t += dt; if (this.bolt.t > 0.3) this.bolt = null; }
     this.flashT = Math.max(0, this.flashT - dt);
@@ -1363,6 +1407,7 @@ export class Game {
     if (this.proj) this.drawProj(g, this.proj);
     this.drawAir(g, showAim && this.airMode);
     this.drawBolt(g);
+    this.drawSfx(g);
     this.drawParticles(g);
     this.drawTags(g);
     if (showAim && !this.airMode) this.drawCross(g);
