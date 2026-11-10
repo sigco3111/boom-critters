@@ -1,6 +1,6 @@
 // 스테이지 테마: 배경(하늘·구름·별·언덕)과 지형/물 색을 캔버스 코드로 그린다 (외부 이미지 없음)
-import { W, H, mulberry32, makeHeights } from './terrain.js?v=2026111048';
-import { t as tr } from './i18n.js?v=2026111048';
+import { W, H, mulberry32, makeHeights } from './terrain.js?v=2026111049';
+import { t as tr } from './i18n.js?v=2026111049';
 
 export const THEMES = [
   {
@@ -37,8 +37,8 @@ export const THEMES = [
   },
 ];
 
-// 스테이지 1~3 초원, 4~6 사막, 7~8 설원, 9~10 밤
-export function themeForStage(s) { return THEMES[s <= 3 ? 0 : s <= 6 ? 1 : s <= 8 ? 2 : 3]; }
+// 스테이지 1~3 초원, 4~6 사막, 7~8 설원, 9~10 밤, 11 초원(섬), 12 밤(다리), 13 사막(협곡+다리)
+export function themeForStage(s) { return THEMES[s === 11 ? 0 : s === 12 ? 3 : s === 13 ? 1 : s <= 3 ? 0 : s <= 6 ? 1 : s <= 8 ? 2 : 3]; }
 // 빠른 대전·무한 모드: 시드로 테마를 정한다 (같은 시드 = 같은 테마)
 export function themeForSeed(seed) { return THEMES[(Math.imul(seed | 0, 2654435761) >>> 28) % THEMES.length]; }
 // 빠른 대전 '테마' 선택값('grass'|'desert'|'snow'|'night') -> 테마 (없으면 undefined: 랜덤)
@@ -52,10 +52,14 @@ export function drawMapPreview(c, theme, kind) {
     const gr = g.createLinearGradient(0, 0, 0, h); theme.sky.forEach(([o, col]) => gr.addColorStop(o, col)); g.fillStyle = gr; g.fillRect(0, 0, w, h);
   }
   if (!kind) { g.fillStyle = 'rgba(0,0,0,0.45)'; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.font = `bold ${h * 0.7}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('?', w / 2, h / 2 + 1); return; }
-  const hs = makeHeights(mulberry32(kind === 'canyon' ? 7 : kind === 'gentle' ? 11 : 3), kind), tl = theme ? theme.tile.base : '#6b5a48', ed = theme ? theme.edge[1] : '#6fae4a';
+  const hs = makeHeights(mulberry32(kind === 'canyon' ? 7 : kind === 'gentle' ? 11 : kind === 'island' ? 5 : kind === 'bridge' ? 9 : 3), kind), tl = theme ? theme.tile.base : '#6b5a48', ed = theme ? theme.edge[1] : '#6fae4a';
+  const yy = (x) => ((Math.min(hs[Math.min(W - 1, Math.max(0, Math.round(x)))], 505) - 200) / 280) * h; // 물 위 빈 열(H)은 물속 높이로
+  if (kind === 'island' || kind === 'bridge') { g.fillStyle = 'rgba(40,120,210,0.9)'; g.fillRect(0, h * 0.8, w, h); } // 물: 섬·절벽 사이 빈 곳이 보이게
   g.beginPath(); g.moveTo(0, h);
-  for (let i = 0; i <= 48; i++) g.lineTo((i / 48) * w, ((hs[Math.min(W - 1, Math.round((i / 48) * (W - 1)))] - 200) / 280) * h);
+  for (let i = 0; i <= 96; i++) g.lineTo((i / 96) * w, yy((i / 96) * (W - 1)));
   g.lineTo(w, h); g.closePath(); g.fillStyle = tl; g.fill(); g.lineWidth = 2; g.strokeStyle = ed; g.stroke();
+  const b = hs.bridge;
+  if (b) { g.lineWidth = 2; g.strokeStyle = '#9a6a35'; g.beginPath(); g.moveTo((b.x1 / W) * w, ((b.y1 - 200) / 280) * h); g.lineTo((b.x2 / W) * w, ((b.y2 - 200) / 280) * h); g.stroke(); }
 }
 
 function ridge(g, color, base, amp, rnd, step = 8) {

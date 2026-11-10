@@ -1,8 +1,8 @@
 // 진행 상황 저장 (localStorage): 해금된 스테이지, 스테이지별 최고 별, 무한 모드 최고 기록
 // 저장소는 storage.js를 거치므로 localStorage가 막힌 환경에서도 이번 접속 동안은 메모리에 유지된다
-import { local } from './storage.js?v=2026111048';
+import { local } from './storage.js?v=2026111049';
 const KEY = 'boom-critters-progress-v1';
-export const STAGES = 10;
+export const STAGES = 13;
 
 function blank() { return { unlocked: 1, stars: {}, endlessBest: 0, best: {} }; }
 
@@ -23,9 +23,12 @@ export function load() {
       for (const k in BEST_KEYS) { const v = Number(b[k]); if (Number.isFinite(v) && v >= 0) o[k] = Math.round(v); }
       if (Object.keys(o).length === Object.keys(BEST_KEYS).length) best[i] = o;
     }
+    // 예전 저장(스테이지 10개)과 호환: 클리어한 스테이지 다음은 항상 열려 있어야 한다 (10을 이미 깬 저장은 11이 열림)
+    let unlocked = Math.min(STAGES, Math.max(1, Number(d.unlocked) | 0 || 1));
+    for (const k in stars) unlocked = Math.max(unlocked, Math.min(STAGES, Number(k) + 1));
     return {
       best,
-      unlocked: Math.min(STAGES, Math.max(1, Number(d.unlocked) | 0 || 1)),
+      unlocked,
       stars,
       endlessBest: Math.max(0, Number(d.endlessBest) | 0),
     };
@@ -73,7 +76,7 @@ export function bestOf(stage) { return load().best[stage] || null; }
 const PREF_KEY = 'boom-prefs-v1';
 export const DIFFS = ['easy', 'normal', 'hard'];
 export const MAP_THEMES = ['random', 'grass', 'desert', 'snow', 'night'];   // 빠른 대전 맵 선택: 테마
-export const MAP_TERRAINS = ['random', 'gentle', 'hills', 'canyon'];          // 빠른 대전 맵 선택: 지형
+export const MAP_TERRAINS = ['random', 'gentle', 'hills', 'canyon', 'island', 'bridge'];          // 빠른 대전 맵 선택: 지형
 export function loadPrefs() {
   const p = { difficulty: 'normal', bigHud: false, contrast: false, vibration: true, hint: null, theme: 'random', terrain: 'random' };
   try {

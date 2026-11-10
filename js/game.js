@@ -1,9 +1,9 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111048';
-import * as audio from './audio.js?v=2026111048';
-import { t as tr, getLang } from './i18n.js?v=2026111048';
-import * as fx from './fx.js?v=2026111048';
-import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111048';
+import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111049';
+import * as audio from './audio.js?v=2026111049';
+import { t as tr, getLang } from './i18n.js?v=2026111049';
+import * as fx from './fx.js?v=2026111049';
+import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111049';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -126,7 +126,8 @@ export function quickConfig(diff, map) { return { mode: 'quick', enemies: (DIFF[
 const ENEMY_X = { 1: [760], 2: [650, 820], 3: [600, 730, 865], 4: [560, 670, 780, 885] };
 
 // ---------- 스테이지 / 무한 모드 설정 (밸런스 숫자는 README "밸런스" 표 참고) ----------
-export const STAGE_COUNT = 10;
+export const STAGE_COUNT = 13;
+const STAGE_TERRAIN = { 11: 'island', 12: 'bridge', 13: 'canyonbridge' }; // 11 섬 · 12 다리(밤) · 13 협곡+다리 (나머지는 언덕)
 // AI 오차 단계(level 1~10): 각도 오차(표준편차, °) 9 → 1, 파워 오차 18 → 2 로 선형 감소. level ≤ 3은 상위 6개 후보 중 무작위 선택
 const ERR_A = [9, 1], ERR_P = [18, 2];
 // AI가 쓸 수 있는 특수 무기(무기 번호 -> 최소 level): 수류탄 2, 번개 3, 화염탄 4, 공습 4. level이 없는 빠른 대전은 모두 사용
@@ -134,10 +135,10 @@ const AI_UNLOCK = { 2: 2, 3: 3, 4: 4, 5: 4 };
 const BONUS_LEVEL = 7, BONUS_GRENADE = 1, BONUS_BOLT = 1; // 우리 팀 보너스 탄약: 적 4마리 구간(level 7+)에서 수류탄 +1, 번개 +1
 // 스테이지 모드 AI 오차 [각도 오차 °, 파워 오차]: window.__sim 승률 측정으로 정한 값 (README "밸런스" 표). 보통 플레이어(3°/6 오차) 목표 승률 약 스테이지 1 95% · 3 88% · 5 70% · 7 55% · 9 40% · 10 30%.
 // 지형마다 난이도가 달라 오차가 단조롭지 않다(4는 3보다, 10은 9보다 오차가 크다). 스테이지 1~3은 상위 6개 후보 중 무작위로 고르는(pick) 부정확한 조준
-const STAGE_AI = [null, [17, 34], [13, 26], [9, 18], [13, 26], [4.6, 9.2], [8, 16], [5.6, 11.2], [3.2, 6.4], [3.3, 6.6], [5.2, 10.4]];
+const STAGE_AI = [null, [17, 34], [13, 26], [9, 18], [13, 26], [4.6, 9.2], [8, 16], [5.6, 11.2], [3.2, 6.4], [3.3, 6.6], [5.2, 10.4], [4.8, 9.6], [4.6, 9.2], [5.2, 10.4]];
 // 스테이지 s(1~10): 고정 시드, 적 수 2→4(1~3: 2마리, 4~6: 3마리, 7~10: 4마리), 바람 범위 ±(3+s), AI level = s
 export function stageConfig(s) {
-  return { mode: 'stage', stage: s, seed: 20240 + s * 7919, enemies: s <= 3 ? 2 : s <= 6 ? 3 : 4, windMax: 3 + s, level: s };
+  return { mode: 'stage', stage: s, seed: 20240 + s * 7919, enemies: s <= 3 ? 2 : s <= 6 ? 3 : 4, windMax: Math.min(14, 3 + s), level: s, terrain: STAGE_TERRAIN[s] };
 }
 // 무한 모드 웨이브 w(1~): 적 수 2→4(1~2: 2마리, 3~4: 3마리, 5~: 4마리), 바람 ±(4+w, 최대 14), AI level = 1 + 1.5×(w-1) (최대 10, 웨이브 5 ≈ 스테이지 7)
 export function waveConfig(w) {
@@ -256,7 +257,7 @@ export class Game {
     // 빠른 대전만 맵을 고를 수 있다 (테마·지형 모두 '랜덤'이면 시드로 정함). 스테이지·무한은 예전 그대로(지형 hills)
     const quick = this.mode === 'quick';
     const theme = this.mode === 'stage' ? themeForStage(this.stage) : (quick && themeById(opts.theme)) || themeForSeed(seed);
-    const kind = quick ? (TERRAINS.includes(opts.terrain) ? opts.terrain : terrainForSeed(seed)) : 'hills';
+    const kind = quick ? (TERRAINS.includes(opts.terrain) ? opts.terrain : terrainForSeed(seed)) : (this.mode === 'stage' && TERRAINS.includes(opts.terrain) ? opts.terrain : 'hills');
     this.buildField(seed, opts.enemies ?? 3, null, theme, kind);
     this.nextIdx = [0, 0];
     this.turnTeam = 0;
@@ -289,9 +290,12 @@ export class Game {
     this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.turnNo = 0; this.air = null;
     const rng = mulberry32(seed ^ 0x5bd1e995), jit = () => (rng() * 2 - 1) * 25;
     const baseX = [[95, 230, 360], ENEMY_X[enemies] || ENEMY_X[3]];
+    const snap = kind === 'island' || kind === 'bridge' || kind === 'canyonbridge'; // 물·다리가 있는 지형: 유닛은 단단한 땅 위에서만 시작
+    const placed = [];
     for (let t = 0; t < 2; t++) {
       for (let i = 0; i < baseX[t].length; i++) {
-        const x = clamp(baseX[t][i] + jit(), 20, W - 20);
+        let x = clamp(baseX[t][i] + jit(), 20, W - 20);
+        if (snap) { x = this.spawnSpot(x, t, placed); placed.push(x); }
         const sy = this.terrain.surfaceY(x);
         const [sp, nm, trait, tagColor] = t === 1 && i >= 3 ? EXTRA_ENEMY : CHARACTERS[t][i];
         const u = new Unit(t, i, sp, nm, x, sy - 1, trait);
@@ -306,6 +310,26 @@ export class Game {
         this.units.push(u);
       }
     }
+  }
+
+  // 섬·다리 지형의 시작 위치: 원하는 x에서 가장 가까운, 가장자리에서 18px 이상 떨어진 평평한 땅 (자기 편 쪽을 먼저, 다리 위·다른 유닛 40px 안은 제외)
+  spawnSpot(x0, team, placed) {
+    const T = this.terrain, br = T.bridge;
+    const okAt = (x) => {
+      if (x < 20 || x > W - 20) return false;
+      if (team === 0 ? x > 470 : x < 490) return false;
+      if (br && x > br.x1 - 8 && x < br.x2 + 8) return false;
+      const sy = T.surfaceY(x);
+      if (sy > WATER_Y - 50) return false;
+      for (let d = -18; d <= 18; d += 6) { const y = T.surfaceY(x + d); if (y > WATER_Y - 50 || Math.abs(y - sy) > 34) return false; }
+      return !placed.some((q) => Math.abs(q - x) < 40);
+    };
+    const dir = team === 0 ? -1 : 1;
+    for (let r = 0; r < W; r++) {
+      if (okAt(x0 + dir * r)) return x0 + dir * r;
+      if (r && okAt(x0 - dir * r)) return x0 - dir * r;
+    }
+    return clamp(x0, 20, W - 20);
   }
 
   // 무한 모드: 다음 웨이브 시작. 생존 유닛은 체력 +35, 3의 배수 웨이브 직전엔 쓰러진 유닛 1명이 HP 50으로 복귀

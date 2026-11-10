@@ -37,18 +37,53 @@ function makeDirtTile(rnd, tile) {
 }
 
 // 지형 프리셋(빠른 대전 '지형' 선택): gentle = 낮은 진폭의 완만한 땅, hills = 기본(예전과 같은 난수 순서), canyon = 가운데 깊은 협곡과 높은 벽
-export const TERRAINS = ['gentle', 'hills', 'canyon'];
-// 지형 '랜덤': 시드로 정한다 (gentle 25% · hills 50% · canyon 25%). 테마(themeForSeed)와 다른 해시를 써서 서로 영향이 없다
-export function terrainForSeed(seed) { const v = Math.imul((seed | 0) ^ 0x9e3779b9, 2246822519) >>> 28; return v < 4 ? 'gentle' : v < 12 ? 'hills' : 'canyon'; }
+// island = 물 위에 떠 있는 섬 2~3개, bridge = 두 절벽을 잇는 얇은 부술 수 있는 다리, canyonbridge = 협곡 위에 다리(스테이지 13 전용, 빠른 대전 선택지에는 없음)
+export const TERRAINS = ['gentle', 'hills', 'canyon', 'island', 'bridge', 'canyonbridge'];
+// 지형 '랜덤': 시드로 정한다 (16칸 중 gentle 3 · hills 6 · canyon 3 · island 2 · bridge 2). 테마(themeForSeed)와 다른 해시를 써서 서로 영향이 없다
+export function terrainForSeed(seed) { const v = Math.imul((seed | 0) ^ 0x9e3779b9, 2246822519) >>> 28; return v < 3 ? 'gentle' : v < 9 ? 'hills' : v < 12 ? 'canyon' : v < 14 ? 'island' : 'bridge'; }
+const smooth = (t) => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
 // 열마다 지표면 높이 h[x] (y 아래가 땅). 협곡은 양쪽 끝 유닛 배치 구역(x≈20~385, 535~910) 밖인 x 400~540에만 파서 모든 유닛이 평평한 고원 위에 서게 한다
 export function makeHeights(rnd, kind = 'hills') {
   const h = new Float32Array(W);
-  if (kind === 'canyon') {
+  if (kind === 'island') {
+    // 섬 2~3개: 섬 사이는 물(h=H, 지형 없음). 섬 가장자리는 40px에 걸쳐 둥글게 물속(505)으로 가라앉는다. 유닛 배치 구역(x≈20~385, 535~910)에 큰 섬이 걸치도록 한다
+    const three = rnd() < 0.5, p = rnd() * 6.283;
+    const isl = three
+      ? [[8, 290 + rnd() * 25, 320 + rnd() * 45], [365 + rnd() * 20, 470 + rnd() * 15, 350 + rnd() * 40], [545 + rnd() * 10, 952, 315 + rnd() * 45]]
+      : [[8, 385 + rnd() * 20, 320 + rnd() * 45], [530 + rnd() * 15, 952, 315 + rnd() * 45]];
+    h.fill(H);
+    for (const [x0, x1, top] of isl) {
+      for (let x = Math.ceil(x0); x <= x1; x++) {
+        const d = Math.min(x - x0, x1 - x), e = smooth(d / 40), y = top + 14 * Math.sin(p + x * 0.02) + 7 * Math.sin(2 * p + x * 0.055);
+        h[x] = y + (505 - y) * (1 - e);
+      }
+    }
+    return h;
+  }
+  if (kind === 'bridge') {
+    // 왼쪽·오른쪽 절벽 사이가 물. 절벽 벽면은 10px에 걸쳐 가파르게 물속으로. 다리는 두 절벽 윗면을 잇는 두께 7px 판자
+    const L = 392 + rnd() * 16, R = 548 - rnd() * 16, p = rnd() * 6.283, tl = 290 + rnd() * 40, tr = 290 + rnd() * 40;
+    h.fill(H);
+    for (let x = 0; x < W; x++) {
+      const left = x <= L, edge = left ? L - x : x - R;
+      if (left ? x > L : x < R) continue;
+      const top = (left ? tl : tr) + 10 * Math.sin(p + x * 0.017) + 5 * Math.sin(2.3 * p + x * 0.05);
+      h[x] = top + (505 - top) * (1 - smooth(edge / 10));
+    }
+    const x1 = Math.floor(L) - 12, x2 = Math.ceil(R) + 12;
+    h.bridge = { x1, y1: h[x1], x2, y2: h[x2], th: 7 };
+    return h;
+  }
+  if (kind === 'canyon' || kind === 'canyonbridge') {
     const left = 255 + rnd() * 40, right = 255 + rnd() * 40, cx = 466 + rnd() * 8, half = 28 + rnd() * 6, wall = 32, floor = 440 + rnd() * 16, p = rnd() * 6.283;
     for (let x = 0; x < W; x++) {
       const t = Math.min(1, Math.max(0, (Math.abs(x - cx) - half) / wall)), s = t * t * (3 - 2 * t);
       const top = (x < cx ? left : right) + 12 * Math.sin(p + (6.283 * 3 * x) / W) + 7 * Math.sin(2.1 * p + (6.283 * 7 * x) / W);
       h[x] = Math.max(215, Math.min(458, floor + (top - floor) * s));
+    }
+    if (kind === 'canyonbridge') { // 협곡 양쪽 벽 윗면을 잇는 다리 (끝이 벽 윗면 안쪽으로 4px 파묻힌다)
+      const x1 = Math.floor(cx - half - wall) - 4, x2 = Math.ceil(cx + half + wall) + 4;
+      h.bridge = { x1, y1: h[x1], x2, y2: h[x2], th: 8 };
     }
     return h;
   }
@@ -87,8 +122,11 @@ export class Terrain {
     const rnd = mulberry32(seed);
     const h = makeHeights(rnd, this.kind);
     this.heights = h;
+    this.bridge = h.bridge || null; // { x1, y1, x2, y2, th }: 다리 (지형 픽셀이라 폭발에 깎인다)
     if (this.headless) {
       for (let x = 0; x < W; x++) for (let y = Math.ceil(h[x]); y < H; y++) this.alpha[y * W + x] = 255;
+      const b = this.bridge;
+      if (b) for (let x = b.x1; x <= b.x2; x++) { const yc = b.y1 + ((b.y2 - b.y1) * (x - b.x1)) / (b.x2 - b.x1); for (let y = Math.floor(yc); y <= Math.floor(yc + b.th); y++) this.alpha[y * W + x] = 255; }
       this.scanTop(0, W, true);
       return;
     }
@@ -108,7 +146,11 @@ export class Terrain {
     g.fillStyle = grad; g.fillRect(0, 0, W, H);
     const line = (w, dy, col) => {
       g.beginPath();
-      for (let x = 0; x < W; x++) (x ? g.lineTo(x, h[x] + dy) : g.moveTo(x, h[x] + dy));
+      let on = false;
+      for (let x = 0; x < W; x++) { // 물 위 빈 열(h≥H)에서는 선을 끊는다
+        if (h[x] >= H) { on = false; continue; }
+        if (on) g.lineTo(x, h[x] + dy); else { g.moveTo(x, h[x] + dy); on = true; }
+      }
       g.lineWidth = w; g.strokeStyle = col; g.lineJoin = 'round'; g.stroke();
     };
     const [e1, e2, e3] = this.theme.edge;
@@ -122,7 +164,25 @@ export class Terrain {
       g.fillRect(x, h[x] + 2, 2, l);
     }
     g.globalCompositeOperation = 'source-over';
+    if (this.bridge) this.drawBridge(g, this.bridge);
     this.refresh(0, 0, W, H);
+  }
+
+  // 나무 다리: 불투명하게 칠해야 충돌(알파)에 잡힌다. 판자 이음선과 윗면 하이라이트
+  drawBridge(g, b) {
+    const yAt = (x) => b.y1 + ((b.y2 - b.y1) * (x - b.x1)) / (b.x2 - b.x1);
+    g.save();
+    g.beginPath(); g.moveTo(b.x1, b.y1); g.lineTo(b.x2, b.y2); g.lineTo(b.x2, b.y2 + b.th); g.lineTo(b.x1, b.y1 + b.th); g.closePath();
+    g.fillStyle = '#9a6a35'; g.fill();
+    g.lineWidth = 1; g.strokeStyle = '#4a2c12';
+    g.beginPath();
+    for (let x = b.x1 + 8; x < b.x2; x += 10) { g.moveTo(x + 0.5, yAt(x)); g.lineTo(x + 0.5, yAt(x) + b.th); }
+    g.stroke();
+    g.lineWidth = 2; g.strokeStyle = '#d9a566';
+    g.beginPath(); g.moveTo(b.x1, b.y1 + 1); g.lineTo(b.x2, b.y2 + 1); g.stroke();
+    g.strokeStyle = '#5a3a1a';
+    g.beginPath(); g.moveTo(b.x1, b.y1 + b.th - 0.5); g.lineTo(b.x2, b.y2 + b.th - 0.5); g.stroke();
+    g.restore();
   }
 
   refresh(x, y, w, h) {

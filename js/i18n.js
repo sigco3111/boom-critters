@@ -1,7 +1,7 @@
 // 언어(한국어/영어) 사전과 도우미. 기본값은 navigator.language(ko*이면 한국어, 아니면 영어)이고 선택은 localStorage('boom-lang')에 저장한다
 // (저장소가 막힌 환경에서는 storage.js가 메모리에만 보관). index.html의 한국어 문구는 그대로 두고, data-i18n 속성이 붙은 요소만 영어일 때 사전 값으로 바꾼다
 // 사용법: t('키', { 값 }) — JS에서 쓰는 문구. applyDom() — data-i18n(텍스트) · data-i18n-html(서식 포함) · data-i18n-aria · data-i18n-title 속성을 가진 요소를 바꾼다
-import { local } from './storage.js?v=2026111048';
+import { local } from './storage.js?v=2026111049';
 
 const KEY = 'boom-lang';
 export const LANGS = ['ko', 'en'];
@@ -23,8 +23,8 @@ const KO = {
   'th.grass': '초원', 'th.desert': '사막 노을', 'th.snow': '설원', 'th.night': '별밤',
   'diff.easy': '쉬움', 'diff.normal': '보통', 'diff.hard': '어려움',
   'map.theme': '테마', 'map.terrain': '지형', 'map.random': '랜덤', 'map.rnd': '(랜덤)', 'map.desc': '{t} · {r} — {d}', 'res.map': '맵: {t} · {r} {x}',
-  'ter.gentle': '완만', 'ter.hills': '언덕', 'ter.canyon': '협곡',
-  'ter.random.d': '매 경기 시드로 정해요', 'ter.gentle.d': '낮고 완만한 땅, 조준이 쉬워요', 'ter.hills.d': '기본 언덕 지형', 'ter.canyon.d': '가운데 깊은 협곡과 높은 벽',
+  'ter.gentle': '완만', 'ter.hills': '언덕', 'ter.canyon': '협곡', 'ter.island': '섬', 'ter.bridge': '다리', 'ter.canyonbridge': '협곡 다리',
+  'ter.random.d': '매 경기 시드로 정해요', 'ter.gentle.d': '낮고 완만한 땅, 조준이 쉬워요', 'ter.hills.d': '기본 언덕 지형', 'ter.canyon.d': '가운데 깊은 협곡과 높은 벽', 'ter.island.d': '물 위에 뜬 섬 2~3개, 떨어지면 풍덩!', 'ter.bridge.d': '두 절벽을 잇는 얇은 다리, 부수면 위의 유닛이 추락', 'ter.canyonbridge.d': '협곡 위의 다리',
   'mode.stage': '스테이지 {n}', 'mode.endless': '무한 · 웨이브 {n}',
   'banner.mine': '내 차례 - {name}', 'banner.foe': '상대 차례 - {name}', 'banner.wave': '웨이브 {n}', 'banner.waveClear': '웨이브 {n} 클리어!',
   'f.splash': '풍덩!', 'f.crate': '보급 상자 투하!', 'f.crateBreak': '상자 파괴', 'f.soon': '곧 출시', 'f.unlockWave': '웨이브 3부터 해금', 'f.unlockStage': '스테이지 4부터 해금',
@@ -74,8 +74,8 @@ const EN = {
   'th.grass': 'Meadow', 'th.desert': 'Desert dusk', 'th.snow': 'Snowfield', 'th.night': 'Starry night',
   'diff.easy': 'Easy', 'diff.normal': 'Normal', 'diff.hard': 'Hard',
   'map.theme': 'Theme', 'map.terrain': 'Terrain', 'map.random': 'Random', 'map.rnd': '(random)', 'map.desc': '{t} · {r} — {d}', 'res.map': 'Map: {t} · {r} {x}',
-  'ter.gentle': 'Gentle', 'ter.hills': 'Hills', 'ter.canyon': 'Canyon',
-  'ter.random.d': 'Picked from the seed each match', 'ter.gentle.d': 'Low, smooth ground; easy aiming', 'ter.hills.d': 'The default hilly terrain', 'ter.canyon.d': 'A deep canyon in the middle with high walls',
+  'ter.gentle': 'Gentle', 'ter.hills': 'Hills', 'ter.canyon': 'Canyon', 'ter.island': 'Island', 'ter.bridge': 'Bridge', 'ter.canyonbridge': 'Canyon bridge',
+  'ter.random.d': 'Picked from the seed each match', 'ter.gentle.d': 'Low, smooth ground; easy aiming', 'ter.hills.d': 'The default hilly terrain', 'ter.canyon.d': 'A deep canyon in the middle with high walls', 'ter.island.d': '2-3 islands over the water; fall off and you drown', 'ter.bridge.d': 'Two cliffs joined by a thin bridge; destroy it to drop units standing on it', 'ter.canyonbridge.d': 'A bridge across a canyon',
   'mode.stage': 'Stage {n}', 'mode.endless': 'Endless · Wave {n}',
   'banner.mine': 'Your turn - {name}', 'banner.foe': 'Enemy turn - {name}', 'banner.wave': 'Wave {n}', 'banner.waveClear': 'Wave {n} clear!',
   'f.splash': 'Splash!', 'f.crate': 'Supply crate!', 'f.crateBreak': 'Crate broken', 'f.soon': 'Coming soon', 'f.unlockWave': 'Unlocks at wave 3', 'f.unlockStage': 'Unlocks at stage 4',
@@ -113,7 +113,7 @@ const EN = {
   'pause.tx': ' Pause', 'pause.aria': 'Pause', 'gear.aria': 'Settings', 'menu.open': 'Open menu', 'menu.aria': 'Menu', 'pop.pause': '⏸ Pause', 'pop.settings': '⚙ Settings',
   'title': 'Boom Critters', 'start.sub': 'Blast the other team with your 3 cute critters!',
   'quick.h': 'Quick Match', 'quick.note': '3 vs 3 single round', 'diff.aria': 'Difficulty', 'quick.btn': 'Start Quick Match',
-  'stage.h': 'Stage Mode', 'stage.note': '10 stages · up to 3 stars', 'stage.btn': 'Stage Mode',
+  'stage.h': 'Stage Mode', 'stage.note': '13 stages · up to 3 stars', 'stage.btn': 'Stage Mode',
   'endless.h': 'Endless Mode', 'endless.note': 'Best: 0 waves', 'endless.btn': 'Endless Mode',
   'help.btn': 'How to Play', 'credits.btn': 'Credits',
   'start.help': 'Move A/D or ←/→ · Jump W · Angle ↑/↓ or drag · Power: hold Space, release · Weapons 1-6 · Mute M',
@@ -153,8 +153,8 @@ const EN = {
   'hp.c7.k': 'Man 2', 'hp.c7.v': 'Balanced - the 4th enemy unit with an orange name tag',
   'hp.crate.h': 'Supply crates', 'hp.crate.p': 'A parachute crate drops every 4th turn. A unit touching it gets HP +30 (max 100) and a clear chime. Explosions destroy it. Standing in flames costs HP at turn start, so move away.',
   'hp.modes.h': 'Modes',
-  'hp.m1.k': 'Quick Match', 'hp.m1.v': 'Pick a difficulty on the start screen and press "Start Quick Match". Easy (2 enemies, big AI error) · Normal (3 enemies) · Hard (4 enemies, small AI error). You can also pick the map: Theme (Random · Meadow · Desert · Snow · Night) and Terrain (Random · Gentle · Hills · Canyon). Your choices are saved and shown on the result screen',
-  'hp.m2.k': 'Stages', 'hp.m2.v': '10 stages; winning unlocks the next. 1-3 stars by survivors. From stage 7 there are 4 enemies, so your team gets +1 grenade (4) and +1 bolt (3)',
+  'hp.m1.k': 'Quick Match', 'hp.m1.v': 'Pick a difficulty on the start screen and press "Start Quick Match". Easy (2 enemies, big AI error) · Normal (3 enemies) · Hard (4 enemies, small AI error). You can also pick the map: Theme (Random · Meadow · Desert · Snow · Night) and Terrain (Random · Gentle · Hills · Canyon · Island · Bridge). Your choices are saved and shown on the result screen',
+  'hp.m2.k': 'Stages', 'hp.m2.v': '13 stages; winning unlocks the next (stage 11 islands, 12 bridge at night, 13 canyon bridge). 1-3 stars by survivors. From stage 7 there are 4 enemies, so your team gets +1 grenade (4) and +1 bolt (3)',
   'hp.m3.k': 'Result screen', 'hp.m3.v': 'Shows shots, damage dealt, damage taken, weapons used and your turns. Stages save the best of each item and show "New record!" when beaten',
   'hp.m4.k': 'Endless', 'hp.m4.v': 'Waves keep coming with more enemies. The run ends when your team is wiped out; the best wave is saved',
   'hp.lang.k': 'Language', 'hp.lang.v': 'Switch Korean/English in ⚙ Settings. The default follows your browser language and your choice is saved',
