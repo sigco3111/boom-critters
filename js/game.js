@@ -1,10 +1,10 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111051';
-import * as audio from './audio.js?v=2026111051';
-import { t as tr, getLang } from './i18n.js?v=2026111051';
-import * as fx from './fx.js?v=2026111051';
-import { makeProps, drawProp, PW, PH, BARREL_R, BARREL_DMG, MINE_R, MINE_DMG, MINE_TRIGGER, MINE_SEE, PACK_CHANCE } from './props.js?v=2026111051';
-import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111051';
+import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111052';
+import * as audio from './audio.js?v=2026111052';
+import { t as tr, getLang } from './i18n.js?v=2026111052';
+import * as fx from './fx.js?v=2026111052';
+import { makeProps, drawProp, PW, PH, BARREL_R, BARREL_DMG, MINE_R, MINE_DMG, MINE_TRIGGER, MINE_SEE, PACK_CHANCE } from './props.js?v=2026111052';
+import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111052';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -23,6 +23,9 @@ const FALL_T = 80;       // 낙하 데미지 임계 높이
 const TURN_TIME = 30;
 const CHARGE_T = 1.6;    // 파워 0→100 충전 시간(초)
 const AIR_WARN = 1.0, AIR_W = 120, AIR_N = 5, AIR_IDX = 5; // 공습: 경고 마커 1초 → 폭탄 5발이 폭 120px 구역에 순서 없이 떨어짐 (무기 슬롯 6번)
+const SMOKE_IDX = 6, TELE_IDX = 7, WIND_IDX = 8;  // 새 무기 슬롯 7·8·9번: 연막탄 · 순간이동 · 바람 바꾸기
+const SMOKE_R = 70, SMOKE_TURNS = 3;               // 연막 구름: 반경 70px, 3턴 유지
+const WIND_LOCK_TURNS = 2;                         // 바람 바꾸기: 새 방향의 바람이 이어지는 턴 수 (상대 턴 + 내 다음 턴)
 const MAX_SPLASH = 8;     // 동시에 보이는 물 튀김 상한
 const MAX_SFX = 24;       // 동시에 재생하는 스프라이트 이펙트(폭발·타격·머즐 플래시) 상한: 넘치면 가장 오래된 것부터 버림
 const MAX_PARTICLES = 500, MAX_FLOATERS = 24; // 파티클·떠오르는 글자 상한 (넘치면 가장 오래된 것부터 재활용=제거)
@@ -80,10 +83,19 @@ export const WEAPONS = [
   { id: 'fire', get name() { return tr('w.fire'); }, radius: 35, damage: 25, windK: 6, speedK: 0.95, knock: 320, ammo: 2, fireR: 50, fireTurns: 3, fireDmg: 8 },
   // 공습: 목표 x를 찍으면 1초 경고 뒤 작은 폭탄 5발(폭발 반경 28, 최대 피해 18)이 폭 120px 구역에 떨어진다. 팀당 1발, 스테이지 4부터 해금(빠른 대전은 항상)
   { id: 'airstrike', get name() { return tr('w.airstrike'); }, radius: 28, damage: 18, windK: 0, knock: 240, ammo: 1, airstrike: true },
+  // 연막탄: 수류탄처럼 던져 튕기다 2초 뒤 연막 구름(반경 70px, 3턴)을 만든다. 피해 없음. 구름 속 유닛은 AI에게서 가려진다
+  { id: 'smoke', get name() { return tr('w.smoke'); }, get short() { return tr('w.smoke'); }, radius: 0, damage: 0, windK: 1, speedK: 0.9, knock: 0, ammo: 2, fuse: 2, smoke: true },
+  // 순간이동: 활성 유닛이 눌러 정한 땅(키보드는 조준점)으로 이동, 턴 종료. 팀당 1회
+  { id: 'teleport', get name() { return tr('w.teleport'); }, get short() { return tr('w.teleport'); }, ammo: 1, teleport: true },
+  // 바람 바꾸기: 바람을 반대 방향으로 다시 굴리고 턴 종료. 팀당 1회
+  { id: 'windshift', get name() { return tr('w.windshift'); }, get short() { return tr('w.windshift.s'); }, ammo: 1, shift: true },
 ];
+const shortName = (w) => w.short || w.name;
+const isInstantW = (w) => !!(w.instant || w.airstrike || w.teleport || w.shift); // 충전 없이 즉시 쓰는 무기
 // 하단 HUD 무기 슬롯 (캔버스 좌표)
 const SLOT = { x: 10, y: H - 56, w: 54, h: 50, gap: 3 };
-// '큰 HUD 글씨'를 켜면 슬롯 높이만 키우고(글자 +25%) 폭은 거의 그대로 둔다: 가운데 파워 바(x 356~)를 가리지 않도록 6칸이 x 348 안에 끝난다
+const HUD_CX = 680;  // 하단 가운데 파워 바·안내 글자의 중심 x: 9칸 무기 바(x 10~520) 오른쪽
+// '큰 HUD 글씨'를 켜면 슬롯 높이만 키우고(글자 +25%) 폭은 거의 그대로 둔다: 파워 바(x 560~)를 가리지 않도록 9칸이 x 520 안에 끝난다
 const SLOT_BIG = { x: 8, y: H - 64, w: 55, h: 58, gap: 2 };
 // 팀별 무기 탄약 (무한 = Infinity, 비활성 무기는 0). 공습은 해금 전(airOk=false)이면 0
 const freshAmmo = (airOk = false) => [0, 1].map(() => WEAPONS.map((w) => (w.disabled || (w.airstrike && !airOk) ? 0 : w.ammo ?? Infinity)));
@@ -100,6 +112,10 @@ export const CHARACTERS = [
 ];
 // 4번째 적 유닛(스테이지 후반): 남자(malePerson) 스프라이트를 쓰고 이름표·HP 바 색을 주황으로 구분. 특성 없음(균형형)
 const EXTRA_ENEMY = ['malePerson', 'malePerson2', 'balanced', '#f59e0b'];
+// 보스 스테이지의 적 팀 (왼쪽부터): 로봇 호위 · 좀비 보스(스프라이트 1.8배, 빨간 왕관) · 여자 호위
+const BOSS_FIRE_AMMO = 4, BOSS_INTRO_T = 2.8; // 보스 등장 배너 시간(초): 이 동안 첫 턴 타이머는 멈춘다
+const BOSS_HP = 400, BOSS_REGEN = 5, BOSS_DMG = 1.6; // 보스 밸런스 값 (README '밸런스' 표)
+const BOSS_TEAM = [['robot', 'robot', 'armor'], ['zombie', 'boss', 'boss', '#dc2626'], ['femalePerson', 'femalePerson', 'steady']];
 // 캐릭터 특성 (작은 보정만): jumpK 점프 높이 배율, maxHp 최대 HP, blastK 폭발 피해 배율, speedK 이동 속도 배율, regen 팀 턴 시작 시 HP 회복, steady 조준 안정(AI 오차 감소 비율 = 파워 충전 시간 증가 비율)
 export const TRAITS = {
   balanced: { get name() { return tr('tr.balanced.n'); }, get desc() { return tr('tr.balanced.d'); } },
@@ -108,6 +124,8 @@ export const TRAITS = {
   armor: { get name() { return tr('tr.armor.n'); }, get desc() { return tr('tr.armor.d'); }, blastK: 0.85, speedK: 0.8 },
   regen: { get name() { return tr('tr.regen.n'); }, get desc() { return tr('tr.regen.d'); }, regen: 5 },
   steady: { get name() { return tr('tr.steady.n'); }, get desc() { return tr('tr.steady.d'); }, steady: 0.15 },
+  // 보스(스테이지 14): HP 300, 폭발 피해 -15%, 턴 시작 HP +5, 자기 폭발 피해 +30%, 몸집 1.8배, 느림
+  boss: { get name() { return tr('tr.boss.n'); }, get desc() { return tr('tr.boss.d'); }, maxHp: BOSS_HP, blastK: 0.85, regen: BOSS_REGEN, dmgK: BOSS_DMG, speedK: 0.7, scale: 1.8, boss: true },
 };
 const BASE_HP = 100;
 export const WALK_FRAMES = 8;
@@ -127,18 +145,20 @@ export function quickConfig(diff, map) { return { mode: 'quick', enemies: (DIFF[
 const ENEMY_X = { 1: [760], 2: [650, 820], 3: [600, 730, 865], 4: [560, 670, 780, 885] };
 
 // ---------- 스테이지 / 무한 모드 설정 (밸런스 숫자는 README "밸런스" 표 참고) ----------
-export const STAGE_COUNT = 13;
-const STAGE_TERRAIN = { 11: 'island', 12: 'bridge', 13: 'canyonbridge' }; // 11 섬 · 12 다리(밤) · 13 협곡+다리 (나머지는 언덕)
+export const STAGE_COUNT = 14;
+export const BOSS_STAGE = 14;  // 보스 스테이지: 적 팀 = 보스 1 + 호위 2
+const STAGE_TERRAIN = { 11: 'island', 12: 'bridge', 13: 'canyonbridge' }; // 11 섬 · 12 다리(밤) · 13 협곡+다리 · 14 보스(언덕) (나머지는 언덕)
 // AI 오차 단계(level 1~10): 각도 오차(표준편차, °) 9 → 1, 파워 오차 18 → 2 로 선형 감소. level ≤ 3은 상위 6개 후보 중 무작위 선택
 const ERR_A = [9, 1], ERR_P = [18, 2];
 // AI가 쓸 수 있는 특수 무기(무기 번호 -> 최소 level): 수류탄 2, 번개 3, 화염탄 4, 공습 4. level이 없는 빠른 대전은 모두 사용
-const AI_UNLOCK = { 2: 2, 3: 3, 4: 4, 5: 4 };
+const AI_UNLOCK = { 2: 2, 3: 3, 4: 4, 5: 4, 7: 4, 8: 5 }; // (7 순간이동 4 · 8 바람 바꾸기 5. 연막탄은 AI가 던지지 않는다)
 const BONUS_LEVEL = 7, BONUS_GRENADE = 1, BONUS_BOLT = 1; // 우리 팀 보너스 탄약: 적 4마리 구간(level 7+)에서 수류탄 +1, 번개 +1
 // 스테이지 모드 AI 오차 [각도 오차 °, 파워 오차]: window.__sim 승률 측정으로 정한 값 (README "밸런스" 표). 보통 플레이어(3°/6 오차) 목표 승률 약 스테이지 1 95% · 3 88% · 5 70% · 7 55% · 9 40% · 10 30%.
 // 지형마다 난이도가 달라 오차가 단조롭지 않다(4는 3보다, 10은 9보다 오차가 크다). 스테이지 1~3은 상위 6개 후보 중 무작위로 고르는(pick) 부정확한 조준
-const STAGE_AI = [null, [17, 34], [13, 26], [9, 18], [13, 26], [4.6, 9.2], [8, 16], [5.6, 11.2], [3.2, 6.4], [3.3, 6.6], [5.2, 10.4], [4.8, 9.6], [4.6, 9.2], [3.4, 6.8]];
+const STAGE_AI = [null, [17, 34], [13, 26], [9, 18], [13, 26], [4.6, 9.2], [8, 16], [5.6, 11.2], [3.2, 6.4], [3.3, 6.6], [5.2, 10.4], [4.8, 9.6], [4.6, 9.2], [3.4, 6.8], [2.6, 5.2]]; // 14(보스)는 스테이지 10과 같은 오차
 // 스테이지 s(1~10): 고정 시드, 적 수 2→4(1~3: 2마리, 4~6: 3마리, 7~10: 4마리), 바람 범위 ±(3+s), AI level = s
 export function stageConfig(s) {
+  if (s === BOSS_STAGE) return { mode: 'stage', stage: s, seed: 20240 + s * 7919, enemies: 3, windMax: 14, level: 10, terrain: STAGE_TERRAIN[s], boss: true };
   return { mode: 'stage', stage: s, seed: 20240 + s * 7919, enemies: s <= 3 ? 2 : s <= 6 ? 3 : 4, windMax: Math.min(14, 3 + s), level: s, terrain: STAGE_TERRAIN[s] };
 }
 // 무한 모드 웨이브 w(1~): 적 수 2→4(1~2: 2마리, 3~4: 3마리, 5~: 4마리), 바람 ±(4+w, 최대 14), AI level = 1 + 1.5×(w-1) (최대 10, 웨이브 5 ≈ 스테이지 7)
@@ -183,8 +203,8 @@ export function stepProj(p, dt, wind, terrain, units, props) {
       for (const u of units) {
         if (!u.alive || (u === p.owner && p.age < 0.35)) continue;
         // 몸통 캡슐(세로 선분 + 반경) 판정: 중심은 발 위 BODY_CY
-        const dy = Math.max(0, Math.abs(p.y - (u.y - BODY_CY)) - BODY_HALF);
-        if (Math.hypot(u.x - p.x, dy) < BODY_R) return 'unit';
+        const dy = Math.max(0, Math.abs(p.y - (u.y - BODY_CY * u.sc)) - BODY_HALF * u.sc);
+        if (Math.hypot(u.x - p.x, dy) < BODY_R * u.sc) return 'unit';
       }
     }
   }
@@ -197,6 +217,7 @@ class Unit {
     this.team = team; this.idx = idx; this.sprite = sprite; this.nameKey = name;
     this.traitKey = traitKey; this.trait = TRAITS[traitKey] || TRAITS.balanced;
     this.maxHp = this.trait.maxHp || BASE_HP;
+    this.sc = this.trait.scale || 1;   // 몸집 배율 (보스 1.8): 그림·명중 판정·이름표 높이
     this.x = x; this.y = y; this.vx = 0; this.vy = 0;
     this.hp = this.maxHp; this.alive = true; this.grounded = true;
     this.facing = team === 0 ? 1 : -1;
@@ -233,6 +254,11 @@ export class Game {
     this.airOk = false;         // 공습 해금 여부 (빠른 대전은 항상, 스테이지·웨이브는 AI level 4 이상 = 스테이지 4 / 웨이브 3부터)
     this.air = null;            // 진행 중인 공습: { cx, t, bombs: [{ x, delay, p, done }] }
     this.airX = W / 2;          // 공습 목표 x (조준 마커)
+    this.smokes = [];           // 연막 구름: { x, y, r, turns, seed, t }
+    this.teleP = null;          // 순간이동 목표: 마우스·터치로 정한 점 { x, y } (없으면 키보드 조준점)
+    this.windLock = null;       // 바람 바꾸기 뒤 이어지는 바람: { sign, left }
+    this.boss = false;          // 보스 스테이지 여부 (스테이지 14)
+    this.bossIntro = null;      // 보스 등장 배너: { t }
     this.ammo = freshAmmo();    // 매치 시작 전에도 버튼 표시가 올바르도록
     this.stepTimer = 0;
     this.stats = blankStats();  // 우리 팀(팀 0) 경기 기록: 결과 화면에 표시
@@ -260,6 +286,7 @@ export class Game {
     this.level = opts.level ?? null;      // null이면 난이도(쉬움/보통/어려움)의 오차를 사용
     this.units = []; this.particles = []; this.floaters = []; this.proj = null; this.sfx.length = 0; this.splashes.length = 0;
     this.stats = blankStats();
+    this.boss = !!opts.boss; this.bossIntro = this.boss ? { t: 0 } : null;
     const seed = opts.seed ?? ((Math.random() * 1e9) | 0);
     // 스테이지 1~3 초원 / 4~6 사막 / 7~8 설원 / 9~10 밤, 빠른 대전·무한은 시드로 결정
     // 빠른 대전만 맵을 고를 수 있다 (테마·지형 모두 '랜덤'이면 시드로 정함). 스테이지·무한은 예전 그대로(지형 hills)
@@ -283,6 +310,10 @@ export class Game {
   initAmmo() {
     const a = freshAmmo(this.airOk);
     if (this.level != null && this.level >= BONUS_LEVEL) { a[0][2] += BONUS_GRENADE; a[0][3] += BONUS_BOLT; }
+    if (this.boss) { // 보스 스테이지: 우리 팀은 특수 무기를 모두 +1, 보스 팀은 화염탄 4발 (보스가 화염탄을 즐겨 쓴다)
+      for (let i = 2; i < WEAPONS.length; i++) if (a[0][i] !== Infinity) a[0][i]++;
+      a[1][4] = BOSS_FIRE_AMMO;
+    }
     return a;
   }
 
@@ -296,6 +327,7 @@ export class Game {
     this.weather = this.headless ? null : makeWeather(theme);
     this.units = []; this.particles = []; this.floaters = []; this.proj = null; this.sfx.length = 0; this.splashes.length = 0;
     this.bolt = null; this.flashT = 0; this.fires = []; this.crates = []; this.props = []; this.turnNo = 0; this.air = null;
+    this.smokes = []; this.teleP = null; this.windLock = null;
     const rng = mulberry32(seed ^ 0x5bd1e995), jit = () => (rng() * 2 - 1) * 25;
     const baseX = [[95, 230, 360], ENEMY_X[enemies] || ENEMY_X[3]];
     const snap = kind === 'island' || kind === 'bridge' || kind === 'canyonbridge'; // 물·다리가 있는 지형: 유닛은 단단한 땅 위에서만 시작
@@ -305,7 +337,7 @@ export class Game {
         let x = clamp(baseX[t][i] + jit(), 20, W - 20);
         if (snap) { x = this.spawnSpot(x, t, placed); placed.push(x); }
         const sy = this.terrain.surfaceY(x);
-        const [sp, nm, trait, tagColor] = t === 1 && i >= 3 ? EXTRA_ENEMY : CHARACTERS[t][i];
+        const [sp, nm, trait, tagColor] = t === 1 && this.boss ? BOSS_TEAM[i] : t === 1 && i >= 3 ? EXTRA_ENEMY : CHARACTERS[t][i];
         const u = new Unit(t, i, sp, nm, x, sy - 1, trait);
         u.tagColor = tagColor || TEAMS[t].color;
         for (let k = 0; k < 20 && this.blocked(u.x, u.y); k++) u.y--;
@@ -469,7 +501,7 @@ export class Game {
     if (u.team === 1) this.stats.dealt += n; else this.stats.taken += n;
   }
 
-  damage(u, dmg, color = '#fff', ix = u.x, iy = u.y - BODY_CY) {
+  damage(u, dmg, color = '#fff', ix = u.x, iy = u.y - BODY_CY * u.sc) {
     if (!u.alive || dmg <= 0) return;
     this.countLoss(u, Math.min(u.hp, dmg));
     u.hp -= dmg; u.hurt = HURT_T;
@@ -531,8 +563,8 @@ export class Game {
   }
 
   // ---------- 폭발 ----------
-  explode(x, y, w) {
-    const r = w.radius;
+  explode(x, y, w, owner = null) {
+    const r = w.radius, dk = (owner && owner.trait.dmgK) || 1; // dmgK: 보스의 센 포격
     this.terrain.crater(x, y, r);
     this.emitExplosion(x, y, r, w.id);
     this.blastCrates(x, y, r);
@@ -543,13 +575,13 @@ export class Game {
     this.hitMine = false;
     for (const u of this.units) {
       if (!u.alive) continue;
-      const cx = u.x, cy = u.y - BODY_CY;
+      const cx = u.x, cy = u.y - BODY_CY * u.sc;
       const d = Math.hypot(cx - x, cy - y);
       if (u.team === 0 && d < r + 90) near = true; // 우리 유닛 근처(반경+90px)에서 터진 폭발
       const reach = r + 12;
       if (d >= reach) continue;
       const f = 1 - d / reach;
-      const dmg = Math.max(2, Math.round(w.damage * f * (u.trait.blastK || 1)));
+      const dmg = Math.max(2, Math.round(w.damage * f * (u.trait.blastK || 1) * dk));
       let nx = (cx - x) / (d || 1), ny = (cy - y) / (d || 1);
       this.damage(u, dmg, '#ff6b5a', cx - nx * BODY_R * 0.6, cy - ny * BODY_R * 0.6); hit = true; // 타격 번쩍임은 폭발 쪽 몸 가장자리에
       if (u.alive) {
@@ -732,6 +764,7 @@ export class Game {
     const t = this.turnTeam;
     if (this.burnFires(t)) return;
     this.turnNo++;
+    this.ageSmokes();
     this.regenTeam(t);
     if (this.turnNo % CRATE_EVERY === 0) this.dropCrate();
     const mine = this.units.filter((u) => u.team === t);
@@ -742,7 +775,7 @@ export class Game {
     }
     this.activeUnit = u;
     if (t === 0 && u) this.stats.turns++;
-    this.wind = Math.floor(rnd(-this.windMax, this.windMax + 1));
+    this.wind = this.rollWind();
     this.timer = TURN_TIME;
     this.state = 'aim';
     this.power = 0; this.charging = false; this.drag = null;
@@ -751,6 +784,44 @@ export class Game {
     this.banner = { text: tr(t === 0 ? 'banner.mine' : 'banner.foe', { name: u.name }), color: TEAMS[t].color, t: 0 };
     this.lastTick = 99;
     this.ai = this.isAI(t) ? { phase: 'think', t: 0, walks: 0, crateWalks: 0, fled: 0, tries: 0, total: 0, target: null } : null;
+  }
+
+  // 이번 턴의 바람. 바람 바꾸기를 쓴 직후 WIND_LOCK_TURNS턴 동안은 바꾼 방향(sign)으로만 불고, 아니면 -windMax~+windMax 무작위
+  rollWind() {
+    const L = this.windLock;
+    if (L && L.left > 0) {
+      if (--L.left <= 0) this.windLock = null;
+      return L.sign * Math.floor(rnd(Math.ceil(this.windMax * 0.4), this.windMax + 1));
+    }
+    return Math.floor(rnd(-this.windMax, this.windMax + 1));
+  }
+
+  // ---------- 연막 ----------
+  // (x, y)에 연막 구름. 턴 시작마다 남은 턴이 줄고(3 → 2 → 1 → 0), 0인 상태로 한 턴을 더 보낸 뒤 사라진다 (생성 직후 3턴 동안 보임)
+  addSmoke(x, y) {
+    this.smokes.push({ x, y, r: SMOKE_R, turns: SMOKE_TURNS, seed: Math.random() * 100, t: 0 });
+    this.ft(x, y - 50, tr('f.smoke'), '#d6dde6');
+    audio.playSynth('smoke');
+    for (let i = 0; i < 10; i++) this.pt('smoke', x + rnd(-20, 20), y + rnd(-16, 10), rnd(-50, 50), rnd(-60, -10), rnd(8, 14), rnd(0.8, 1.4), '200,205,212');
+  }
+  ageSmokes() {
+    if (!this.smokes.length) return;
+    for (const m of this.smokes) m.turns--;
+    this.smokes = this.smokes.filter((m) => m.turns >= 0);
+  }
+  // (x, y)가 연막 안인지 (margin: 반경에 더하는 여유)
+  inSmoke(x, y, margin = 0) {
+    for (const m of this.smokes) if (Math.hypot(x - m.x, y - m.y) < m.r + margin) return true;
+    return false;
+  }
+  // 선분 (x1,y1)-(x2,y2)가 연막 구름을 지나는지
+  lineThroughSmoke(x1, y1, x2, y2) {
+    const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy || 1;
+    for (const m of this.smokes) {
+      const k = clamp(((m.x - x1) * dx + (m.y - y1) * dy) / l2, 0, 1);
+      if (Math.hypot(x1 + dx * k - m.x, y1 + dy * k - m.y) < m.r) return true;
+    }
+    return false;
   }
 
   // 재생 특성: 팀 턴이 시작될 때 그 팀의 살아 있는 재생형 유닛이 HP를 회복한다 (최대 HP까지)
@@ -903,7 +974,7 @@ export class Game {
   blastArea(x, y, r, dmg, knock) {
     for (const u of this.units) {
       if (!u.alive) continue;
-      const cx = u.x, cy = u.y - BODY_CY, d = Math.hypot(cx - x, cy - y);
+      const cx = u.x, cy = u.y - BODY_CY * u.sc, d = Math.hypot(cx - x, cy - y);
       if (d >= r) continue;
       const f = 1 - 0.25 * (d / r), nx = (cx - x) / (d || 1), ny = (cy - y) / (d || 1);
       this.damage(u, Math.max(2, Math.round(dmg * f * (u.trait.blastK || 1))), '#ff6b5a', cx - nx * BODY_R * 0.6, cy - ny * BODY_R * 0.6);
@@ -1009,7 +1080,7 @@ export class Game {
       this.ft(u.x, u.y - 70, w.disabled ? tr('f.soon') : locked ? tr(this.mode === 'endless' ? 'f.unlockWave' : 'f.unlockStage') : tr('f.noAmmo'), '#ffe27a');
       return;
     }
-    this.weapon = i; audio.play('switch', { vol: 0.7 });
+    this.weapon = i; this.teleP = null; audio.play('switch', { vol: 0.7 });
     if (w.airstrike) this.airX = this.defaultAirX();
   }
   // 무기 바 더블탭: 지금 무기 다음으로 쓸 수 있는(탄약이 있고 해금된) 무기로 넘긴다. 바꿨으면 true
@@ -1077,7 +1148,7 @@ export class Game {
     this.jump(this.activeUnit, dir);
   }
   beginCharge() {
-    if (this.isPlayerTurn && !this.charging && this.airMode) { this.fire(0); return; } // 공습은 충전 없이 마커 위치로 즉시 호출
+    if (this.isPlayerTurn && !this.charging && this.instantMode) { this.fire(0); return; } // 공습·순간이동·바람 바꾸기는 충전 없이 즉시 실행
     if (!this.isPlayerTurn || this.charging || !this.activeUnit.grounded) return;
     this.charging = true; this.power = 0;
   }
@@ -1087,9 +1158,16 @@ export class Game {
     if (this.state === 'aim') this.fire(Math.max(8, this.power));
   }
 
+  // 우리 팀 경기 기록: 발사 횟수·무기별 사용 횟수 + 진동
+  countShot(w) {
+    if (this.turnTeam === 0) { this.stats.shots++; this.stats.wpn[w.id] = (this.stats.wpn[w.id] || 0) + 1; this.buzz('fire'); }
+  }
+
   fire(power) {
     const u = this.activeUnit, w = WEAPONS[this.weapon];
-    if (this.turnTeam === 0) { this.stats.shots++; this.stats.wpn[w.id] = (this.stats.wpn[w.id] || 0) + 1; this.buzz('fire'); }
+    if (w.teleport) return this.fireTeleport(u, w);      // 실패(불가능한 땅)하면 기록·탄약을 쓰지 않는다
+    if (w.shift) return this.fireWindShift(u, w);
+    this.countShot(w);
     if (w.instant) return this.fireLightning(u, w);
     if (w.airstrike) return this.fireAirstrike(u, w);
     const a = rad(this.angle), v = launchSpeed(w, power), f = u.facing;
@@ -1104,8 +1182,74 @@ export class Game {
     this.state = 'flying';
     u.squash = -0.2; u.shootT = 0.4;
     if (w.id === 'cannon' || w.id === 'rocket') audio.play('sea_cannon', { rate: w.id === 'rocket' ? 1.15 : 1, vol: 0.9 });
-    else audio.play('fire', { rate: w.id === 'grenade' ? 1.3 : 0.6 });
-    if (w.id === 'grenade') audio.playSynth('grenadeTick', { stage: 0, delay: 0.12 });
+    else audio.play('fire', { rate: w.fuse ? 1.3 : 0.6 });
+    if (w.fuse) audio.playSynth('grenadeTick', { stage: 0, delay: 0.12 });
+  }
+
+  // ---------- 순간이동 ----------
+  // 눌러 정한 점 (px, py) 근처에서 유닛이 설 수 있는 땅을 찾는다. 땅 속이면 위로(최대 60px), 공중이면 아래로(최대 120px) 맞춰 서고,
+  // 물 위·물가(WATER_Y-12 아래)·다른 유닛 겹침·땅이 없으면 null. 반환 { x, y }(발 위치)
+  teleSpot(px, py) {
+    const u = this.activeUnit;
+    if (!Number.isFinite(px) || !Number.isFinite(py) || py > WATER_Y - 6) return null;
+    const x = clamp(Math.round(px), 14, W - 14);
+    let y = clamp(Math.round(py), 30, WATER_Y), k = 0;
+    while (this.blocked(x, y) && k++ < 60) y--;
+    if (this.blocked(x, y)) return null;
+    for (k = 0; !this.feetSolid(x, y + 1) && k < 120; k++) y++;
+    if (!this.feetSolid(x, y + 1) || y > WATER_Y - 12) return null;
+    for (const o of this.units) if (o !== u && o.alive && Math.abs(o.x - x) < 20 && Math.abs(o.y - y) < 44) return null;
+    return { x, y };
+  }
+  // 순간이동 목표: 마우스·터치로 정한 점, 없으면 키보드 조준점
+  teleTarget() { return this.teleP || this.aimPoint(); }
+  get teleMode() { return this.weapon === TELE_IDX && !!WEAPONS[TELE_IDX].teleport; }
+  get windMode() { return this.weapon === WIND_IDX && !!WEAPONS[WIND_IDX].shift; }
+  get instantMode() { return this.airMode || this.teleMode || this.windMode; }
+  setTeleP(px, py) { if (this.isPlayerTurn && this.teleMode) this.teleP = { x: clamp(px, 0, W), y: clamp(py, 0, H) }; }
+
+  fireTeleport(u, w) {
+    const t = this.teleTarget(), s = this.teleSpot(t.x, t.y);
+    if (!s) { // 갈 수 없는 곳: 탄약·턴 그대로
+      this.teleP = null; this.charging = false; this.power = 0;
+      this.ft(u.x, u.y - 70, tr('f.noTele'), '#ffb0a0');
+      audio.play('switch', { vol: 0.8, rate: 0.7 });
+      return;
+    }
+    this.countShot(w);
+    if (this.ammo[this.turnTeam][this.weapon] !== Infinity) this.ammo[this.turnTeam][this.weapon]--;
+    const ox = u.x, oy = u.y - 24;
+    this.sparkle(ox, oy, false);
+    u.x = s.x; u.y = s.y; u.vx = 0; u.vy = 0; u.grounded = true; u.fallStart = u.y; u.squash = 0.3; u.moving = false;
+    this.sparkle(u.x, u.y - 24, true);
+    audio.playSynth('teleport');
+    this.ft(u.x, Math.max(26, u.y - 80), tr('f.tele'), '#bfe6ff');
+    this.teleP = null; this.charging = false; this.power = 0; this.lastPower = 0;
+    this.state = 'settle'; this.settleT = 0; this.settleTotal = 0;
+  }
+  // 반짝임 고리: 떠나는 곳은 퍼지고(out=false) 도착하는 곳은 위로 솟는다
+  sparkle(x, y, arrive) {
+    for (let i = 0, n = this.lowFx ? 10 : 22; i < n; i++) {
+      const a = (i / n) * 6.2832 + rnd(-0.15, 0.15), sp = rnd(70, 180);
+      this.pt('spark', x + Math.cos(a) * (arrive ? 26 : 4), y + Math.sin(a) * (arrive ? 26 : 4) * 1.4, Math.cos(a) * sp * (arrive ? -0.35 : 1), Math.sin(a) * sp * (arrive ? -0.35 : 1) - 30, rnd(1.6, 3.2), rnd(0.45, 0.9));
+    }
+    this.pt('flash', x, y, 0, 0, 30, 0.3);
+  }
+
+  // ---------- 바람 바꾸기 ----------
+  // 바람을 반대 방향으로 다시 굴린다(0이면 무작위 방향). 새 방향은 상대 턴과 내 다음 턴까지 이어진다. 턴 종료
+  fireWindShift(u, w) {
+    this.countShot(w);
+    if (this.ammo[this.turnTeam][this.weapon] !== Infinity) this.ammo[this.turnTeam][this.weapon]--;
+    const sign = this.wind ? -Math.sign(this.wind) : Math.random() < 0.5 ? -1 : 1;
+    this.wind = sign * Math.floor(rnd(Math.ceil(this.windMax * 0.4), this.windMax + 1));
+    this.windLock = { sign, left: WIND_LOCK_TURNS };
+    audio.playSynth('whoosh');
+    this.ft(u.x, Math.max(26, u.y - 80), tr('f.windShift', { d: tr(sign > 0 ? 'f.east' : 'f.west') }), '#cfe8ff');
+    for (let i = 0; i < 14; i++) this.pt('smoke', u.x + rnd(-90, 90), u.y - rnd(10, 80), sign * rnd(150, 300), rnd(-12, 12), rnd(2, 4), rnd(0.35, 0.7), '235,245,255');
+    u.squash = -0.2; u.shootT = 0.4;
+    this.charging = false; this.power = 0; this.lastPower = 0;
+    this.state = 'settle'; this.settleT = 0; this.settleTotal = 0;
   }
 
   // ---------- 공습 ----------
@@ -1148,6 +1292,13 @@ export class Game {
     if (a.bombs.every((b) => b.done)) { this.air = null; this.state = 'settle'; this.settleT = 0; this.settleTotal = 0; }
   }
 
+  // 투사체가 물에 빠짐: 물방울·소리·물 튀김
+  waterHit(p, k) {
+    for (let i = 0; i < 14; i++) this.pt('splash', p.x, WATER_Y, rnd(-70, 70), rnd(-250, -90), rnd(2, 4), rnd(0.5, 0.9));
+    audio.play('sea_splash', { vol: 0.8, rate: 1.1 });
+    this.splash(p.x, k);
+  }
+
   // ---------- 번개 ----------
   // 활성 유닛에서 각도 방향으로 곧게 뻗는 번개. 처음 맞은 유닛 하나에게만 피해를 준다 (지형은 관통).
   // 번개 궤적 계산: 지형은 관통하고 처음 닿는 유닛(발사자 제외)에서 멈춘다
@@ -1161,8 +1312,8 @@ export class Game {
       if (x < -10 || x > W + 10 || y < -10 || y > H) { len = s; break; }
       for (const o of this.units) {
         if (!o.alive || o === u) continue;
-        const vy = Math.max(0, Math.abs(y - (o.y - BODY_CY)) - BODY_HALF);
-        if (Math.hypot(o.x - x, vy) < BODY_R + 2) { target = o; break; }
+        const vy = Math.max(0, Math.abs(y - (o.y - BODY_CY * o.sc)) - BODY_HALF * o.sc);
+        if (Math.hypot(o.x - x, vy) < BODY_R * o.sc + 2) { target = o; break; }
       }
       if (target) { len = s; break; }
     }
@@ -1248,31 +1399,31 @@ export class Game {
     const rad2 = WEAPONS[weapon].radius * 1.1;
     let best = null;
     const cands = [];
-    const hazards = this.props.filter((p) => p.type === 'barrel' && !p.dead && friends.some((o) => Math.hypot(o.x - p.x, (o.y - BODY_CY) - (p.y - 14)) < BARREL_R + 14)); // 아군 곁의 통: 근처에 떨어지면 아군이 휘말린다
+    const hazards = this.props.filter((p) => p.type === 'barrel' && !p.dead && friends.some((o) => Math.hypot(o.x - p.x, (o.y - BODY_CY * o.sc) - (p.y - 14)) < BARREL_R + 14)); // 아군 곁의 통: 근처에 떨어지면 아군이 휘말린다
     for (let angle = 12; angle <= 85; angle += step) {
       if (performance.now() > this._aiDeadline) yield; // 이번 프레임의 계산 시간을 다 썼으면 다음 프레임에 이어서
       for (let power = 15; power <= 100; power += step) {
         const r = grenade ? this.simulateGrenade(u, angle, power, facing) : this.simulate(u, weapon, angle, power, facing);
         let score = r.kind === 'water' || r.kind === 'out' ? 9999 : Math.hypot(r.x - pt.x, r.y - pt.y);
-        for (const o of friends) if (Math.hypot(r.x - o.x, r.y - (o.y - BODY_CY)) < rad2) score += 150;
+        for (const o of friends) if (Math.hypot(r.x - o.x, r.y - (o.y - BODY_CY * o.sc)) < rad2) score += 150;
         for (const o of hazards) if (Math.hypot(r.x - o.x, r.y - (o.y - 14)) < rad2 + 20) score += 150;
         cands.push({ angle, power, score });
         if (!best || score < best.score) best = { angle, power, score };
       }
     }
     cands.sort((a, b) => a.score - b.score);
-    const e = this.aiErr(), min = best.score;
+    const e = this.aiErr(), min = best.score, sm = this.inSmoke(pt.x, pt.y) ? 2 : 1; // 연막 속 목표: 조준 오차 2배
     if (e.pick) best = cands[Math.floor(Math.random() * 6)];
     return {
       facing, weapon, dist: best.score, min,
-      angle: clamp(best.angle + gauss() * 2 * e.a, 5, 88),
-      power: clamp(best.power + gauss() * 2 * e.p, 10, 100),
+      angle: clamp(best.angle + gauss() * 2 * e.a * sm, 5, 88),
+      power: clamp(best.power + gauss() * 2 * e.p * sm, 10, 100),
     };
   }
 
   // 목표가 지형 뒤(시선이 지형에 막힘)이거나 구덩이(양쪽 지면이 25px 이상 높음)에 있는지
   aiHidden(u, e) {
-    const x1 = u.x, y1 = u.y - BODY_CY, x2 = e.x, y2 = e.y - BODY_CY, len = Math.hypot(x2 - x1, y2 - y1);
+    const x1 = u.x, y1 = u.y - BODY_CY * u.sc, x2 = e.x, y2 = e.y - BODY_CY * e.sc, len = Math.hypot(x2 - x1, y2 - y1);
     for (let s = 14; s < len - 14; s += 4) {
       if (this.terrain.solid(x1 + ((x2 - x1) * s) / len, y1 + ((y2 - y1) * s) / len)) return true;
     }
@@ -1288,10 +1439,11 @@ export class Game {
       let ang = 45;
       for (let k = 0; k < 3; k++) { // 발사 원점이 각도에 따라 달라지므로 몇 번 보정
         const ox = u.x + f * Math.cos(rad(ang)) * 18, oy = u.y - 20 - Math.sin(rad(ang)) * 18;
-        ang = (Math.atan2(oy - (e.y - BODY_CY), Math.abs(e.x - ox)) * 180) / Math.PI;
+        ang = (Math.atan2(oy - (e.y - BODY_CY * e.sc), Math.abs(e.x - ox)) * 180) / Math.PI;
       }
       if (ang < 5 || ang > 88) continue;
       const tr = this.traceBolt(u, ang, f);
+      if (this.smokes.length && this.lineThroughSmoke(tr.ox, tr.oy, e.x, e.y - BODY_CY * e.sc)) continue; // 연막을 지나는 번개는 고르지 못한다
       if (tr.target && tr.target.team !== u.team) out.push({ target: tr.target, angle: ang, facing: f });
     }
     return out;
@@ -1302,11 +1454,17 @@ export class Game {
   *aiDecide() {
     const u = this.activeUnit, ai = this.ai, me = u.team, am = this.ammo[me], sk = this.sim && this.sim.skill[me];
     const enemies = this.units.filter((o) => o.alive && o.team !== me);
-    const pt = (e) => ({ x: e.x, y: e.y - BODY_CY });
+    const pt = (e) => ({ x: e.x, y: e.y - BODY_CY * e.sc });
     if (!enemies.length) return null;
     const hidden = enemies.filter((e) => this.aiHidden(u, e));
     // 낮은 스테이지/웨이브에서는 AI의 특수 무기 제한. 시뮬레이션 속 우리 팀은 level과 무관하게 탄약이 있으면 사용(basic이면 대포탄·로켓만)
-    const can = (i) => am[i] > 0 && (sk ? !sk.basic : this.level == null || this.level >= AI_UNLOCK[i]);
+    const can = (i) => am[i] > 0 && !(sk && i === WIND_IDX) && (sk ? !sk.basic : this.level == null || this.level >= AI_UNLOCK[i]);
+    const instant = (weapon, extra) => ({ weapon, facing: u.facing, dist: 0, min: 0, target: enemies[0], angle: this.angle, power: 0, ...extra });
+    if (can(TELE_IDX) && this.aiWantsTele(u)) { // 순간이동: HP 35 미만이거나 화염 지대 안
+      const sp = this.aiTeleSpot(u, enemies);
+      if (sp) return instant(TELE_IDX, { tele: sp });
+    }
+    if (can(WIND_IDX) && this.aiWindBad(u, enemies) && Math.random() < 0.7) return instant(WIND_IDX); // 바람이 다음 사격을 크게 방해할 때 바람 바꾸기
     if (can(AIR_IDX) && Math.random() < 0.85) { // 공습: 상대 유닛 2마리 이상이 가로 120px 안에 모여 있고 아군이 구역 근처에 없을 때
       let grp = null;
       for (const a of enemies) {
@@ -1314,7 +1472,7 @@ export class Game {
         if (g.length >= 2 && (!grp || g.length > grp.length)) grp = g;
       }
       if (grp) {
-        const e = this.aiErr(), cx = clamp((Math.min(...grp.map((o) => o.x)) + Math.max(...grp.map((o) => o.x))) / 2 + gauss() * e.a * 2, 20, W - 20);
+        const e = this.aiErr(), mid = (Math.min(...grp.map((o) => o.x)) + Math.max(...grp.map((o) => o.x))) / 2, cx = clamp(mid + gauss() * e.a * 2 * (this.inSmoke(mid, grp[0].y - BODY_CY) ? 2 : 1), 20, W - 20);
         const friendly = this.units.some((o) => o.alive && o.team === me && Math.abs(o.x - cx) < AIR_W / 2 + 10);
         if (!friendly) return { weapon: AIR_IDX, facing: cx >= u.x ? 1 : -1, dist: 0, min: 0, target: grp[0], angle: this.angle, power: 0, x: cx };
       }
@@ -1351,9 +1509,44 @@ export class Game {
         if (plan.min <= 45) return { ...plan, target: e };
       }
     }
-    if (!ai.target || !ai.target.alive) ai.target = enemies[Math.floor(Math.random() * enemies.length)];
+    const vis = enemies.filter((e) => !this.inSmoke(e.x, e.y - BODY_CY * e.sc)); // 연막 속 유닛은 AI 눈에 안 띈다: 보이는 적을 먼저 노린다
+    if (!ai.target || !ai.target.alive || (vis.length && !vis.includes(ai.target))) ai.target = (vis.length ? vis : enemies)[Math.floor(Math.random() * (vis.length || enemies.length))];
+    if (u.trait.boss && can(4) && Math.random() < 0.55) { // 보스는 화염탄을 즐겨 쓴다 (착탄이 멀면 일반 사격)
+      const fp = yield* this.aiPlan(4, pt(ai.target));
+      if (fp.min <= 60) return { ...fp, target: ai.target };
+    }
     if (ai.weapon === undefined) ai.weapon = Math.random() < 0.35 ? 1 : 0;
     return { ...(yield* this.aiPlan(ai.weapon, pt(ai.target))), target: ai.target };
+  }
+
+  // 순간이동을 쓸 상황: HP 35 미만이거나 화염 지대 안
+  aiWantsTele(u) { return u.hp < 35 || this.aiFireAt(u.x, u.y); }
+  // 순간이동 도착지: 서 있을 수 있는 땅, 화염 지대·아는 지뢰에서 먼 곳, 70px 이상 이동. HP가 낮으면 적에게서 멀고 가려진 곳, 아니면 가장 가까운 안전한 곳
+  aiTeleSpot(u, enemies) {
+    const low = u.hp < 35;
+    let best = null;
+    for (let x = 30; x <= W - 30; x += 12) {
+      const sy = this.terrain.surfaceY(x);
+      if (sy >= WATER_Y - 40) continue;
+      const sp = this.teleSpot(x, sy - 6);
+      if (!sp) continue;
+      const d0 = Math.abs(sp.x - u.x);
+      if (d0 < 70 || this.aiFireAt(sp.x, sp.y, 12)) continue;
+      if (this.props.some((m) => m.type === 'mine' && !m.dead && (m.rev || m.known[u.team]) && Math.abs(m.x - sp.x) < 40)) continue;
+      let score = -d0;
+      if (low) {
+        const near = Math.min(...enemies.map((e) => Math.hypot(e.x - sp.x, e.y - sp.y))), me = { x: sp.x, y: sp.y, sc: u.sc };
+        score = Math.min(near, 450) + (enemies.every((e) => this.aiHidden(me, e)) ? 120 : 0) - d0 * 0.05;
+      }
+      if (!best || score > best.score) best = { x: sp.x, y: sp.y, score };
+    }
+    return best;
+  }
+  // 바람이 가장 가까운 적을 향한 사격을 크게 방해하는가 (바람이 사격 방향 반대로 강하게 분다)
+  aiWindBad(u, enemies) {
+    let e = null;
+    for (const o of enemies) if (!e || Math.abs(o.x - u.x) < Math.abs(e.x - u.x)) e = o;
+    return !!e && this.wind * (e.x >= u.x ? 1 : -1) < 0 && Math.abs(this.wind) >= Math.max(6, this.windMax * 0.6);
   }
 
   // 적이 폭발 반경 안에 있고 아군(자신 포함)이 안전거리 밖인 통 중 적을 가장 많이 휩쓰는 것
@@ -1361,9 +1554,9 @@ export class Game {
     let best = null;
     for (const p of this.props) {
       if (p.type !== 'barrel' || p.dead || p.fuse >= 0) continue;
-      const by = p.y - 14, near = enemies.filter((e) => Math.hypot(e.x - p.x, (e.y - BODY_CY) - by) < BARREL_R - 6);
+      const by = p.y - 14, near = enemies.filter((e) => Math.hypot(e.x - p.x, (e.y - BODY_CY * e.sc) - by) < BARREL_R - 6);
       if (!near.length) continue;
-      if (this.units.some((o) => o.alive && o.team === u.team && Math.hypot(o.x - p.x, (o.y - BODY_CY) - by) < BARREL_R + 22)) continue;
+      if (this.units.some((o) => o.alive && o.team === u.team && Math.hypot(o.x - p.x, (o.y - BODY_CY * o.sc) - by) < BARREL_R + 22)) continue;
       if (!best || near.length > best.n) best = { p, n: near.length, enemy: near[0] };
     }
     return best;
@@ -1424,7 +1617,7 @@ export class Game {
     if (a.phase === 'think') {
       if (a.t < 0.9) return;
       // 1) 화염 지대 안이면 밖으로 이동 (다음 턴 시작 때 또 화상을 입지 않도록)
-      if (!a.job && a.fled < 2 && this.aiFireAt(u.x, u.y)) {
+      if (!a.job && a.fled < 2 && this.aiFireAt(u.x, u.y) && !(this.ammo[u.team][TELE_IDX] > 0 && (this.sim && this.sim.skill[u.team] ? !this.sim.skill[u.team].basic : this.level == null || this.level >= AI_UNLOCK[TELE_IDX]))) {
         const f = this.fires.find((q) => Math.hypot(u.x - q.x, (u.y - 14) - q.y) < q.r);
         const first = u.x >= f.x ? 1 : -1;
         const dir = this.aiSafeAhead(u, first) ? first : this.aiSafeAhead(u, -first) ? -first : 0;
@@ -1458,6 +1651,7 @@ export class Game {
         a.plan = plan; a.phase = 'aim'; a.t = 0; a.from = this.angle;
         u.facing = plan.facing; this.weapon = plan.weapon;
         if (plan.x !== undefined) this.airX = plan.x; // 공습: 마커가 목표 위치에 표시됨
+        if (plan.tele) this.teleP = { x: plan.tele.x, y: plan.tele.y }; // 순간이동: 도착지를 표시
       }
     } else if (a.phase === 'walk') {
       const arrived = a.goal === 'crate' && (a.crate.dead || Math.abs(a.crate.x - u.x) < 8);
@@ -1468,7 +1662,7 @@ export class Game {
       const k = Math.min(1, a.t / 0.7);
       this.angle = a.from + (a.plan.angle - a.from) * k;
       if (k >= 1) {
-        if (WEAPONS[a.plan.weapon].instant || WEAPONS[a.plan.weapon].airstrike) { this.fire(0); this.ai = null; } // 번개·공습은 파워 충전 없이 즉시 발사
+        if (isInstantW(WEAPONS[a.plan.weapon])) { this.fire(0); this.ai = null; } // 번개·공습·순간이동·바람 바꾸기는 파워 충전 없이 즉시 실행
         else { a.phase = 'charge'; a.t = 0; this.charging = true; this.power = 0; }
       }
     } else if (a.phase === 'charge') {
@@ -1497,11 +1691,13 @@ export class Game {
     }
     this.shake = Math.max(0, this.shake - dt * 24);
     if (this.banner) { this.banner.t += dt; if (this.banner.t > BANNER_T) this.banner = null; }
+    if (this.bossIntro) { this.bossIntro.t += dt; if (this.bossIntro.t > BOSS_INTRO_T) this.bossIntro = null; }
+    for (const m of this.smokes) m.t += dt;
 
     for (const u of this.units) if (u.alive) { u.moving = false; }
     const hu = this.activeUnit;
     if (this.state === 'aim') {
-      this.timer -= dt;
+      if (!this.bossIntro) this.timer -= dt;
       const sec = Math.ceil(this.timer);
       if (sec <= 5 && sec > 0 && sec !== this.lastTick) { this.lastTick = sec; audio.play('tick', { vol: 0.6 }); }
       const human = !this.isAI(this.turnTeam);
@@ -1530,7 +1726,7 @@ export class Game {
       }
     } else if (this.state === 'flying') {
       const p = this.proj;
-      const grenade = p.w.id === 'grenade';
+      const grenade = !!p.w.fuse; // 수류탄·연막탄: 고정 스텝 + 튕김 + 퓨즈
       let r = null;
       if (grenade) { // 고정 1/60초 스텝: 프레임 속도와 무관하게 AI 시뮬레이션과 같은 궤적
         p.acc = (p.acc || 0) + dt;
@@ -1540,7 +1736,8 @@ export class Game {
       if (grenade) {
         const sec = Math.ceil(p.fuse);
         if (sec < p.tickN && sec > 0) { p.tickN = sec; audio.playSynth('grenadeTick', { stage: Math.min(2, Math.round(p.w.fuse - sec)) }); }
-        this.pt('fire', p.x + 2, p.y - 6, rnd(-15, 15), rnd(-40, -15), rnd(1.5, 2.5), 0.25);
+        if (p.w.smoke) this.pt('smoke', p.x, p.y - 4, rnd(-12, 12), rnd(-30, -10), rnd(3, 5), 0.5, '210,214,220'); // 연막탄: 회색 연기 꼬리
+        else this.pt('fire', p.x + 2, p.y - 6, rnd(-15, 15), rnd(-40, -15), rnd(1.5, 2.5), 0.25);
       } else if (p.w.id === 'fire') {
         this.pt('fire', p.x, p.y, rnd(-25, 25), rnd(-25, 25), rnd(3, 6), 0.4);
       } else if (p.w.id === 'rocket') {
@@ -1553,15 +1750,12 @@ export class Game {
       }
       if (r) {
         this.proj = null;
-        if (r === 'terrain' || r === 'unit' || r === 'explode' || r === 'prop') {
-          this.explode(p.x, p.y, p.w);
+        if (p.w.smoke) { if (r === 'explode') this.addSmoke(p.x, p.y); else if (r === 'water') this.waterHit(p, 0.9); } // 연막탄은 퓨즈가 끝나야 터진다
+        else if (r === 'terrain' || r === 'unit' || r === 'explode' || r === 'prop') {
+          this.explode(p.x, p.y, p.w, p.owner);
           if (p.w.fireR) this.igniteAt(p.x, p.y, p.w);
         }
-        else if (r === 'water') {
-          for (let i = 0; i < 14; i++) this.pt('splash', p.x, WATER_Y, rnd(-70, 70), rnd(-250, -90), rnd(2, 4), rnd(0.5, 0.9));
-          audio.play('sea_splash', { vol: 0.8, rate: 1.1 });
-          this.splash(p.x, p.w.id === 'rocket' ? 1.3 : 1);
-        }
+        else if (r === 'water') this.waterHit(p, p.w.id === 'rocket' ? 1.3 : 1);
         this.state = 'settle'; this.settleT = 0; this.settleTotal = 0;
       }
     } else if (this.state === 'strike') {
@@ -1654,19 +1848,22 @@ export class Game {
     for (const o of this.props) if (!o.dead) drawProp(g, o, this.time);
     for (const c of this.crates) this.drawCrate(g, c);
     for (const u of this.units) if (u.alive || (!u.drowned && u.deadT < FADE_END)) this.drawUnit(g, u);
+    this.drawSmokes(g);
     this.drawFires(g);
     this.drawWater(g);
     this.drawSplashes(g);
     const showAim = this.state === 'aim' && (this.turnTeam === 0 || (this.ai && (this.ai.phase === 'aim' || this.ai.phase === 'charge')));
-    if (showAim && !this.airMode) this.drawAim(g);
-    this._aim = showAim && !this.airMode ? this.aimPoint() : null; this.aimBox = null;
+    const tele = showAim && this.teleMode, plain = showAim && !this.airMode && !this.windMode && !tele; // 공습·바람 바꾸기·순간이동은 조준선을 그리지 않는다
+    if (plain) this.drawAim(g);
+    this._aim = plain || (tele && !this.teleP) ? this.aimPoint() : null; this.aimBox = null;
     if (this.proj) this.drawProj(g, this.proj);
     this.drawAir(g, showAim && this.airMode);
     this.drawBolt(g);
     this.drawSfx(g);
     this.drawParticles(g);
     this.drawTags(g);
-    if (showAim && !this.airMode) this.drawCross(g);
+    if (plain || (tele && !this.teleP)) this.drawCross(g);
+    if (tele) this.drawTeleMark(g);
     if (this.airLabel && this.airLabel.str) { const l = this.airLabel; this.text(g, l.str, l.x, l.y, l.fs, l.color); } // 이름표 위에 보이도록 마지막에
     const fs = Math.min(34, Math.max(18, 15 / this.viewScale)); // 작은 화면에서도 CSS 15px 안팎
     for (const f of this.floaters) {
@@ -1679,6 +1876,56 @@ export class Game {
     g.restore();
     if (this.flashT > 0) { g.fillStyle = `rgba(220,235,255,${Math.min(0.55, this.flashT * 4)})`; g.fillRect(0, 0, W, H); }
     this.drawHUD(g);
+  }
+
+  // 연막 구름: 부드러운 회색 연기 덩이를 겹쳐 그린다 (미리 그려 둔 덩이 한 장을 위치·크기만 바꿔 찍음). 마지막 턴에는 옅어지고, 처음 0.6초는 서서히 번진다
+  drawSmokes(g) {
+    const S = this.smokes; if (!S.length) return;
+    let pf = this._puff;
+    if (!pf) {
+      const c = document.createElement('canvas'); c.width = c.height = 96;
+      const q = c.getContext('2d'), gr = q.createRadialGradient(48, 48, 4, 48, 48, 46);
+      gr.addColorStop(0, 'rgba(214,219,226,0.95)'); gr.addColorStop(0.55, 'rgba(190,196,205,0.55)'); gr.addColorStop(1, 'rgba(170,176,186,0)');
+      q.fillStyle = gr; q.fillRect(0, 0, 96, 96);
+      pf = this._puff = c;
+    }
+    const n = this.lowFx ? 9 : 16, rm = this.reduceMotion;
+    g.save();
+    for (const m of S) {
+      const fade = Math.min(1, m.t / 0.6) * (m.turns <= 0 ? 0.6 : 1);
+      for (let i = 0; i < n; i++) {
+        const h1 = Math.sin(m.seed * 12.9898 + i * 78.233) * 43758.5453, h2 = Math.sin(m.seed * 4.1414 + i * 37.719) * 24634.634;
+        const a = (h1 - Math.floor(h1)) * 6.2832, d = Math.sqrt(h2 - Math.floor(h2)) * m.r * 0.78;
+        const dr = rm ? 0 : this.time * 0.5 + i;
+        const x = m.x + Math.cos(a) * d + Math.sin(dr) * 5, y = m.y + Math.sin(a) * d * 0.85 + Math.cos(dr * 0.8) * 4, sz = 62 + (i % 4) * 14;
+        g.globalAlpha = (0.55 + 0.1 * (i % 3)) * fade;
+        g.drawImage(pf, x - sz / 2, y - sz / 2, sz, sz);
+      }
+    }
+    g.restore();
+  }
+
+  // 순간이동 도착지 표시: 갈 수 있으면 파란 고리와 점선(유닛 → 도착지), 갈 수 없으면 빨간 ✕
+  drawTeleMark(g) {
+    const u = this.activeUnit; if (!u) return;
+    const t = this.teleTarget(), sp = this.teleSpot(t.x, t.y), pul = 0.5 + 0.5 * Math.sin(this.time * 8);
+    g.save();
+    if (sp) {
+      g.strokeStyle = 'rgba(140,220,255,0.7)'; g.lineWidth = 2; g.setLineDash([6, 6]);
+      g.beginPath(); g.moveTo(u.x, u.y - 24); g.lineTo(sp.x, sp.y - 24); g.stroke(); g.setLineDash([]);
+      for (let i = 0; i < 2; i++) {
+        g.strokeStyle = i ? '#fff' : 'rgba(40,120,200,0.9)'; g.lineWidth = i ? 2 : 5;
+        g.beginPath(); g.ellipse(sp.x, sp.y, 16 + 3 * pul, 6 + pul, 0, 0, 7); g.stroke();
+        g.beginPath(); g.ellipse(sp.x, sp.y - 24, 11 + 2 * pul, 22 + 3 * pul, 0, 0, 7); g.stroke();
+      }
+    } else {
+      g.lineCap = 'round';
+      for (let i = 0; i < 2; i++) {
+        g.strokeStyle = i ? '#ff5a4a' : 'rgba(0,0,0,0.85)'; g.lineWidth = i ? 3 : 6;
+        g.beginPath(); g.moveTo(t.x - 9, t.y - 9); g.lineTo(t.x + 9, t.y + 9); g.moveTo(t.x + 9, t.y - 9); g.lineTo(t.x - 9, t.y + 9); g.stroke();
+      }
+    }
+    g.restore();
   }
 
   // 번개 줄기: 지그재그 파란 글로우 + 흰 심지, 약 0.3초
@@ -1844,14 +2091,14 @@ export class Game {
     g.save();
     g.globalAlpha *= 0.34 * (1 - 0.65 * k);
     g.fillStyle = '#000';
-    g.beginPath(); g.ellipse(u.x, gy + 0.5, rx, rx * 0.26, tilt, 0, 6.283); g.fill();
+    g.beginPath(); g.ellipse(u.x, gy + 0.5, rx * u.sc, rx * u.sc * 0.26, tilt, 0, 6.283); g.fill();
     g.restore();
   }
 
   drawUnit(g, u) {
     const set = this.sprites[u.sprite];
     const img = set[this.poseOf(u)] || set.idle;
-    const h = SPRITE_H, w = h * (img.naturalWidth / img.naturalHeight);
+    const h = SPRITE_H * u.sc, w = h * (img.naturalWidth / img.naturalHeight);
     let sx = 1, sy = 1;
     if (u.alive && u.grounded && !u.moving) { sx = 1 + u.squash * 0.5; sy = 1 - u.squash * 0.5; }
     g.save();
@@ -1865,6 +2112,19 @@ export class Game {
       g.globalAlpha = base * Math.min(1, u.hurt / HURT_T * 1.4) * 0.85;
       g.drawImage(this.flashSprite(img), -w / 2, -h, w, h);
     }
+    if (u.trait.boss && u.alive) this.drawCrown(g, -h * 0.93);
+    g.restore();
+  }
+
+  // 보스의 빨간 왕관 (머리 위, 금 테두리와 보석)
+  drawCrown(g, y) {
+    const cw = 14, ch = 17;
+    g.save();
+    g.lineJoin = 'round';
+    g.beginPath(); g.moveTo(-cw, y); g.lineTo(-cw, y - ch); g.lineTo(-cw / 2, y - ch * 0.5); g.lineTo(0, y - ch * 1.1); g.lineTo(cw / 2, y - ch * 0.5); g.lineTo(cw, y - ch); g.lineTo(cw, y); g.closePath();
+    g.fillStyle = '#d62828'; g.fill(); g.lineWidth = 2.2; g.strokeStyle = '#ffd34a'; g.stroke();
+    g.fillStyle = '#ffe27a';
+    for (const [gx, gy] of [[-cw, y - ch], [0, y - ch * 1.1], [cw, y - ch]]) { g.beginPath(); g.arc(gx, gy, 2.6, 0, 7); g.fill(); }
     g.restore();
   }
 
@@ -1880,7 +2140,7 @@ export class Game {
       if (!u.alive) continue;
       const t = u.tag || (u.tag = { u, w: 0, x: 0, y: 0, nm: '', tm: false }), nm = u.name;
       if (t.nm !== nm || t.tm !== this.teamMarks) { t.nm = nm; t.tm = this.teamMarks; t.w = Math.max(46, Math.ceil(this.textW(nm, 700, 10)) + 10 + (this.teamMarks ? 14 : 0)); }
-      t.x = u.x; t.y = u.y - TAG_TOP;
+      t.x = u.x; t.y = u.y - TAG_TOP - (u.sc - 1) * 64 - (u.sc > 1 ? 16 : 0); // 큰 보스는 이름표가 머리·왕관 위로
       tags[nt++] = t;
     }
     tags.length = nt;
@@ -1940,7 +2200,7 @@ export class Game {
     this.text(g, String(u.hp), x, by + 6, 9);
     // 머리와 어긋났을 때 연결선 (확대 좌표계에서도 실제 머리 위치로 향하도록 보정)
     if (Math.abs(x - u.x) * ts > 6) {
-      const ay = y + TAG_H, tx = x + (u.x - x) / ts, ty = ay + (u.y - 54 - ay) / ts;
+      const ay = y + TAG_H, tx = x + (u.x - x) / ts, ty = ay + (u.y - 54 * u.sc - ay) / ts;
       g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1;
       g.beginPath(); g.moveTo(x, y + TAG_H); g.lineTo(tx, ty); g.stroke();
     }
@@ -2073,6 +2333,15 @@ export class Game {
       g.fillStyle = '#555'; g.fillRect(-11, -4, 3, 8);
     } else if (p.w.id === 'fire') {
       g.fillStyle = fireBall(g); g.beginPath(); g.arc(0, 0, 9, 0, 7); g.fill();
+    } else if (p.w.smoke) { // 연막탄: 회색 통 (퓨즈가 줄면 깜빡)
+      const hot = p.fuse < 0.7 && Math.floor(p.fuse * 8) % 2 === 0;
+      g.rotate(p.age * 6);
+      g.fillStyle = hot ? '#aab2bc' : '#6b7480'; g.strokeStyle = '#2e343b'; g.lineWidth = 1.5;
+      g.beginPath(); g.roundRect(-5, -7, 10, 14, 3); g.fill(); g.stroke();
+      g.fillStyle = '#c9d0d8'; g.fillRect(-5, -2, 10, 3);
+      g.restore();
+      this.text(g, String(Math.max(1, Math.ceil(p.fuse))), p.x, Math.max(16, p.y - 16), 18, p.fuse < 1 ? '#ffd0c8' : '#fff');
+      return;
     } else if (p.w.id === 'grenade') {
       const hot = p.fuse < 1 && Math.floor(p.fuse * 8) % 2 === 0;
       g.rotate(p.age * 6);
@@ -2175,6 +2444,24 @@ export class Game {
         g.fillStyle = '#e04030'; g.beginPath(); g.moveTo(bx - 4, by - 6); g.lineTo(bx, by - 2); g.lineTo(bx + 4, by - 6); g.lineTo(bx + 2, by - 1); g.lineTo(bx - 2, by - 1); g.closePath(); g.fill();
       }
       g.strokeStyle = '#ffd24a'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(-12, 12); g.lineTo(12, 12); g.stroke();
+    } else if (id === 'smoke') { // 회색 연막통 + 위로 피어오르는 연기
+      g.fillStyle = '#6b7480'; g.strokeStyle = '#2e343b'; g.lineWidth = 1.5;
+      g.beginPath(); g.roundRect(-6, -2, 12, 14, 3); g.fill(); g.stroke();
+      g.fillStyle = '#9aa3ad'; g.fillRect(-6, 2, 12, 3);
+      g.fillStyle = 'rgba(225,230,236,0.95)';
+      for (const [px, py, pr] of [[-4, -6, 5], [3, -9, 6], [8, -4, 4], [-1, -12, 4]]) { g.beginPath(); g.arc(px, py, pr, 0, 7); g.fill(); }
+    } else if (id === 'teleport') { // 파란 포털 고리 + 반짝임
+      g.strokeStyle = '#6fd0ff'; g.lineWidth = 2.4;
+      g.beginPath(); g.ellipse(0, 1, 8, 12, 0, 0, 7); g.stroke();
+      g.strokeStyle = '#c8f0ff'; g.lineWidth = 1.4; g.beginPath(); g.ellipse(0, 1, 4.5, 8, 0, 0, 7); g.stroke();
+      g.fillStyle = '#fff';
+      for (const [sx, sy, sr] of [[-11, -8, 3], [11, 8, 3.4], [10, -9, 2]]) { g.beginPath(); g.moveTo(sx, sy - sr); g.lineTo(sx + sr * 0.3, sy - sr * 0.3); g.lineTo(sx + sr, sy); g.lineTo(sx + sr * 0.3, sy + sr * 0.3); g.lineTo(sx, sy + sr); g.lineTo(sx - sr * 0.3, sy + sr * 0.3); g.lineTo(sx - sr, sy); g.lineTo(sx - sr * 0.3, sy - sr * 0.3); g.closePath(); g.fill(); }
+    } else if (id === 'windshift') { // 바람 줄기 세 개와 방향 화살표
+      g.strokeStyle = '#bfe6ff'; g.lineWidth = 2.2; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(-12, -6); g.lineTo(4, -6); g.arc(4, -9, 3, Math.PI / 2, -Math.PI * 0.9, true);
+      g.moveTo(-12, 1); g.lineTo(10, 1); g.arc(10, 4, 3, -Math.PI / 2, Math.PI * 0.9);
+      g.moveTo(-12, 8); g.lineTo(2, 8); g.stroke();
+      g.fillStyle = '#ffe27a'; g.beginPath(); g.moveTo(13, -2); g.lineTo(13, -9); g.lineTo(8, -5.5); g.closePath(); g.fill();
     } else if (id === 'fire') {
       g.fillStyle = '#ff7a1a';
       g.beginPath(); g.moveTo(0, -13); g.bezierCurveTo(10, -3, 10, 10, 0, 11); g.bezierCurveTo(-10, 10, -9, -2, 0, -13); g.fill();
@@ -2223,7 +2510,7 @@ export class Game {
       this.text(g, String(i + 1), x + 9 * f, y + 9 * f, 10 * f, sel ? '#222' : '#cfe3f7', 'center');
       const lock = w.airstrike && !this.airOk;
       if (!off) this.text(g, lock ? tr('hud.lock') : ammo === Infinity ? '∞' : '×' + ammo, x + sw - 5, y + 9 * f, (lock ? 9 : 11) * f, empty ? '#ff9c9c' : sel ? '#222' : '#ffe27a', 'right');
-      this.text(g, w.name, x + sw / 2, y + (big ? 48 : 42), 10 * f, sel ? '#222' : '#fff');
+      this.text(g, shortName(w), x + sw / 2, y + (big ? 48 : 42), 10 * f, sel ? '#222' : '#fff');
       g.restore();
       if (off) {
         g.fillStyle = 'rgba(0,0,0,0.6)'; g.beginPath(); g.roundRect(x + sw / 2 - 18 * f, cy - 8 * f, 36 * f, 15 * f, 7 * f); g.fill();
@@ -2240,16 +2527,18 @@ export class Game {
     // 무기 (하단 HUD)
     if (!this.touchUI) this.drawWeaponBar(g);    // 파워 바
     if (this.turnTeam === 0 && this.airMode && this.state === 'aim' && !this.touchUI) { // 공습 조준 안내 (파워 바 대신)
-      this.text(g, tr('hud.air', { x: Math.round(this.airX) }), W / 2, H - 26, 12 * big);
+      this.text(g, tr('hud.air', { x: Math.round(this.airX) }), HUD_CX, H - 26, 12 * big);
+    } else if (this.turnTeam === 0 && this.state === 'aim' && (this.teleMode || this.windMode) && !this.touchUI) { // 순간이동·바람 바꾸기 안내
+      this.text(g, tr(this.teleMode ? 'hud.tele' : 'hud.shift'), HUD_CX, H - 26, 12 * big);
     } else if (this.turnTeam === 0 && (this.state === 'aim' || this.state === 'flying') && !(this.touchUI && !dom)) { // 가로 터치 화면은 발사 버튼이 각도·파워를 표시
-      const bx = W / 2 - 120, by = H - 30; // 얇고 반투명한 파워 바: 화면 맨 아래 가장자리에 붙여 조준선·조준점과 겹치지 않게 한다
+      const bx = HUD_CX - 120, by = H - 30; // 얇고 반투명한 파워 바: 화면 맨 아래 가장자리에 붙여 조준선·조준점과 겹치지 않게 한다
       g.fillStyle = 'rgba(0,0,0,0.4)'; g.beginPath(); g.roundRect(bx - 3, by - 3, 246, 16, 6); g.fill();
       g.globalAlpha = 0.7; g.fillStyle = powerGrad(g, bx); g.fillRect(bx, by, 240 * this.power / 100, 10); g.globalAlpha = 1;
       g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 1; g.strokeRect(bx, by, 240, 10);
       if (this.lastPower) { g.fillStyle = '#fff'; g.fillRect(bx + 240 * this.lastPower / 100 - 1, by - 2, 2, 14); }
-      if (!dom) this.text(g, tr('hud.aim', { a: Math.round(this.angle), p: Math.round(this.power) }), W / 2, by - 14 * big, 12 * big);
+      if (!dom) this.text(g, tr('hud.aim', { a: Math.round(this.angle), p: Math.round(this.power) }), HUD_CX, by - 14 * big, 12 * big);
     }
-    if (!dom && !this.touchUI && this.turnTeam === 1 && this.state === 'aim') this.text(g, tr('hud.foeAim'), W / 2, H - 26, 14 * big, '#fff');
+    if (!dom && !this.touchUI && this.turnTeam === 1 && this.state === 'aim') this.text(g, tr('hud.foeAim'), HUD_CX, H - 26, 14 * big, '#fff');
     // 턴 배너: "내 차례 - 이름" / "상대 차례 - 이름"을 상단 중앙 HUD 바로 아래 하늘에 짧은 페이드로 보여줌
     if (this.banner) {
       const b = this.banner, a = Math.min(1, b.t / 0.12, (BANNER_T - b.t) / 0.35);
@@ -2265,6 +2554,25 @@ export class Game {
       this.text(g, btxt, W / 2, by + bh / 2 + 1, fz, mine ? '#b5d3ff' : '#ffb3b3', 'center', '800');
       g.restore();
     }
+    if (this.bossIntro) this.drawBossIntro(g, big);
+  }
+
+  // 보스 등장 배너: 화면 가운데에 붉은 띠가 가로로 열리고 '보스 등장!' + 보스 이름 (0.25초 페이드 인, 마지막 0.5초 페이드 아웃)
+  drawBossIntro(g, big) {
+    const t = this.bossIntro.t, a = Math.max(0, Math.min(1, t / 0.25, (BOSS_INTRO_T - t) / 0.5)), k = Math.min(1, t / 0.3);
+    const fz = Math.min(44, Math.max(24, 22 / this.viewScale)) * big, bh = fz * 3.1, by = H * 0.34 - bh / 2, bw = W * k;
+    g.save();
+    g.globalAlpha = a * 0.92;
+    const gr = g.createLinearGradient(0, by, 0, by + bh);
+    gr.addColorStop(0, 'rgba(120,10,10,0.92)'); gr.addColorStop(0.5, 'rgba(190,24,24,0.95)'); gr.addColorStop(1, 'rgba(120,10,10,0.92)');
+    g.fillStyle = gr; g.fillRect(W / 2 - bw / 2, by, bw, bh);
+    g.fillStyle = '#ffd34a'; g.fillRect(W / 2 - bw / 2, by, bw, 3); g.fillRect(W / 2 - bw / 2, by + bh - 3, bw, 3);
+    g.globalAlpha = a;
+    if (k >= 1) {
+      this.text(g, tr('boss.warn'), W / 2, by + bh * 0.36, fz, '#fff', 'center', '800');
+      this.text(g, tr('boss.name'), W / 2, by + bh * 0.74, fz * 0.62, '#ffe27a', 'center', '700');
+    }
+    g.restore();
   }
 
   // 상단 HUD(팀 HP·타이머·바람·유닛 정보 줄·모드/시드 알약)는 값이 바뀔 때만 오프스크린에 다시 그리고 평소에는 한 번 찍는다.
@@ -2349,7 +2657,7 @@ export class Game {
     let best = null, bd = 24;
     for (const u of this.units) {
       if (!u.alive) continue;
-      const d = Math.hypot(u.x - px, Math.max(0, Math.abs(py - (u.y - BODY_CY)) - BODY_HALF));
+      const d = Math.hypot(u.x - px, Math.max(0, Math.abs(py - (u.y - BODY_CY * u.sc)) - BODY_HALF * u.sc)) - (u.sc - 1) * BODY_R;
       if (d < bd) { bd = d; best = u; }
     }
     return best;
@@ -2401,7 +2709,7 @@ export function warmupSteps(sprites, { viewScale = 1, bigHud = false, teamMarks 
     () => { // 무기별 투사체·공습 조준 마커
       for (let i = 0; i < WEAPONS.length; i++) {
         const wp = WEAPONS[i]; w.weapon = i; if (wp.airstrike) w.airX = 450;
-        if (!wp.instant && !wp.airstrike) { w.proj = { x: 300, y: 200, vx: 100, vy: -50, w: wp, owner: u0(), age: 0.5, fuse: 2 }; w.state = 'flying'; w.draw(g); w.proj = null; w.state = 'aim'; }
+        if (!isInstantW(wp)) { w.proj = { x: 300, y: 200, vx: 100, vy: -50, w: wp, owner: u0(), age: 0.5, fuse: 2 }; w.state = 'flying'; w.draw(g); w.proj = null; w.state = 'aim'; }
         w.draw(g);
       }
       w.weapon = 0; w.state = 'aim';
@@ -2410,6 +2718,7 @@ export function warmupSteps(sprites, { viewScale = 1, bigHud = false, teamMarks 
     () => { w.igniteAt(400, 300, WEAPONS[4]); w.dropCrate(); tick(25); },              // 화염 지대·보급 상자
     () => { w.weapon = 3; w.state = 'aim'; w.turnTeam = 0; w.fireLightning(u0(), WEAPONS[3]); tick(20); w.state = 'aim'; }, // 번개
     () => { w.weapon = 5; w.state = 'aim'; w.turnTeam = 0; w.airX = 420; w.fireAirstrike(u0(), WEAPONS[5]); tick(100); }, // 공습
+    () => { w.state = 'aim'; w.turnTeam = 0; w.addSmoke(480, 300); w.weapon = TELE_IDX; w.teleP = { x: 400, y: 300 }; tick(3); w.teleP = null; w.weapon = 0; w.smokes.length = 0; }, // 연막·순간이동 표시
     () => { w.floaters.length = 0; bake(1, fs, '#ff3b30', '800', nums(1, 60, (n) => '-' + n)); },              // 피해 숫자
     () => { bake(1, fs, '#ff3b30', '800', nums(61, 120, (n) => '-' + n)); bake(1, fs, '#5dff6e', '800', ['+5', '+10', '+30']); },
     () => bake(ts, 9, '#fff', '700', nums(0, 115)),                                        // 이름표 HP 숫자

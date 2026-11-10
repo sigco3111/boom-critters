@@ -1,15 +1,15 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111051';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig, warmupSteps, warmFlash } from './game.js?v=2026111051';
-import * as audio from './audio.js?v=2026111051';
-import * as progress from './progress.js?v=2026111051';
-import { MenuBg } from './menubg.js?v=2026111051';
-import { themeById, drawMapPreview } from './themes.js?v=2026111051';
-import * as store from './storage.js?v=2026111051';
-import * as loader from './loader.js?v=2026111051';
-import * as fx from './fx.js?v=2026111051';
-import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111051';
+const VERSION = '2026111052';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig, warmupSteps, warmFlash } from './game.js?v=2026111052';
+import * as audio from './audio.js?v=2026111052';
+import * as progress from './progress.js?v=2026111052';
+import { MenuBg } from './menubg.js?v=2026111052';
+import { themeById, drawMapPreview } from './themes.js?v=2026111052';
+import * as store from './storage.js?v=2026111052';
+import * as loader from './loader.js?v=2026111052';
+import * as fx from './fx.js?v=2026111052';
+import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111052';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -81,7 +81,7 @@ coarseMQ.addEventListener?.('change', () => setTouchUI());
 portraitMQ.addEventListener?.('change', () => setTouchUI());
 let endlessRecord = false;
 let current = { mode: 'quick' };   // 현재/마지막 매치: { mode: 'quick'|'stage'|'endless', stage? }
-const weaponBtns = [1, 2, 3, 4, 5, 6].map((n) => $('bW' + n)).filter(Boolean); // 6번 공습 버튼은 index.html에 있을 때만
+const weaponBtns = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => $('bW' + n)).filter(Boolean); // 6~9번 버튼은 index.html에 있을 때만
 const stars = (n) => '★'.repeat(n) + '☆'.repeat(3 - n);
 const show = (id, on = true) => $(id).classList.toggle('hidden', !on);
 // 설정·크레딧·도움말 같은 모달이 열려 있으면 경기를 멈추고 게임 키 입력을 막음
@@ -174,7 +174,7 @@ function showResult(winner) {
         title = tr('res.over');
         sub = tr('res.endSub', { n: cleared, b: progress.load().endlessBest, rec: record && cleared > 0 ? tr('res.new') : '' });
       } else if (mode === 'stage') {
-        title = won ? tr('res.clear', { n: stage }) : tr('res.lose');
+        title = won ? tr(stageConfig(stage).boss ? 'res.bossClear' : 'res.clear', { n: stage }) : tr('res.lose');
         if (won) sub = tr('res.alive', { n: alive, b: r.best }) + (r.unlockedNext && stage < STAGE_COUNT ? tr('res.unlock', { n: stage + 1 }) : '');
         else sub = tr(winner === 1 ? 'res.allDown' : 'res.bothDown');
       } else {
@@ -216,9 +216,9 @@ function showResult(winner) {
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
 window.__audio = audio; // 디버깅/테스트용: __audio.musicInfo()
-window.__sim = (n, opts) => import('./sim.js?v=2026111051').then((m) => m.sim(n, opts));
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111051').then((m) => m.table(n, stages, skills));
-window.__sim.soak = (n, opts) => import('./sim.js?v=2026111051').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
+window.__sim = (n, opts) => import('./sim.js?v=2026111052').then((m) => m.sim(n, opts));
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111052').then((m) => m.table(n, stages, skills));
+window.__sim.soak = (n, opts) => import('./sim.js?v=2026111052').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
 
 // 이 경기에 뒤에서 받는 캐릭터가 필요한가: 적이 3마리 이상(보통 이상·스테이지 4~)이거나 무한 모드(웨이브가 오르면 적이 4마리)
 function needsLazy(cfg) {
@@ -299,9 +299,9 @@ function renderStages() {
     const locked = i > d.unlocked, st = d.stars[i] || 0, cfg = stageConfig(i);
     const b = document.createElement('button');
     b.type = 'button'; b.dataset.stage = String(i);
-    b.className = (locked ? 'locked ' : '') + (st ? 'done' : '');
+    b.className = (locked ? 'locked ' : '') + (st ? 'done ' : '') + (cfg.boss ? 'boss' : '');
     b.disabled = locked;
-    b.innerHTML = `<b>${i}</b><span class="stars">${locked ? '🔒' : stars(st)}</span><small>${tr('stage.enemies', { n: cfg.enemies })}</small>`;
+    b.innerHTML = `<b>${i}</b><span class="stars">${locked ? '🔒' : stars(st)}</span><small>${cfg.boss ? tr('stage.boss') : tr('stage.enemies', { n: cfg.enemies })}</small>`;
     b.setAttribute('aria-label', locked ? tr('stage.locked', { n: i }) : st ? tr('stage.stars', { n: i, s: st }) : tr('stage.plain', { n: i }));
     b.addEventListener('click', () => launch({ mode: 'stage', stage: i }));
     grid.appendChild(b);
@@ -352,7 +352,7 @@ function makeHud() {
       set('wn', num, 'textContent', String(Math.abs(gm.wind || 0)));
       set('md', mode, 'textContent', gm.modeLabel);
       let st = '';
-      if (gm.state === 'aim') st = gm.turnTeam === 0 ? (gm.airMode ? tr('st.mineAir', { x: Math.round(gm.airX) }) : tr('st.mineAim', { a: Math.round(gm.angle), p: Math.round(gm.power) })) : tr('st.foe');
+      if (gm.state === 'aim') st = gm.turnTeam === 0 ? (gm.airMode ? tr('st.mineAir', { x: Math.round(gm.airX) }) : gm.teleMode ? tr('st.mineTele') : gm.windMode ? tr('st.mineWind') : tr('st.mineAim', { a: Math.round(gm.angle), p: Math.round(gm.power) })) : tr('st.foe');
       else if (gm.state === 'strike') st = tr('st.strike');
       set('st', status, 'textContent', st);
       if (unitEl) { // 지금 차례인 유닛(또는 마우스를 올린 유닛)의 이름·HP·특성
@@ -602,7 +602,7 @@ function setup(sprites) {
     if (e.repeat) { if (['Space', 'KeyW'].includes(e.code)) e.preventDefault(); return; }
     if (e.code === 'KeyW') { game.playerJump(); e.preventDefault(); }
     else if (e.code === 'Space') { game.beginCharge(); e.preventDefault(); }
-    else if (/^(Digit|Numpad)[1-6]$/.test(e.code)) game.setWeapon(Number(e.code.slice(-1)) - 1);
+    else if (/^(Digit|Numpad)[1-9]$/.test(e.code)) game.setWeapon(Number(e.code.slice(-1)) - 1);
     else if (e.code === 'KeyM') muteBtn.click();
   });
   window.addEventListener('keyup', (e) => {
@@ -643,6 +643,10 @@ function setup(sprites) {
     if (finger) setTouchUI(true);
     const [px, py] = toGame(e);
     if (!game.touchUI) { const slot = game.slotAt(px, py); if (slot >= 0) { game.setWeapon(slot); barTap(slot, e.pointerType || 'mouse'); return; } } // 하단 HUD 무기 버튼
+    if (game.teleMode && game.isPlayerTurn) { // 순간이동: 누르면 목표 표시가 그 자리로 가고, 끌어서 조정, 떼면 이동
+      if (airPtr === null) { airPtr = e.pointerId; canvas.setPointerCapture(e.pointerId); game.setTeleP(px, py); }
+      return;
+    }
     if (game.airMode && game.isPlayerTurn) { // 공습: 누르면 목표 마커가 그 x로 가고, 끌어서 조정, 떼면 호출
       if (airPtr === null) { airPtr = e.pointerId; canvas.setPointerCapture(e.pointerId); game.setAirX(px); }
       return;
@@ -656,14 +660,16 @@ function setup(sprites) {
   });
   canvas.addEventListener('pointermove', (e) => {
     if (e.pointerType === 'mouse') game.hover = game.unitAt(...toGame(e)); // 마우스를 유닛에 올리면 정보 줄에 그 유닛의 특성이 보인다
-    if (e.pointerId === airPtr) game.setAirX(toGame(e)[0]);
+    if (e.pointerId === airPtr) { if (game.teleMode) game.setTeleP(...toGame(e)); else game.setAirX(toGame(e)[0]); }
     else if (e.pointerId === aimPtr) game.dragMove(...toGame(e));
     else if (e.pointerId === dragging) game.aimTo(...toGame(e));
   });
   const endDrag = (fireIt) => (e) => {
     if (e.pointerId === airPtr) { // 공습 호출: 손을 떼면 마커 위치에 투하 (취소되면 호출하지 않음)
       airPtr = null;
-      if (fireIt) { game.setAirX(toGame(e)[0]); game.beginCharge(); }
+      if (fireIt && game.teleMode) { game.setTeleP(...toGame(e)); game.beginCharge(); }
+      else if (fireIt && game.airMode) { game.setAirX(toGame(e)[0]); game.beginCharge(); }
+      else game.teleP = null;
     }
     if (e.pointerId === aimPtr) { aimPtr = null; game.dragEnd(fireIt); }
     if (e.pointerId === dragging) dragging = null;
@@ -741,13 +747,13 @@ function setup(sprites) {
     // 발사 버튼(가로 터치 화면): 각도·파워 표시와 파워 게이지
     {
       const mine = game.turnTeam === 0 && (game.state === 'aim' || game.state === 'flying');
-      const info = mine && game.airMode ? tr('fire.target', { x: Math.round(game.airX) }) : mine ? `${Math.round(game.angle)}° · ${Math.round(game.power)}` : game.turnTeam === 1 && game.state === 'aim' ? tr('fire.foe') : '';
+      const info = mine && game.airMode ? tr('fire.target', { x: Math.round(game.airX) }) : mine && game.teleMode ? tr('fire.teleInfo') : mine && game.windMode ? tr('fire.windInfo') : mine ? `${Math.round(game.angle)}° · ${Math.round(game.power)}` : game.turnTeam === 1 && game.state === 'aim' ? tr('fire.foe') : '';
       if (fireFx.textContent !== info) fireFx.textContent = info;
       const pw = mine ? Math.round(game.power) + '%' : '0%';
       if (fireBtn.dataset.pw !== pw) { fireBtn.dataset.pw = pw; fireBtn.style.setProperty('--pw', pw); }
       pauseBtn.disabled = !canPause();
       compactTick();
-      const fl = game.airMode ? tr('fire.air') : tr('fire.label');
+      const fl = game.airMode ? tr('fire.air') : game.teleMode ? tr('fire.tele') : game.windMode ? tr('fire.wind') : tr('fire.label');
       if (fireLabel.textContent !== fl) fireLabel.textContent = fl;
     }
     // 무기 버튼 상태 표시
@@ -756,10 +762,10 @@ function setup(sprites) {
       const w = WEAPONS[i], a = game.ammo ? game.ammo[0][i] : 0;
       b.disabled = !!w.disabled || a <= 0;
       const amt = w.disabled ? 'soon' : w.airstrike && !game.airOk ? '🔒' : a === Infinity ? '∞' : `×${a}`;
-      const label = `${i + 1} ${w.name}|${amt}`;
+      const wname = w.short || w.name, label = `${i + 1} ${wname}|${amt}`;
       if (b.dataset.label !== label) { // 터치 화면에서는 두 줄(이름 / 탄약)로 보인다
         b.dataset.label = label;
-        b.innerHTML = `<span class="wn"><span class="wk">${i + 1} </span>${w.name}</span><span class="wa">${amt}</span>`; // .wk(번호)는 큰 HUD 글씨 + 터치 화면에서 숨겨 이름·탄약을 더 크게 보여 줌
+        b.innerHTML = `<span class="wn"><span class="wk">${i + 1} </span>${wname}</span><span class="wa">${amt}</span>`; // .wk(번호)는 큰 HUD 글씨 + 터치 화면에서 숨겨 이름·탄약을 더 크게 보여 줌
       }
     });
     raf = requestAnimationFrame(frame);

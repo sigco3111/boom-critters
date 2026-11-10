@@ -1,6 +1,6 @@
 // 헤드리스 AI 대 AI 시뮬레이션 (밸런스 측정용). 브라우저 콘솔에서: await __sim(20, { stage: 5, skill: 'average' })
 // 우리 팀(팀 0)을 숙련도 프로필의 AI가 조작하고, 렌더링 없이(지형은 높이맵 충돌 배열만) 고정 시간 스텝으로 경기를 끝까지 돌린다.
-import { Game, STAGE_COUNT, WEAPONS, W, H, WATER_Y, stageConfig, quickConfig, waveConfig } from './game.js?v=2026111051';
+import { Game, STAGE_COUNT, WEAPONS, W, H, WATER_Y, stageConfig, quickConfig, waveConfig } from './game.js?v=2026111052';
 
 // 플레이어 숙련도 프로필: 각도 오차(°, 표준편차) · 파워 오차 · pick(상위 후보 중 무작위) · basic(대포탄·로켓만 사용)
 export const SKILLS = {
@@ -78,11 +78,12 @@ function fuzzHuman(g, st, dt) {
     if (Math.random() < 0.15) g.playerJump();
     if (Math.random() < 0.4) g.setWeapon(Math.floor(Math.random() * WEAPONS.length));
     if (g.airMode && Math.random() < 0.5) g.setAirX(Math.random() * W);
+    if (g.teleMode && Math.random() < 0.7) g.setTeleP(Math.random() * W, Math.random() * H); // 순간이동: 아무 데나 눌러 본다 (갈 수 없는 곳이면 거절돼야 함)
     if (Math.random() < 0.25) st.fireAt = Math.random() * 1.8;
     if (Math.random() < 0.05) g.aimTo(Math.random() * W, Math.random() * H);
   }
   if (st.fireAt === undefined) return;
-  if (g.airMode) { g.beginCharge(); st.fireAt = undefined; }
+  if (g.instantMode) { g.beginCharge(); st.fireAt = undefined; }
   else if (!g.charging) { g.beginCharge(); st.chg = 0; }
   else if ((st.chg += dt) >= st.fireAt) { g.releaseCharge(); st.fireAt = undefined; }
 }
@@ -111,6 +112,7 @@ function checkWorld(g, add, dt) {
   }
   if (cap.barrel > 4 || cap.crate > 4 || cap.mine > 3) add('장애물 상한 초과', JSON.stringify(cap));
   if (g.proj && ![g.proj.x, g.proj.y].every(fin)) add('투사체 좌표가 NaN', '');
+  for (const m of g.smokes) if (![m.x, m.y, m.turns].every(fin)) add('연막 값이 NaN', '');
   if (![g.wind, g.timer, g.angle, g.power].every(fin)) add('바람·타이머·각도·파워가 NaN', '');
 }
 export async function soak(n = 2, opts = {}) {

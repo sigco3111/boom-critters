@@ -5,7 +5,7 @@
 // 번개·공습·수류탄 카운트다운·치유 효과음은 파일 없이 Web Audio(노이즈·오실레이터)로 합성 — 모두 sfxGain을 거치므로 효과음 볼륨·음소거를 따른다
 // OGG를 디코드하지 못하는 기기(구형 iOS Safari 등): 음악은 원곡 MP3(assets/music/enchanted-festival.mp3)로 대체하고,
 // 효과음·결과 징글은 파일 없이 합성한 소리(FALLBACK)로 대체한다 — 효과음은 sfxGain, 징글은 musicGain을 거치므로 볼륨·음소거를 그대로 따른다
-import { local } from './storage.js?v=2026111051';
+import { local } from './storage.js?v=2026111052';
 const NAMES = ['explosion', 'fire', 'land', 'step', 'hit', 'select', 'win', 'lose', 'tick', 'switch',
   'sea_cannon', 'sea_boom', 'sea_boom_big', 'sea_boom_small', 'sea_splash'];
 const MUSIC_URL = 'assets/music/enchanted-festival-loop.ogg';
@@ -219,6 +219,32 @@ function tone(type, f0, f1, t, dur, peak, att = 0.01, out = sfxGain) {
   o.start(t); o.stop(t + dur + 0.05);
 }
 const SYNTH = {
+  // 연막: 낮은 '쉬익' - 노이즈를 로우패스로 부드럽게 깔고 서서히 줄임
+  smoke(t, { vol = 1 }) {
+    const src = ctx.createBufferSource(); src.buffer = noise(); src.loop = true;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(2600, t); lp.frequency.exponentialRampToValueAtTime(500, t + 0.7);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.34 * vol, t + 0.06); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.75);
+    src.connect(lp); lp.connect(g); g.connect(sfxGain);
+    src.start(t); src.stop(t + 0.8);
+  },
+  // 순간이동: 낮은음에서 높은음으로 훑는 사인 + 끝에 반짝 두 음
+  teleport(t, { vol = 1 }) {
+    tone('sine', 300, 1800, t, 0.28, 0.22 * vol, 0.01);
+    tone('triangle', 600, 3600, t, 0.28, 0.07 * vol, 0.01);
+    tone('sine', 2093, 2093, t + 0.26, 0.2, 0.14 * vol, 0.005);
+    tone('sine', 3136, 3136, t + 0.32, 0.25, 0.1 * vol, 0.005);
+  },
+  // 바람 바꾸기: 밴드패스를 오르내리는 노이즈 '휘이이'
+  whoosh(t, { vol = 1 }) {
+    const src = ctx.createBufferSource(); src.buffer = noise(); src.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 3;
+    bp.frequency.setValueAtTime(400, t); bp.frequency.exponentialRampToValueAtTime(2200, t + 0.35); bp.frequency.exponentialRampToValueAtTime(500, t + 0.8);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.4 * vol, t + 0.3); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.85);
+    src.connect(bp); bp.connect(g); g.connect(sfxGain);
+    src.start(t); src.stop(t + 0.9);
+  },
   // 번개: 노이즈 버스트를 하이패스 스윕(600Hz -> 7kHz)으로 지지직 + 불규칙한 크랙클 진폭, 아래에 짧은 하강 지직음
   lightning(t, { vol = 1 }) {
     const src = ctx.createBufferSource(); src.buffer = noise(); src.loop = true;
