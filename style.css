@@ -85,6 +85,8 @@ body.touch #controls .fire { border-radius: 50%; font-size: 17px; line-height: 1
 body.touch #controls button { opacity: 0.92; }
 body.touch #topBtns button { min-width: 44px; min-height: 44px; }
 body.touch #topBtns .tx { display: none; }
+#topBtns { transition: opacity 0.12s; }
+#topBtns.aimclear { opacity: 0; pointer-events: none; } /* 조준 중 이름표·조준점과 겹치면 숨김 (가로 터치) */
 
 /* 세로 화면: 캔버스 아래에 컨트롤을 배치 */
 @media (orientation: portrait) {
