@@ -1317,6 +1317,11 @@ export class Game {
       g.restore();
     }
     const label = this.mode === 'stage' ? `스테이지 ${this.stage}` : this.mode === 'endless' ? `무한 모드 · 웨이브 ${this.wave} (클리어 ${this.cleared})` : DIFF[this.difficulty]?.label || '';
-    this.text(g, `${label} · 시드 ${this.seed}`, W - 16, 64, 10, 'rgba(255,255,255,0.85)', 'right', '400');
+    // 모드·시드 표시: 양 팀 HUD(상단 좌우)와 겹치지 않도록 바람 표시 바로 아래 중앙에 작은 알약 모양으로 그림
+    const info = `${label} · 시드 ${this.seed}`;
+    g.font = '400 11px "Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif';
+    const iw = Math.ceil(g.measureText(info).width) + 20;
+    g.fillStyle = 'rgba(0,0,0,0.45)'; g.beginPath(); g.roundRect(W / 2 - iw / 2, 90, iw, 17, 8.5); g.fill();
+    this.text(g, info, W / 2, 98.5, 11, 'rgba(255,255,255,0.9)', 'center', '400');
   }
 }
