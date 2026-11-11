@@ -1,10 +1,10 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111054';
-import * as audio from './audio.js?v=2026111054';
-import { t as tr, getLang } from './i18n.js?v=2026111054';
-import * as fx from './fx.js?v=2026111054';
-import { makeProps, drawProp, PW, PH, BARREL_R, BARREL_DMG, MINE_R, MINE_DMG, MINE_TRIGGER, MINE_SEE, PACK_CHANCE } from './props.js?v=2026111054';
-import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111054';
+import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111055';
+import * as audio from './audio.js?v=2026111055';
+import { t as tr, getLang } from './i18n.js?v=2026111055';
+import * as fx from './fx.js?v=2026111055';
+import { makeProps, drawProp, PW, PH, BARREL_R, BARREL_DMG, MINE_R, MINE_DMG, MINE_TRIGGER, MINE_SEE, PACK_CHANCE } from './props.js?v=2026111055';
+import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111055';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -32,6 +32,7 @@ const MAX_PARTICLES = 500, MAX_FLOATERS = 24; // 파티클·떠오르는 글자 
 const AI_MAX_TRIES = 3;      // AI가 유효한 사격(물/화면 밖이 아닌 착탄)을 못 찾을 때 다시 계산해 보는 횟수. 넘으면 턴을 넘긴다
 const AI_SLICE_MS = 4;       // AI 사격 계산을 한 프레임에 쓰는 최대 시간(ms): 나머지는 다음 프레임에 이어서 (느린 폰의 프레임 끊김 방지)
 const AI_TURN_MAX = 22;      // AI 한 턴의 최대 시간(초): 이 안에 쏘지 못하면 강제로 넘김 (제한 시간 30초보다 먼저)
+const TURN_WATCH_GAME = 45, TURN_WATCH_WALL = 120; // 안전망: 한 턴이 게임 시간 45초(안내 띠 정지 시간 제외) 또는 실제 시간 120초(일시정지·숨김 제외)를 넘으면 강제로 턴을 끝낸다
 const SETTLE_MAX = 8;        // 발사 후 유닛이 안정되길 기다리는 최대 시간(초)
 const DRAG_MIN = 14; // 터치 드래그 조준: 발사에 필요한 최소 드래그 거리 (캔버스 px)
 
@@ -920,6 +921,7 @@ export class Game {
     this.angle = 45;
     this.banner = { text: tr(t === 0 ? 'banner.mine' : 'banner.foe', { name: u.name }), color: TEAMS[t].color, t: 0 };
     this.lastTick = 99;
+    this.turnT = 0; this.turnWall = 0; this._wl = 0;
     this.ai = this.isAI(t) ? { phase: 'think', t: 0, walks: 0, crateWalks: 0, fled: 0, tries: 0, total: 0, target: null } : null;
   }
 
@@ -1853,9 +1855,29 @@ export class Game {
   }
 
   // ---------- 업데이트 ----------
+  // 턴 감시: 어떤 이유로든(AI·투사체·폭발 연쇄·연막/순간이동 상태 등) 한 턴이 끝나지 않으면 강제로 끝내고 기록을 남긴다 (watchdogHits)
+  watchdog(dt) {
+    if (!this.bossIntro && !this.note) this.turnT += dt;
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (this._wl) this.turnWall += Math.min(0.25, (now - this._wl) / 1000); // 프레임 사이가 길게 벌어진 시간(일시정지·탭 숨김)은 세지 않는다
+    this._wl = now;
+    if (this.turnT > TURN_WATCH_GAME || this.turnWall > TURN_WATCH_WALL) this.forceEndTurn(this.turnT > TURN_WATCH_GAME ? `game ${this.turnT.toFixed(0)}s` : `wall ${this.turnWall.toFixed(0)}s`);
+  }
+  forceEndTurn(why) {
+    this.watchdogHits = (this.watchdogHits || 0) + 1;
+    (this.watchdogLog || (this.watchdogLog = [])).push({ why, state: this.state, turn: this.turnNo, team: this.turnTeam, ai: this.ai ? this.ai.phase : null, wave: this.wave || 0 });
+    if (this.watchdogLog.length > 20) this.watchdogLog.shift();
+    console.warn('[watchdog] 턴이 끝나지 않아 강제로 넘깁니다:', why, 'state=' + this.state, 'turn=' + this.turnNo);
+    this.proj = null; this.air = null; this.ai = null; this.charging = false; this.drag = null;
+    this.state = 'settle'; this.settleT = 0; this.settleTotal = 0;
+    this.turnT = 0; this.turnWall = 0;
+    if (!this.checkWinner()) this.endTurn();
+  }
+
   update(dt) {
     this.time += dt;
     if (this.state === 'idle') return;
+    if (this.state === 'aim' || this.state === 'flying' || this.state === 'strike' || this.state === 'settle') this.watchdog(dt);
     this.updateParticles(dt);
     this.updateSfx(dt);
     this.updateSplashes(dt);
@@ -2369,8 +2391,25 @@ export class Game {
     // 조준점(과 터치 드래그 지점)이 이름표·HP 바 블록 가까이(화면 28px 안)에 있으면 블록을 흐리게 해 조준점이 가려지지 않게 한다
     const now = performance.now(), dtA = Math.min(0.1, Math.max(0, (now - (this._tagNow || now)) / 1000)); this._tagNow = now;
     const near = TAG_NEAR / Math.max(0.2, this.viewScale), ap = this._aim, dr = ap && this.drag;
+    const hs = this.hudScale, ch = Math.max(80, (this._hudIw || 160) / 2) * hs + 4;
+    const hud = this._hudRects || (this._hudRects = [{}, {}, {}]); // 상단 HUD 영역 3곳: 왼쪽 팀 HP·유닛 정보 · 가운데 타이머·바람·모드/웨이브 알약 · 오른쪽 팀 HP·유닛 정보
+    hud[0].l = 0; hud[0].r = 14 + 230 * hs + 4; hud[1].l = W / 2 - ch; hud[1].r = W / 2 + ch; hud[2].l = W - 14 - 230 * hs - 4; hud[2].r = W;
+    hud[0].b = hud[2].b = 12 + 78 * hs + 3; hud[1].b = 107 * hs + 3;
     for (const t of tags) {
       t.x = clamp(t.x, (t.w / 2) * ts + 2, W - (t.w / 2) * ts - 2);
+      const hw = (t.w / 2) * ts;
+      if (t.y + TAG_H - TAG_H * ts < 2) t.y = 2 - TAG_H + TAG_H * ts; // 화면 위로 잘리지 않게
+      const inHud = (x) => hud.some((r) => t.y + TAG_H - TAG_H * ts < r.b && x + hw > r.l && x - hw < r.r);
+      if (inHud(t.x)) { // 높이 선 유닛의 이름표가 HUD(웨이브·시드 알약, 타이머, HP 박스) 위에 겹치면 가장 가까운 빈 자리로 옆으로 비킨다
+        let best = null;
+        for (const r of hud) for (const c of [r.l - hw - 1, r.r + hw + 1]) if (c >= hw + 2 && c <= W - hw - 2 && !inHud(c) && (best === null || Math.abs(c - t.x) < Math.abs(best - t.x))) best = c;
+        if (best !== null) t.x = best;
+        else { // 옆에도 빈 자리가 없으면(HUD가 화면 위를 가득 채운 작은 화면) HUD 바로 아래로 내린다
+          let bot = 0;
+          for (const r of hud) if (t.x + hw > r.l && t.x - hw < r.r) bot = Math.max(bot, r.b);
+          if (t.y + TAG_H - TAG_H * ts < bot) t.y = bot - TAG_H + TAG_H * ts;
+        }
+      }
       const x0 = t.x - (t.w / 2) * ts, x1 = t.x + (t.w / 2) * ts, y1 = t.y + TAG_H, y0 = y1 - TAG_H * ts;
       let hit = false;
       if (ap) {
@@ -2864,6 +2903,7 @@ export class Game {
     // 모드·시드 표시: 양 팀 HUD(상단 좌우)와 겹치지 않도록 바람 표시 바로 아래 중앙에 작은 알약 모양으로 그림
     const info = tr('hud.info', { label: this.modeLabel, theme: this.theme.name, seed: this.seed });
     const iw = Math.ceil(this.textW(info, 400, 11)) + 20;
+    this._hudIw = iw;
     g.save(); g.translate(W / 2, 0); g.scale(hs, hs); g.translate(-W / 2, 0);
     this.sc = hs;
     g.fillStyle = 'rgba(0,0,0,0.45)'; g.beginPath(); g.roundRect(W / 2 - iw / 2, 90, iw, 17, 8.5); g.fill();

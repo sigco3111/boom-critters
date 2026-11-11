@@ -1,6 +1,6 @@
 // 헤드리스 AI 대 AI 시뮬레이션 (밸런스 측정용). 브라우저 콘솔에서: await __sim(20, { stage: 5, skill: 'average' })
 // 우리 팀(팀 0)을 숙련도 프로필의 AI가 조작하고, 렌더링 없이(지형은 높이맵 충돌 배열만) 고정 시간 스텝으로 경기를 끝까지 돌린다.
-import { Game, STAGE_COUNT, WEAPONS, W, H, WATER_Y, stageConfig, quickConfig, waveConfig } from './game.js?v=2026111054';
+import { Game, STAGE_COUNT, WEAPONS, W, H, WATER_Y, stageConfig, quickConfig, waveConfig } from './game.js?v=2026111055';
 
 // 플레이어 숙련도 프로필: 각도 오차(°, 표준편차) · 파워 오차 · pick(상위 후보 중 무작위) · basic(대포탄·로켓만 사용)
 export const SKILLS = {
@@ -149,39 +149,69 @@ function checkWorld(g, add, dt) {
   for (const m of g.smokes) if (![m.x, m.y, m.turns].every(fin)) add('연막 값이 NaN', '');
   if (![g.wind, g.timer, g.angle, g.power].every(fin)) add('바람·타이머·각도·파워가 NaN', '');
 }
+// 시작 위치 검사: 물·지형 안·월드 밖·공중에 뜬 채 시작하는 유닛(= 닿을 수 없는/맞힐 수 없는 자리)을 찾는다
+function checkSpawn(g, add) {
+  const fin = Number.isFinite;
+  for (const u of g.units) {
+    if (![u.x, u.y].every(fin)) { add('시작 위치 좌표가 NaN', ''); continue; }
+    const sy = g.terrain.surfaceY(u.x);
+    if (u.x < 10 || u.x > W - 10) add('닿을 수 없는 시작 위치: 월드 가장자리', `x=${u.x.toFixed(0)}`);
+    else if (sy > WATER_Y - 30) add('닿을 수 없는 시작 위치: 물가·물속', `x=${u.x.toFixed(0)} ground=${sy}`);
+    else if (g.blocked(u.x, u.y)) add('닿을 수 없는 시작 위치: 지형 속에 박힘', `x=${u.x.toFixed(0)} y=${u.y.toFixed(0)}`);
+    else if (Math.abs(sy - u.y) > 26) add('닿을 수 없는 시작 위치: 땅에서 떠 있음', `y=${u.y.toFixed(0)} ground=${sy}`);
+  }
+  const mine = g.units.filter((u) => u.team === 0), foes = g.units.filter((u) => u.team === 1);
+  if (mine.length < 3 || foes.length < 1) add('시작 유닛 수가 이상함', `${mine.length} vs ${foes.length}`);
+}
+const THEME_IDS = [undefined, 'grass', 'desert', 'snow', 'night'], TERRAIN_IDS = [undefined, 'gentle', 'hills', 'canyon', 'island', 'bridge'];
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+// opts: { total(경기 수, 기본 n*40), stages, waves, quick(true면 빠른 대전 포함), skills }
+// 경기를 스테이지 1~14 · 빠른 대전(난이도×테마×지형 무작위) · 무한 웨이브 1~12 순서로 돌려 가며 만든다
 export async function soak(n = 2, opts = {}) {
-  const issues = {}, t0 = Date.now();
-  const stages = opts.stages || Array.from({ length: STAGE_COUNT }, (_, i) => i + 1);
-  const skills = opts.skills || ['casual', 'average', 'skilled', 'human'];
-  const cfgs = stages.map((s) => [`stage${s}`, stageConfig(s), 'normal'])
-    .concat(['easy', 'normal', 'hard'].map((d) => [`quick-${d}`, quickConfig(d), d]), [1, 3, 5].map((w) => [`wave${w}`, waveConfig(w), 'normal']));
-  const errs = [], ce = console.error;
+  const issues = {}, t0 = Date.now(), total = opts.total || n * 40;
+  const stages = opts.stages || Array.from({ length: STAGE_COUNT }, (_, i) => i + 1), waves = opts.waves || Array.from({ length: 12 }, (_, i) => i + 1);
+  const skills = opts.skills || ['casual', 'average', 'skilled', 'human', 'human'];
+  const errs = [], ce = console.error, cw = console.warn;
   console.error = (...a) => { errs.push(a.map(String).join(' ')); };
-  let matches = 0, maxTurn = 0;
+  let wd = 0; console.warn = (...a) => { if (String(a[0]).includes('[watchdog]')) wd++; else cw(...a); };
+  const by = {};
+  let matches = 0, maxTurn = 0, turns = 0;
   try {
-    for (const [label, cfg, diff] of cfgs) for (const sk of skills) for (let i = 0; i < n; i++) {
-      const ctx = `${label}/${sk}`, add = (k, ex) => { const e = issues[k] || (issues[k] = { n: 0, example: `${ctx} ${ex}` }); e.n++; };
+    for (let m = 0; m < total; m++) {
+      const r = m % 3; // 0 스테이지 · 1 빠른 대전 · 2 무한 웨이브
+      let label, cfg, diff = 'normal', wave0 = 0;
+      if (r === 0) { const s = stages[(m / 3 | 0) % stages.length]; label = `stage${s}`; cfg = stageConfig(s); }
+      else if (r === 1) { diff = pick(['easy', 'normal', 'hard']); const th = pick(THEME_IDS), te = pick(TERRAIN_IDS); label = `quick-${diff}-${th || 'rnd'}-${te || 'rnd'}`; cfg = quickConfig(diff, { theme: th, terrain: te }); }
+      else { wave0 = waves[(m / 3 | 0) % waves.length]; label = `wave${wave0}`; cfg = waveConfig(wave0); }
+      const sk = pick(skills), ctx = `${label}/${sk}`;
+      let seedTxt = '';
+      const add = (k, ex) => { const e = issues[k] || (issues[k] = { n: 0, example: `${ctx} seed=${seedTxt} ${ex}` }); e.n++; };
       const g = new Game({}); g.headless = true; g.onOver = () => {}; g.onWave = () => {};
       g.sim = { skill: [SKILLS[sk] || null, null], err: null };
-      g.newMatch(diff, { ...cfg });
-      const dt = [1 / 30, 1 / 60, 0.033][matches % 3], st = { t: 0, next: 0.3 };
-      let steps = 0, lastTurn = g.turnNo, turnT = g.time;
+      const dt = [1 / 30, 1 / 60, 0.033][m % 3], st = { t: 0, next: 0.3 };
+      let steps = 0, lastTurn = 0, turnT = 0;
+      const cat = r === 0 ? 'stage' : r === 1 ? 'quick' : 'endless';
+      by[cat] = (by[cat] || 0) + 1;
       try {
+        g.newMatch(diff, { ...cfg });
+        seedTxt = String(g.seed); lastTurn = g.turnNo; turnT = g.time;
+        checkSpawn(g, add);
         while (g.state !== 'over' && steps++ < 30 * 60 * 40) {
-          if (g.state === 'wave' && g.wave >= 4) break; // 무한 모드는 웨이브 4까지만
+          if (g.mode === 'endless' && g.cleared >= wave0 + 1) break; // 무한 모드: 시작 웨이브를 깨고 보상을 고른 뒤 다음 웨이브가 시작되면 끝
           if (!SKILLS[sk]) fuzzHuman(g, st, dt);
           g.update(dt);
           checkWorld(g, add, dt);
-          if (g.turnNo !== lastTurn) { const d = g.time - turnT; maxTurn = Math.max(maxTurn, d); if (d > 60) add('한 턴이 게임 시간 60초 초과', `${d.toFixed(0)}s`); lastTurn = g.turnNo; turnT = g.time; }
-          if (g.time - turnT > 90) { add('턴이 멈춤(90초)', `state=${g.state}`); break; }
+          if (g.turnNo !== lastTurn) { const d = g.time - turnT; maxTurn = Math.max(maxTurn, d); turns++; if (d > 60) add('한 턴이 게임 시간 60초 초과', `${d.toFixed(0)}s`); lastTurn = g.turnNo; turnT = g.time; }
+          if (g.time - turnT > 90 && g.state !== 'reward') { add('턴이 멈춤(90초)', `state=${g.state}`); break; }
         }
         if (g.state !== 'over' && g.mode !== 'endless' && steps > 30 * 60 * 40) add('경기가 40분 안에 끝나지 않음', '');
+        if (g.watchdogHits) for (const w of g.watchdogLog) add('감시 장치가 턴을 강제로 끝냄', JSON.stringify(w));
       } catch (e) { add('예외: ' + e.message, String(e.stack || '').split('\n').slice(0, 3).join(' | ')); }
       matches++;
       if (matches % 4 === 0) await tick();
     }
-  } finally { console.error = ce; }
+  } finally { console.error = ce; console.warn = cw; }
   if (errs.length) issues['console.error 발생'] = { n: errs.length, example: errs[0].slice(0, 200) };
-  return { matches, issues, maxTurnSec: +maxTurn.toFixed(1), ms: Date.now() - t0 };
+  return { matches, by, turns, issues, watchdog: wd, maxTurnSec: +maxTurn.toFixed(1), ms: Date.now() - t0 };
 }
 export { STAGE_COUNT };

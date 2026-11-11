@@ -1,15 +1,15 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111054';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig, warmupSteps, warmFlash, BOSS_BONUS_HP } from './game.js?v=2026111054';
-import * as audio from './audio.js?v=2026111054';
-import * as progress from './progress.js?v=2026111054';
-import { MenuBg } from './menubg.js?v=2026111054';
-import { themeById, drawMapPreview } from './themes.js?v=2026111054';
-import * as store from './storage.js?v=2026111054';
-import * as loader from './loader.js?v=2026111054';
-import * as fx from './fx.js?v=2026111054';
-import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111054';
+const VERSION = '2026111055';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig, warmupSteps, warmFlash, BOSS_BONUS_HP } from './game.js?v=2026111055';
+import * as audio from './audio.js?v=2026111055';
+import * as progress from './progress.js?v=2026111055';
+import { MenuBg } from './menubg.js?v=2026111055';
+import { themeById, drawMapPreview } from './themes.js?v=2026111055';
+import * as store from './storage.js?v=2026111055';
+import * as loader from './loader.js?v=2026111055';
+import * as fx from './fx.js?v=2026111055';
+import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111055';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -81,6 +81,7 @@ coarseMQ.addEventListener?.('change', () => setTouchUI());
 portraitMQ.addEventListener?.('change', () => setTouchUI());
 let endlessRecord = false;
 let current = { mode: 'quick' };   // 현재/마지막 매치: { mode: 'quick'|'stage'|'endless', stage? }
+let selShown = -1;
 const weaponBtns = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => $('bW' + n)).filter(Boolean); // 6~9번 버튼은 index.html에 있을 때만
 const stars = (n) => '★'.repeat(n) + '☆'.repeat(3 - n);
 const show = (id, on = true) => $(id).classList.toggle('hidden', !on);
@@ -221,10 +222,10 @@ function showResult(winner) {
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
 window.__audio = audio; // 디버깅/테스트용: __audio.musicInfo()
-window.__sim = (n, opts) => import('./sim.js?v=2026111054').then((m) => m.sim(n, opts));
-window.__sim.endless = (n, opts) => import('./sim.js?v=2026111054').then((m) => m.endless(n, opts)); // 무한 모드 밸런스: await __sim.endless(30, { skill: 'average' }) -> { avg, median, dist, ... }
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111054').then((m) => m.table(n, stages, skills));
-window.__sim.soak = (n, opts) => import('./sim.js?v=2026111054').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
+window.__sim = (n, opts) => import('./sim.js?v=2026111055').then((m) => m.sim(n, opts));
+window.__sim.endless = (n, opts) => import('./sim.js?v=2026111055').then((m) => m.endless(n, opts)); // 무한 모드 밸런스: await __sim.endless(30, { skill: 'average' }) -> { avg, median, dist, ... }
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111055').then((m) => m.table(n, stages, skills));
+window.__sim.soak = (n, opts) => import('./sim.js?v=2026111055').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
 
 // 이 경기에 뒤에서 받는 캐릭터가 필요한가: 적이 3마리 이상(보통 이상·스테이지 4~)이거나 무한 모드(웨이브가 오르면 적이 4마리)
 function needsLazy(cfg) {
@@ -813,7 +814,13 @@ function setup(sprites) {
     }
     // 무기 버튼 상태 표시
     weaponBtns.forEach((b, i) => {
-      b.classList.toggle('sel', game.weapon === i);
+      const on = game.weapon === i;
+      b.classList.toggle('sel', on);
+      if (on && selShown !== i) { // 고른 무기 버튼이 가로 스크롤 막대 밖이면 안으로 밀어 넣는다
+        selShown = i;
+        const bar = b.parentElement;
+        if (bar && bar.scrollWidth > bar.clientWidth + 1) { const br = bar.getBoundingClientRect(), bb = b.getBoundingClientRect(), l = bb.left - br.left + bar.scrollLeft, r = l + bb.width; if (l < bar.scrollLeft) bar.scrollLeft = l - 4; else if (r > bar.scrollLeft + bar.clientWidth) bar.scrollLeft = r - bar.clientWidth + 4; }
+      }
       const w = WEAPONS[i], a = game.ammo ? game.ammo[0][i] : 0;
       b.disabled = !!w.disabled || a <= 0;
       const amt = w.disabled ? 'soon' : w.airstrike && !game.airOk ? '🔒' : a === Infinity ? '∞' : `×${a}`;
