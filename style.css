@@ -464,3 +464,8 @@ body.booting #controls, body.booting #topBtns, body.booting #rotateHint { visibi
   .rw-choices button span { font-size: 13px; }
   .rw-choices button i { top: 50%; transform: translateY(-50%); left: 12px; font-size: 14px; }
 }
+
+/* 낮은 가로 화면(예: 844×390): 스테이지 선택의 '뒤로' 버튼을 왼쪽 위에 붙여 스크롤 없이 항상 보이게 한다 (제목 위쪽 공간을 차지하지 않음) */
+@media (orientation: landscape) and (max-height: 500px) {
+  #stageScreen #stageBackBtn { order: -1; position: sticky; top: 6px; z-index: 5; align-self: flex-start; margin: 0 0 -44px; min-height: 44px; padding: 6px 16px; font-size: 15px; }
+}
