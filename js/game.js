@@ -1,10 +1,10 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111056';
-import * as audio from './audio.js?v=2026111056';
-import { t as tr, getLang } from './i18n.js?v=2026111056';
-import * as fx from './fx.js?v=2026111056';
-import { makeProps, drawProp, PW, PH, BARREL_R, BARREL_DMG, MINE_R, MINE_DMG, MINE_TRIGGER, MINE_SEE, PACK_CHANCE } from './props.js?v=2026111056';
-import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111056';
+import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111057';
+import * as audio from './audio.js?v=2026111057';
+import { t as tr, getLang } from './i18n.js?v=2026111057';
+import * as fx from './fx.js?v=2026111057';
+import { makeProps, drawProp, PW, PH, BARREL_R, BARREL_DMG, MINE_R, MINE_DMG, MINE_TRIGGER, MINE_SEE, PACK_CHANCE } from './props.js?v=2026111057';
+import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111057';
 
 export { W, H };
 export const WATER_Y = 496;

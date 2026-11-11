@@ -1,15 +1,15 @@
 // 진입점: 에셋 로딩, 입력, UI, 메인 루프
 // 캐시 버전: index.html의 ?v=, 모듈 import의 ?v=, 크레딧 화면 표시와 함께 올린다 (배포마다 갱신)
-const VERSION = '2026111056';
-import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig, warmupSteps, warmFlash, BOSS_BONUS_HP } from './game.js?v=2026111056';
-import * as audio from './audio.js?v=2026111056';
-import * as progress from './progress.js?v=2026111056';
-import { MenuBg } from './menubg.js?v=2026111056';
-import { themeById, drawMapPreview } from './themes.js?v=2026111056';
-import * as store from './storage.js?v=2026111056';
-import * as loader from './loader.js?v=2026111056';
-import * as fx from './fx.js?v=2026111056';
-import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111056';
+const VERSION = '2026111057';
+import { Game, W, H, TEAMS, CHARACTERS, WALK_FRAMES, WEAPONS, STAGE_COUNT, DIFF, quickConfig, stageConfig, waveConfig, warmupSteps, warmFlash, BOSS_BONUS_HP } from './game.js?v=2026111057';
+import * as audio from './audio.js?v=2026111057';
+import * as progress from './progress.js?v=2026111057';
+import { MenuBg } from './menubg.js?v=2026111057';
+import { themeById, drawMapPreview } from './themes.js?v=2026111057';
+import * as store from './storage.js?v=2026111057';
+import * as loader from './loader.js?v=2026111057';
+import * as fx from './fx.js?v=2026111057';
+import { t as tr, getLang, setLang, applyDom, onLangChange } from './i18n.js?v=2026111057';
 
 const POSES = ['idle', ...Array.from({ length: WALK_FRAMES }, (_, i) => 'walk' + i), 'jump', 'fall', 'hit', 'attack0', 'hold', 'down'];
 const CHAR_KEYS = CHARACTERS.flat().map(([k]) => k);
@@ -222,10 +222,10 @@ function showResult(winner) {
 // 밸런스 측정용 헤드리스 시뮬레이션 (콘솔): await __sim(30, { stage: 5, skill: 'average' }) / await __sim.table(20)
 // 렌더링 없이 AI 대 AI 경기를 빠르게 돌려 승률을 돌려준다. 필요할 때만 sim.js를 불러온다.
 window.__audio = audio; // 디버깅/테스트용: __audio.musicInfo()
-window.__sim = (n, opts) => import('./sim.js?v=2026111056').then((m) => m.sim(n, opts));
-window.__sim.endless = (n, opts) => import('./sim.js?v=2026111056').then((m) => m.endless(n, opts)); // 무한 모드 밸런스: await __sim.endless(30, { skill: 'average' }) -> { avg, median, dist, ... }
-window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111056').then((m) => m.table(n, stages, skills));
-window.__sim.soak = (n, opts) => import('./sim.js?v=2026111056').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
+window.__sim = (n, opts) => import('./sim.js?v=2026111057').then((m) => m.sim(n, opts));
+window.__sim.endless = (n, opts) => import('./sim.js?v=2026111057').then((m) => m.endless(n, opts)); // 무한 모드 밸런스: await __sim.endless(30, { skill: 'average' }) -> { avg, median, dist, ... }
+window.__sim.table = (n, stages, skills) => import('./sim.js?v=2026111057').then((m) => m.table(n, stages, skills));
+window.__sim.soak = (n, opts) => import('./sim.js?v=2026111057').then((m) => m.soak(n, opts)); // 내구 테스트: await __sim.soak(2) -> { matches, issues }
 
 // 이 경기에 뒤에서 받는 캐릭터가 필요한가: 적이 3마리 이상(보통 이상·스테이지 4~)이거나 무한 모드(웨이브가 오르면 적이 4마리)
 function needsLazy(cfg) {
