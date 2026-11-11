@@ -479,3 +479,6 @@ body:not(.touch) #startScreen h1 { font-size: calc(5 * var(--cq)); line-height: 
 body:not(.touch) #startScreen .mode { padding: calc(1 * var(--cq)) calc(2 * var(--cq)); gap: calc(0.6 * var(--cq)); }
 body:not(.touch) #startScreen .mode button.big { padding: calc(1.1 * var(--cq)) calc(2 * var(--cq)); }
 body:not(.touch) #startScreen .help { max-width: 92%; }
+body:not(.touch) #stageScreen { gap: calc(1.2 * var(--cq)); padding: calc(1 * var(--cq)) calc(2 * var(--cq)); }
+body:not(.touch) #stageScreen h1 { font-size: calc(5 * var(--cq)); line-height: 1.1; }
+body:not(.touch) #stageGrid { gap: calc(1.2 * var(--cq)); }
