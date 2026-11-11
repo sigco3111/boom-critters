@@ -5,7 +5,7 @@
 // 번개·공습·수류탄 카운트다운·치유 효과음은 파일 없이 Web Audio(노이즈·오실레이터)로 합성 — 모두 sfxGain을 거치므로 효과음 볼륨·음소거를 따른다
 // OGG를 디코드하지 못하는 기기(구형 iOS Safari 등): 음악은 원곡 MP3(assets/music/enchanted-festival.mp3)로 대체하고,
 // 효과음·결과 징글은 파일 없이 합성한 소리(FALLBACK)로 대체한다 — 효과음은 sfxGain, 징글은 musicGain을 거치므로 볼륨·음소거를 그대로 따른다
-import { local } from './storage.js?v=2026111057';
+import { local } from './storage.js?v=2026111058';
 const NAMES = ['explosion', 'fire', 'land', 'step', 'hit', 'select', 'win', 'lose', 'tick', 'switch',
   'sea_cannon', 'sea_boom', 'sea_boom_big', 'sea_boom_small', 'sea_splash'];
 const MUSIC_URL = 'assets/music/enchanted-festival-loop.ogg';
