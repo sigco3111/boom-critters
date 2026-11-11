@@ -1,10 +1,53 @@
-# 붐 크리터스 (Boom Critters)
+<h1 align="center">붐 크리터스 (Boom Critters)</h1>
 
-웜즈·포트리스 스타일의 싱글플레이 **턴제 포격 웹게임**입니다. 순수 HTML5 Canvas + 바닐라 JavaScript(ES 모듈)이며 빌드 도구·서버 없이 정적 파일만으로 동작합니다. 폰·태블릿 터치와 키보드·마우스를 모두 지원하고, 한국어 / English로 플레이할 수 있습니다.
+<p align="center">
+  웜즈·포트리스 스타일의 싱글플레이 <b>턴제 포격 웹게임</b><br>
+  순수 HTML5 Canvas + 바닐라 JavaScript(ES 모듈) · 빌드 도구·서버 없이 정적 파일만으로 동작<br>
+  폰·태블릿 터치와 키보드·마우스 지원 · 한국어 / English
+</p>
+
+<p align="center">
+  <a href="https://sigco3111.github.io/boom-critters/"><img alt="지금 플레이하기" src="https://img.shields.io/badge/%E2%96%B6%20%EC%A7%80%EA%B8%88%20%ED%94%8C%EB%A0%88%EC%9D%B4-sigco3111.github.io%2Fboom--critters-d9a31b?style=for-the-badge"></a>
+</p>
+
+<p align="center">
+  <img alt="버전 2026111057" src="https://img.shields.io/badge/version-2026111057-3b82f6">
+  <img alt="HTML5 Canvas" src="https://img.shields.io/badge/HTML5-Canvas-e34f26">
+  <img alt="Vanilla JS" src="https://img.shields.io/badge/JavaScript-vanilla%20ES%20modules-f7df1e">
+  <img alt="코드 라이선스 MIT" src="https://img.shields.io/badge/code-MIT-2e8b57">
+</p>
+
+<p align="center">
+  <a href="https://sigco3111.github.io/boom-critters/"><img src="docs/screenshots/02-battle.png" alt="붐 크리터스 전투 화면: 로켓 폭발과 크레이터, 팀 HP, 무기 바" width="880"></a>
+</p>
 
 ▶ **플레이**: https://sigco3111.github.io/boom-critters/
 
-**목차**: [게임 방법](#게임-방법) · [조작](#조작) · [무기](#무기) · [모드와 스테이지](#모드와-스테이지) · [캐릭터 특성](#캐릭터-특성) · [난이도와 밸런스](#난이도와-밸런스) · [설정·접근성·언어](#설정접근성언어) · [소리](#소리) · [성능](#성능) · [프로젝트 구조](#프로젝트-구조) · [로컬 실행](#로컬-실행) · [에셋 크레딧](#에셋-크레딧) · [라이선스](#라이선스) · [English summary](#english-summary)
+## 특징
+- **무기 9종**: 대포탄 · 로켓 · 수류탄 · 번개 · 화염탄 · 공습 · 연막탄 · 순간이동 · 바람 바꾸기
+- **모드 3가지**: 빠른 대전(난이도·테마·지형 선택) · 스테이지 14개(마지막은 보스전, 별 평가) · 무한 웨이브(특수 적·보스·보상 3택 1)
+- **부서지는 지형**: 폭발이 땅을 파내고, 섬·협곡·부서지는 다리 지형과 상자·폭발 통·지뢰가 있음
+- **테마 4종**: 초원 · 사막 노을 · 설원 · 별이 뜬 밤, 테마별 날씨 효과 (모두 캔버스 코드로 직접 그림)
+- **모바일 대응**: 세로·가로 터치 컨트롤, 홈 화면에 앱으로 설치 가능
+- **접근성**: 큰 글씨 HUD, 고대비 팀 표시, 동작 줄이기, 한국어 / English 전환
+
+## 스크린샷
+| 시작 화면 | 스테이지 선택 |
+|:---:|:---:|
+| <img src="docs/screenshots/01-start.png" alt="시작 화면" width="420"><br>빠른 대전 · 스테이지 · 무한 모드 | <img src="docs/screenshots/05-stage-select.png" alt="스테이지 선택" width="420"><br>14개 스테이지와 별 평가 |
+| **설원 + 협곡** | **별밤 + 다리** |
+| <img src="docs/screenshots/03-theme-snow.png" alt="설원 테마" width="420"><br>눈이 내리는 설원 | <img src="docs/screenshots/04-theme-night.png" alt="별밤 테마" width="420"><br>반딧불이가 떠다니는 별밤과 나무 다리 |
+| **무한 모드 웨이브 보상** | **모바일 가로 화면** |
+| <img src="docs/screenshots/06-endless-reward.png" alt="무한 모드 웨이브 보상 화면" width="420"><br>웨이브를 깰 때마다 보상 3개 중 1개 선택 | <img src="docs/screenshots/08-mobile-landscape.png" alt="모바일 가로 화면" width="420"><br>가로 화면은 컨트롤이 맨 아래 한 줄에 놓임 |
+
+<p align="center">
+  <img src="docs/screenshots/07-mobile-portrait.png" alt="모바일 세로 화면" width="240"><br>
+  <b>모바일 세로 화면</b> — 팀 HP·타이머·바람이 캔버스 아래 큰 글씨 HUD로 표시됩니다.
+</p>
+
+> 스크린샷은 라이브 게임(버전 2026111057)에서 직접 캡처했습니다.
+
+**목차**: [특징](#특징) · [스크린샷](#스크린샷) · [게임 방법](#게임-방법) · [조작](#조작) · [무기](#무기) · [모드와 스테이지](#모드와-스테이지) · [캐릭터 특성](#캐릭터-특성) · [난이도와 밸런스](#난이도와-밸런스) · [설정·접근성·언어](#설정접근성언어) · [소리](#소리) · [성능](#성능) · [프로젝트 구조](#프로젝트-구조) · [로컬 실행](#로컬-실행) · [에셋 크레딧](#에셋-크레딧) · [변경 이력](#변경-이력-changelog) · [라이선스](#라이선스) · [English summary](#english-summary)
 
 ## 게임 방법
 - 파랑 팀(나) 3마리 vs 빨강 팀(AI) 2~4마리. 캐릭터 HP는 100(남자는 튼튼함 특성으로 110). 상대 팀을 모두 쓰러뜨리면 승리, 우리 팀이 전멸하면 패배.
