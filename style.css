@@ -1,7 +1,7 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; height: 100dvh; background: #12202e; color: #fff; font-family: "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; overflow: hidden; }
 #app { height: 100%; height: 100dvh; padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
-#stage { --cq: 1cqw; position: relative; width: min(100vw, calc((100vh - 84px) * 16 / 9)); width: min(calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right)), calc((100dvh - 84px) * 16 / 9)); aspect-ratio: 16 / 9; container-type: inline-size; background: #000; }
+#stage { --cq: 1cqw; position: relative; width: min(100vw, calc((100vh - 108px) * 16 / 9)); width: min(calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right)), calc((100dvh - 108px) * 16 / 9)); aspect-ratio: 16 / 9; container-type: inline-size; background: #000; }
 canvas { width: 100%; height: 100%; display: block; touch-action: none; user-select: none; -webkit-user-select: none; }
 .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(2 * var(--cq)); background: rgba(10, 25, 45, 0.78); text-align: center; font-size: calc(2 * var(--cq)); padding: calc(2 * var(--cq)); }
 .overlay.hidden, .hidden { display: none; }
@@ -469,3 +469,13 @@ body.booting #controls, body.booting #topBtns, body.booting #rotateHint { visibi
 @media (orientation: landscape) and (max-height: 500px) {
   #stageScreen #stageBackBtn { order: -1; position: sticky; top: 6px; z-index: 5; align-self: flex-start; margin: 0 0 -44px; min-height: 44px; padding: 6px 16px; font-size: 15px; }
 }
+
+/* ---------- 데스크톱 시작 화면 잘림 방지 (2026111058) ---------- */
+/* 조작 버튼이 2줄 이상으로 줄바꿈되어도 무대가 화면 위로 밀려 잘리지 않도록 108px를 남기고, 넘치면 위에서부터 스크롤 */
+body:not(.touch) #app { justify-content: safe center; overflow-y: auto; }
+.overlay { overflow-y: auto; justify-content: safe center; }
+body:not(.touch) #startScreen { gap: calc(1 * var(--cq)); padding: calc(0.8 * var(--cq)) calc(2 * var(--cq)) calc(5 * var(--cq)); } /* 아래 5cq는 우하단 설정·소리 버튼과 안내 글이 겹치지 않게 */
+body:not(.touch) #startScreen h1 { font-size: calc(5 * var(--cq)); line-height: 1.1; }
+body:not(.touch) #startScreen .mode { padding: calc(1 * var(--cq)) calc(2 * var(--cq)); gap: calc(0.6 * var(--cq)); }
+body:not(.touch) #startScreen .mode button.big { padding: calc(1.1 * var(--cq)) calc(2 * var(--cq)); }
+body:not(.touch) #startScreen .help { max-width: 92%; }
