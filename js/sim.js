@@ -1,6 +1,6 @@
 // 헤드리스 AI 대 AI 시뮬레이션 (밸런스 측정용). 브라우저 콘솔에서: await __sim(20, { stage: 5, skill: 'average' })
 // 우리 팀(팀 0)을 숙련도 프로필의 AI가 조작하고, 렌더링 없이(지형은 높이맵 충돌 배열만) 고정 시간 스텝으로 경기를 끝까지 돌린다.
-import { Game, STAGE_COUNT, WEAPONS, W, H, WATER_Y, stageConfig, quickConfig, waveConfig } from './game.js?v=2026111055';
+import { Game, STAGE_COUNT, WEAPONS, W, H, WATER_Y, stageConfig, quickConfig, waveConfig } from './game.js?v=2026111056';
 
 // 플레이어 숙련도 프로필: 각도 오차(°, 표준편차) · 파워 오차 · pick(상위 후보 중 무작위) · basic(대포탄·로켓만 사용)
 export const SKILLS = {
@@ -175,7 +175,7 @@ export async function soak(n = 2, opts = {}) {
   console.error = (...a) => { errs.push(a.map(String).join(' ')); };
   let wd = 0; console.warn = (...a) => { if (String(a[0]).includes('[watchdog]')) wd++; else cw(...a); };
   const by = {};
-  let matches = 0, maxTurn = 0, turns = 0;
+  let matches = 0, maxTurn = 0, turns = 0, sudden = 0, maxTurnNo = 0;
   try {
     for (let m = 0; m < total; m++) {
       const r = m % 3; // 0 스테이지 · 1 빠른 대전 · 2 무한 웨이브
@@ -205,6 +205,7 @@ export async function soak(n = 2, opts = {}) {
           if (g.time - turnT > 90 && g.state !== 'reward') { add('턴이 멈춤(90초)', `state=${g.state}`); break; }
         }
         if (g.state !== 'over' && g.mode !== 'endless' && steps > 30 * 60 * 40) add('경기가 40분 안에 끝나지 않음', '');
+        maxTurnNo = Math.max(maxTurnNo, g.turnNo); if (g.suddenHits) sudden++; // 서든데스(턴 100 초과 소모전)까지 간 경기 수
         if (g.watchdogHits) for (const w of g.watchdogLog) add('감시 장치가 턴을 강제로 끝냄', JSON.stringify(w));
       } catch (e) { add('예외: ' + e.message, String(e.stack || '').split('\n').slice(0, 3).join(' | ')); }
       matches++;
@@ -212,6 +213,6 @@ export async function soak(n = 2, opts = {}) {
     }
   } finally { console.error = ce; console.warn = cw; }
   if (errs.length) issues['console.error 발생'] = { n: errs.length, example: errs[0].slice(0, 200) };
-  return { matches, by, turns, issues, watchdog: wd, maxTurnSec: +maxTurn.toFixed(1), ms: Date.now() - t0 };
+  return { matches, by, turns, issues, watchdog: wd, sudden, maxTurnNo, maxTurnSec: +maxTurn.toFixed(1), ms: Date.now() - t0 };
 }
 export { STAGE_COUNT };

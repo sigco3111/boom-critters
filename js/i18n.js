@@ -1,7 +1,7 @@
 // 언어(한국어/영어) 사전과 도우미. 기본값은 navigator.language(ko*이면 한국어, 아니면 영어)이고 선택은 localStorage('boom-lang')에 저장한다
 // (저장소가 막힌 환경에서는 storage.js가 메모리에만 보관). index.html의 한국어 문구는 그대로 두고, data-i18n 속성이 붙은 요소만 영어일 때 사전 값으로 바꾼다
 // 사용법: t('키', { 값 }) — JS에서 쓰는 문구. applyDom() — data-i18n(텍스트) · data-i18n-html(서식 포함) · data-i18n-aria · data-i18n-title 속성을 가진 요소를 바꾼다
-import { local } from './storage.js?v=2026111055';
+import { local } from './storage.js?v=2026111056';
 
 const KEY = 'boom-lang';
 export const LANGS = ['ko', 'en'];
@@ -31,7 +31,7 @@ const KO = {
   'ter.gentle': '완만', 'ter.hills': '언덕', 'ter.canyon': '협곡', 'ter.island': '섬', 'ter.bridge': '다리', 'ter.canyonbridge': '협곡 다리',
   'ter.random.d': '매 경기 시드로 정해요', 'ter.gentle.d': '낮고 완만한 땅, 조준이 쉬워요', 'ter.hills.d': '기본 언덕 지형', 'ter.canyon.d': '가운데 깊은 협곡과 높은 벽', 'ter.island.d': '물 위에 뜬 섬 2~3개, 떨어지면 풍덩!', 'ter.bridge.d': '두 절벽을 잇는 얇은 다리, 부수면 위의 유닛이 추락', 'ter.canyonbridge.d': '협곡 위의 다리',
   'mode.stage': '스테이지 {n}', 'mode.endless': '무한 · 웨이브 {n}',
-  'banner.mine': '내 차례 - {name}', 'banner.foe': '상대 차례 - {name}', 'banner.wave': '웨이브 {n}', 'banner.waveClear': '웨이브 {n} 클리어!',
+  'banner.mine': '내 차례 - {name}', 'banner.foe': '상대 차례 - {name}', 'banner.sudden': '서든데스 -{d}', 'banner.wave': '웨이브 {n}', 'banner.waveClear': '웨이브 {n} 클리어!',
   'f.splash': '풍덩!', 'f.crate': '보급 상자 투하!', 'f.crateBreak': '상자 파괴', 'f.barrel': '쾅! 폭발 통', 'f.mine': '지뢰!', 'f.pack': '치유 상자!', 'f.soon': '곧 출시', 'f.unlockWave': '웨이브 3부터 해금', 'f.unlockStage': '스테이지 4부터 해금',
   'f.noAmmo': '탄약 없음', 'f.think': '생각 중...', 'f.timeout': '시간 초과', 'f.turns': '{n}턴',
   'air.warn': '공습 경보! {s}', 'air.target': '공습 목표 · 눌러서 호출', 'air.go': '공습!',
@@ -101,7 +101,7 @@ const EN = {
   'ter.gentle': 'Gentle', 'ter.hills': 'Hills', 'ter.canyon': 'Canyon', 'ter.island': 'Island', 'ter.bridge': 'Bridge', 'ter.canyonbridge': 'Canyon bridge',
   'ter.random.d': 'Picked from the seed each match', 'ter.gentle.d': 'Low, smooth ground; easy aiming', 'ter.hills.d': 'The default hilly terrain', 'ter.canyon.d': 'A deep canyon in the middle with high walls', 'ter.island.d': '2-3 islands over the water; fall off and you drown', 'ter.bridge.d': 'Two cliffs joined by a thin bridge; destroy it to drop units standing on it', 'ter.canyonbridge.d': 'A bridge across a canyon',
   'mode.stage': 'Stage {n}', 'mode.endless': 'Endless · Wave {n}',
-  'banner.mine': 'Your turn - {name}', 'banner.foe': 'Enemy turn - {name}', 'banner.wave': 'Wave {n}', 'banner.waveClear': 'Wave {n} clear!',
+  'banner.mine': 'Your turn - {name}', 'banner.foe': 'Enemy turn - {name}', 'banner.sudden': 'Sudden death -{d}', 'banner.wave': 'Wave {n}', 'banner.waveClear': 'Wave {n} clear!',
   'f.splash': 'Splash!', 'f.crate': 'Supply crate!', 'f.crateBreak': 'Crate broken', 'f.barrel': 'Boom! Barrel', 'f.mine': 'Mine!', 'f.pack': 'Health pack!', 'f.soon': 'Coming soon', 'f.unlockWave': 'Unlocks at wave 3', 'f.unlockStage': 'Unlocks at stage 4',
   'f.noAmmo': 'No ammo', 'f.think': 'Thinking...', 'f.timeout': 'Time up', 'f.turns': '{n} turns',
   'air.warn': 'Air raid! {s}', 'air.target': 'Airstrike target · tap to call', 'air.go': 'Airstrike!',

@@ -1,10 +1,10 @@
 // 게임 로직: 유닛 물리, 턴 흐름, 투사체, AI
-import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111055';
-import * as audio from './audio.js?v=2026111055';
-import { t as tr, getLang } from './i18n.js?v=2026111055';
-import * as fx from './fx.js?v=2026111055';
-import { makeProps, drawProp, PW, PH, BARREL_R, BARREL_DMG, MINE_R, MINE_DMG, MINE_TRIGGER, MINE_SEE, PACK_CHANCE } from './props.js?v=2026111055';
-import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111055';
+import { Terrain, TERRAINS, terrainForSeed, W, H, mulberry32 } from './terrain.js?v=2026111056';
+import * as audio from './audio.js?v=2026111056';
+import { t as tr, getLang } from './i18n.js?v=2026111056';
+import * as fx from './fx.js?v=2026111056';
+import { makeProps, drawProp, PW, PH, BARREL_R, BARREL_DMG, MINE_R, MINE_DMG, MINE_TRIGGER, MINE_SEE, PACK_CHANCE } from './props.js?v=2026111056';
+import { THEMES, themeById, themeForStage, themeForSeed, makeBackground, drawBackgroundFx, makeWeather, stepWeather, drawWeather } from './themes.js?v=2026111056';
 
 export { W, H };
 export const WATER_Y = 496;
@@ -33,6 +33,7 @@ const AI_MAX_TRIES = 3;      // AI가 유효한 사격(물/화면 밖이 아닌 
 const AI_SLICE_MS = 4;       // AI 사격 계산을 한 프레임에 쓰는 최대 시간(ms): 나머지는 다음 프레임에 이어서 (느린 폰의 프레임 끊김 방지)
 const AI_TURN_MAX = 22;      // AI 한 턴의 최대 시간(초): 이 안에 쏘지 못하면 강제로 넘김 (제한 시간 30초보다 먼저)
 const TURN_WATCH_GAME = 45, TURN_WATCH_WALL = 120; // 안전망: 한 턴이 게임 시간 45초(안내 띠 정지 시간 제외) 또는 실제 시간 120초(일시정지·숨김 제외)를 넘으면 강제로 턴을 끝낸다
+const SUDDEN_TURN = 100, SUDDEN_DMG = 10; // 소모전 방지: 한 경기(웨이브)가 양 팀 합산 100턴을 넘기면 팀 턴이 시작될 때마다 그 팀 유닛 전원이 10 피해 (서로 닿지 않는 외딴 지형에서 영영 못 맞히는 교착 방지)
 const SETTLE_MAX = 8;        // 발사 후 유닛이 안정되길 기다리는 최대 시간(초)
 const DRAG_MIN = 14; // 터치 드래그 조준: 발사에 필요한 최소 드래그 거리 (캔버스 px)
 
@@ -901,6 +902,7 @@ export class Game {
     const t = this.turnTeam;
     if (this.burnFires(t)) return;
     this.turnNo++;
+    if (this.turnNo > SUDDEN_TURN && this.suddenDeath(t)) return;
     this.ageSmokes();
     this.regenTeam(t);
     if (this.turnNo % CRATE_EVERY === 0) this.dropCrate();
@@ -919,7 +921,7 @@ export class Game {
     this.power = 0; this.charging = false; this.drag = null;
     this.weapon = 0;
     this.angle = 45;
-    this.banner = { text: tr(t === 0 ? 'banner.mine' : 'banner.foe', { name: u.name }), color: TEAMS[t].color, t: 0 };
+    this.banner = { text: tr(t === 0 ? 'banner.mine' : 'banner.foe', { name: u.name }) + (this.turnNo > SUDDEN_TURN ? ' · ' + tr('banner.sudden', { d: SUDDEN_DMG }) : ''), color: TEAMS[t].color, t: 0 };
     this.lastTick = 99;
     this.turnT = 0; this.turnWall = 0; this._wl = 0;
     this.ai = this.isAI(t) ? { phase: 'think', t: 0, walks: 0, crateWalks: 0, fled: 0, tries: 0, total: 0, target: null } : null;
@@ -1199,6 +1201,14 @@ export class Game {
       f.turns--;
     }
     this.fires = this.fires.filter((f) => f.turns > 0);
+    return this.checkWinner();
+  }
+
+  // 서든데스: 해당 팀 유닛 전원이 피해를 입는다. 승패가 나면 true
+  suddenDeath(team) {
+    this.suddenHits = (this.suddenHits || 0) + 1;
+    for (const u of this.units) if (u.alive && u.team === team) this.damage(u, SUDDEN_DMG, '#c77dff');
+    audio.play('hit', { vol: 0.5, rate: 1.2 });
     return this.checkWinner();
   }
 
